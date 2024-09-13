@@ -7,6 +7,9 @@ import click
 import logging
 import json
 import tabulate
+import enum
+import time
+from typing import Collection
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +26,40 @@ REST_BASE_URL = f"{BASE_URL}/rest"
 _SESSION = None
 
 
+class RefreshPolicy(enum.Enum):
+    NO = enum.auto()
+    FORCE = enum.auto()
+    AUTO = enum.auto()
+
+
+class Status(enum.Enum):
+    WARNING = 1
+    ERROR = 2
+    UNKNOWN = -1
+
+    @staticmethod
+    def from_int(status: int) -> 'Status':
+        try:
+            return Status(status)
+        except ValueError:
+            return Status.UNKNOWN
+
+    def __str__(self):
+        return self.name.title()
+
+
+def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
+    if policy == RefreshPolicy.FORCE:
+        return 0
+    if policy == RefreshPolicy.NO:
+        return -1
+    return auto
+
+
+FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
+AUTO_REFRESH_S = 60 * 60 * 24 * 7
+
+
 def get_session() -> requests.Session:
     global _SESSION
     if not _SESSION:
@@ -34,14 +71,21 @@ def get_session() -> requests.Session:
     return _SESSION
 
 
-def get_json(path: str, refresh: bool = False):
+def get_json(path: str, max_cache_age: int = -1):
     CACHEDIR.mkdir(parents=True, exist_ok=True)
     cachefile = CACHEDIR / f"{path.replace('/', '_')}.json"
 
     if cachefile.exists():
-        logger.debug("Loading cache file for %s", path)
-        with cachefile.open('r') as f:
-            return json.load(f)
+        if max_cache_age < 0:
+            use_cache = True
+        else:
+            age = time.time() - cachefile.stat().st_mtime
+            use_cache = age < max_cache_age
+
+        if use_cache:
+            logger.debug("Loading cache file for %s", path)
+            with cachefile.open('r') as f:
+                return json.load(f)
 
     logger.debug("Fetching %s", path)
     r = get_session().get(f"{REST_BASE_URL}{path}")
@@ -52,17 +96,21 @@ def get_json(path: str, refresh: bool = False):
     return json.loads(r.text)
 
 
-def get_build(buildid: int, refresh: bool = False):
-    return get_json(f"/build/{buildid}/")['data']
+def get_build(buildid: int, refresh: RefreshPolicy = RefreshPolicy.NO):
+    maxage = refresh_policy_max_age(refresh, AUTO_REFRESH_S)
+    return get_json(f"/build/{buildid}/", maxage)['data']
 
 
-def get_build_collection(collectionid: int, refresh: bool = False):
-    return get_json(f"/buildcollection/{collectionid}/")['data']
+def get_build_collection(collectionid: int,
+                         refresh: RefreshPolicy = RefreshPolicy.NO):
+    maxage = refresh_policy_max_age(refresh, AUTO_REFRESH_S)
+    return get_json(f"/buildcollection/{collectionid}/", maxage)['data']
 
 
-def get_stepfailures(refresh: bool = False):
+def get_stepfailures(refresh: RefreshPolicy = RefreshPolicy.NO):
     logger.info("Loading build failures...")
-    return get_json("/stepfailure/")['data']
+    maxage = refresh_policy_max_age(refresh, FAILURES_AUTO_REFRESH_S)
+    return get_json("/stepfailure/", maxage)['data']
 
 
 @click.group()
@@ -100,38 +148,66 @@ def login(user: str, password: str):
     logger.info("Logging success")
 
 
-def build_status_to_name(status: int) -> str:
-    if status == 1:
-        return "Warning"
-    if status == 2:
-        return "Error"
-    return "Unknown"
+TABLE_HEADER = ['Build', 'Status', 'Test', 'Worker', 'Completed', 'SWAT URL',
+                'Autobuilder URL']
 
 
 @main.command()
 @click.option('--limit', '-l', type=click.INT, default=0,
               help="Only list the n last entries")
 @click.option('--sort', '-s', multiple=True, default=["Build"],
+              type=click.Choice(TABLE_HEADER, case_sensitive=False),
               help="Specify sort order")
-def show_pending_failures_noowner(limit: int, sort: list[str]):
-    failures = get_stepfailures()
+@click.option('--refresh', '-r',
+              type=click.Choice([p.name for p in RefreshPolicy],
+                                case_sensitive=False),
+              default="auto",
+              help="Fetch data from server instead of using cache")
+@click.option('--test-filter', '-t', multiple=True,
+              help="Only show some tests")
+@click.option('--ignore-test-filter', '-T', multiple=True,
+              help="Ignore some tests")
+@click.option('--status-filter', '-s', multiple=True,
+              type=click.Choice([str(s) for s in Status],
+                                case_sensitive=False),
+              help="Only show some statuses")
+def show_pending_failures_noowner(limit: int, sort: Collection[str],
+                                  refresh: str,
+                                  test_filter: Collection[str],
+                                  ignore_test_filter: Collection[str],
+                                  status_filter: Collection[str]):
+    statusenum_filter = [Status[s.upper()] for s in status_filter]
+    refreshpol = RefreshPolicy[refresh.upper()]
+    failures = get_stepfailures(refresh=refreshpol)
     pending_ids = {f['relationships']['build']['data']['id'] for f in failures
                    if f['attributes']['triage'] == 0}
 
     infos = []
     for buildid in sorted(pending_ids, reverse=True):
-        build = get_build(buildid)
+        build = get_build(buildid, refresh=refreshpol)
+        attributes = build['attributes']
         collectionid = build['relationships']['buildcollection']['data']['id']
-        collection = get_build_collection(collectionid)
+        collection = get_build_collection(collectionid, refresh=refreshpol)
 
         if collection['attributes']['owner'] is not None:
             continue
 
-        attributes = build['attributes']
+        if test_filter and attributes['targetname'] not in test_filter:
+            continue
+
+        if attributes['targetname'] in ignore_test_filter:
+            continue
+
+        status = Status.from_int(attributes['status'])
+        if statusenum_filter and status not in statusenum_filter:
+            continue
+
+        # Keys must be in TABLE_HEADER
         infos.append({'Build': attributes['buildid'],
-                      'Status': build_status_to_name(attributes['status']),
+                      'Status': status,
                       'Test': attributes['targetname'],
                       'Worker': attributes['workername'],
+                      'Completed': attributes['completed'],
                       'SWAT URL': f"{BASE_URL}/collection/{collection['id']}/",
                       'Autobuilder URL': attributes['url']
                       })
@@ -142,10 +218,13 @@ def show_pending_failures_noowner(limit: int, sort: list[str]):
     def sortfn(x):
         return tuple([x[k] for k in sort])
 
-    headers = list(infos[0].keys())
+    headers = TABLE_HEADER
     table = [info.values() for info in sorted(infos, key=sortfn)]
 
     print(tabulate.tabulate(table, headers=headers))
+    logging.info("%s entries found (%s warnings and %s errors)", len(infos),
+                 len([i for i in infos if i['Status'] == Status.ERROR]),
+                 len([i for i in infos if i['Status'] == Status.WARNING]))
 
 
 if __name__ == '__main__':
