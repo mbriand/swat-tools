@@ -9,6 +9,8 @@ import json
 import tabulate
 import enum
 import time
+import subprocess
+import shlex
 from typing import Collection
 
 logger = logging.getLogger(__name__)
@@ -171,11 +173,14 @@ TABLE_HEADER = ['Build', 'Status', 'Test', 'Worker', 'Completed', 'SWAT URL',
               type=click.Choice([str(s) for s in Status],
                                 case_sensitive=False),
               help="Only show some statuses")
+@click.option('--open-url-with',
+              help="Open the swatbot url with given program")  # TODO
 def show_pending_failures_noowner(limit: int, sort: Collection[str],
                                   refresh: str,
                                   test_filter: Collection[str],
                                   ignore_test_filter: Collection[str],
-                                  status_filter: Collection[str]):
+                                  status_filter: Collection[str],
+                                  open_url_with: str):
     statusenum_filter = [Status[s.upper()] for s in status_filter]
     refreshpol = RefreshPolicy[refresh.upper()]
     failures = get_stepfailures(refresh=refreshpol)
@@ -203,14 +208,18 @@ def show_pending_failures_noowner(limit: int, sort: Collection[str],
             continue
 
         # Keys must be in TABLE_HEADER
+        swat_url = f"{BASE_URL}/collection/{collection['id']}/"
         infos.append({'Build': attributes['buildid'],
                       'Status': status,
                       'Test': attributes['targetname'],
                       'Worker': attributes['workername'],
                       'Completed': attributes['completed'],
-                      'SWAT URL': f"{BASE_URL}/collection/{collection['id']}/",
+                      'SWAT URL': swat_url,
                       'Autobuilder URL': attributes['url']
                       })
+
+        if open_url_with:
+            subprocess.run(shlex.split(f"{open_url_with} {swat_url}"))
 
         if limit and len(infos) >= limit:
             break
