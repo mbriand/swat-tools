@@ -34,7 +34,7 @@ class RefreshPolicy(enum.Enum):
     AUTO = enum.auto()
 
 
-class Status(enum.Enum):
+class Status(enum.IntEnum):
     WARNING = 1
     ERROR = 2
     UNKNOWN = -1
@@ -48,6 +48,17 @@ class Status(enum.Enum):
 
     def __str__(self):
         return self.name.title()
+
+
+class Field(enum.StrEnum):
+    BUILD = 'Build'
+    STATUS = 'Status'
+    TEST = 'Test'
+    OWNER = 'Owner'
+    WORKER = 'Worker'
+    COMPLETED = 'Completed'
+    SWAT_URL = 'SWAT URL'
+    AUTOBUILDER_URL = 'Autobuilder URL'
 
 
 def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
@@ -150,15 +161,12 @@ def login(user: str, password: str):
     logger.info("Logging success")
 
 
-TABLE_HEADER = ['Build', 'Status', 'Test', 'Worker', 'Completed', 'SWAT URL',
-                'Autobuilder URL']
-
-
 @main.command()
 @click.option('--limit', '-l', type=click.INT, default=0,
-              help="Only list the n last entries")
+              help="Only parse the n last failures waiting for triage")
 @click.option('--sort', '-s', multiple=True, default=["Build"],
-              type=click.Choice(TABLE_HEADER, case_sensitive=False),
+              type=click.Choice([str(f) for f in Field],
+                                case_sensitive=False),
               help="Specify sort order")
 @click.option('--refresh', '-r',
               type=click.Choice([p.name for p in RefreshPolicy],
@@ -167,70 +175,88 @@ TABLE_HEADER = ['Build', 'Status', 'Test', 'Worker', 'Completed', 'SWAT URL',
               help="Fetch data from server instead of using cache")
 @click.option('--test-filter', '-t', multiple=True,
               help="Only show some tests")
+@click.option('--owner-filter', '-o', multiple=True,
+              help='Only show some owners ("none" for no owner)')
 @click.option('--ignore-test-filter', '-T', multiple=True,
               help="Ignore some tests")
-@click.option('--status-filter', '-s', multiple=True,
+@click.option('--status-filter', '-S', multiple=True,
               type=click.Choice([str(s) for s in Status],
                                 case_sensitive=False),
               help="Only show some statuses")
 @click.option('--open-url-with',
-              help="Open the swatbot url with given program")  # TODO
-def show_pending_failures_noowner(limit: int, sort: Collection[str],
-                                  refresh: str,
-                                  test_filter: Collection[str],
-                                  ignore_test_filter: Collection[str],
-                                  status_filter: Collection[str],
-                                  open_url_with: str):
+              help="Open the swatbot url with given program")
+def show_pending_failures(limit: int, sort: Collection[str],
+                          refresh: str,
+                          test_filter: Collection[str],
+                          ignore_test_filter: Collection[str],
+                          status_filter: Collection[str],
+                          owner_filter: Collection[str],
+                          open_url_with: str):
     statusenum_filter = [Status[s.upper()] for s in status_filter]
+    owners = [None if str(f).lower() == "none" else f for f in owner_filter]
     refreshpol = RefreshPolicy[refresh.upper()]
     failures = get_stepfailures(refresh=refreshpol)
     pending_ids = {f['relationships']['build']['data']['id'] for f in failures
                    if f['attributes']['triage'] == 0}
 
+    logger.info("Loading build failures details...")
+    unique_pending_ids = sorted(pending_ids, reverse=True)[-limit:]
     infos = []
-    for buildid in sorted(pending_ids, reverse=True):
-        build = get_build(buildid, refresh=refreshpol)
-        attributes = build['attributes']
-        collectionid = build['relationships']['buildcollection']['data']['id']
-        collection = get_build_collection(collectionid, refresh=refreshpol)
+    with click.progressbar(unique_pending_ids) as pending_ids_progress:
+        for buildid in pending_ids_progress:
+            build = get_build(buildid, refresh=refreshpol)
+            attributes = build['attributes']
+            relationships = build['relationships']
+            collectionid = relationships['buildcollection']['data']['id']
+            collection = get_build_collection(collectionid, refresh=refreshpol)
 
-        if collection['attributes']['owner'] is not None:
-            continue
+            if owners and collection['attributes']['owner'] not in owners:
+                continue
 
-        if test_filter and attributes['targetname'] not in test_filter:
-            continue
+            if test_filter and attributes['targetname'] not in test_filter:
+                continue
 
-        if attributes['targetname'] in ignore_test_filter:
-            continue
+            if attributes['targetname'] in ignore_test_filter:
+                continue
 
-        status = Status.from_int(attributes['status'])
-        if statusenum_filter and status not in statusenum_filter:
-            continue
+            status = Status.from_int(attributes['status'])
+            if statusenum_filter and status not in statusenum_filter:
+                continue
 
-        # Keys must be in TABLE_HEADER
-        swat_url = f"{BASE_URL}/collection/{collection['id']}/"
-        infos.append({'Build': attributes['buildid'],
-                      'Status': status,
-                      'Test': attributes['targetname'],
-                      'Worker': attributes['workername'],
-                      'Completed': attributes['completed'],
-                      'SWAT URL': swat_url,
-                      'Autobuilder URL': attributes['url']
-                      })
+            # Keys must be in TABLE_HEADER
+            swat_url = f"{BASE_URL}/collection/{collection['id']}/"
+            infos.append({'Build': attributes['buildid'],
+                          'Status': status,
+                          'Test': attributes['targetname'],
+                          'Worker': attributes['workername'],
+                          'Completed': attributes['completed'],
+                          'SWAT URL': swat_url,
+                          'Autobuilder URL': attributes['url'],
+                          'Owner': collection['attributes']['owner'],
+                          })
 
-        if open_url_with:
-            subprocess.run(shlex.split(f"{open_url_with} {swat_url}"))
-
-        if limit and len(infos) >= limit:
-            break
+            if open_url_with:
+                subprocess.run(shlex.split(f"{open_url_with} {swat_url}"))
 
     def sortfn(x):
-        return tuple([x[k] for k in sort])
+        return tuple([x[Field(k)] for k in sort])
 
-    headers = TABLE_HEADER
-    table = [info.values() for info in sorted(infos, key=sortfn)]
+    shown_fields = [
+        Field.BUILD,
+        Field.STATUS,
+        Field.TEST,
+        Field.OWNER,
+        Field.WORKER,
+        Field.COMPLETED,
+        # Field.SWAT_URL,
+        Field.AUTOBUILDER_URL,
+    ]
+    headers = [str(f) for f in shown_fields]
+    table = [[info[field] for field in shown_fields]
+             for info in sorted(infos, key=sortfn)]
 
     print(tabulate.tabulate(table, headers=headers))
+
     logging.info("%s entries found (%s warnings and %s errors)", len(infos),
                  len([i for i in infos if i['Status'] == Status.ERROR]),
                  len([i for i in infos if i['Status'] == Status.WARNING]))
