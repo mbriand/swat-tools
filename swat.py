@@ -59,6 +59,7 @@ class Field(enum.StrEnum):
     COMPLETED = 'Completed'
     SWAT_URL = 'SWAT URL'
     AUTOBUILDER_URL = 'Autobuilder URL'
+    STEPS = 'Steps'
 
 
 def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
@@ -196,11 +197,15 @@ def show_pending_failures(limit: int, sort: Collection[str],
     owners = [None if str(f).lower() == "none" else f for f in owner_filter]
     refreshpol = RefreshPolicy[refresh.upper()]
     failures = get_stepfailures(refresh=refreshpol)
-    pending_ids = {f['relationships']['build']['data']['id'] for f in failures
-                   if f['attributes']['triage'] == 0}
+    pending_ids: dict[str, list[str]] = {}
+    for failure in failures:
+        if failure['attributes']['triage'] == 0:
+            buildid = failure['relationships']['build']['data']['id']
+            stepname = failure['attributes']['stepname']
+            pending_ids.setdefault(buildid, []).append(stepname)
 
     logger.info("Loading build failures details...")
-    unique_pending_ids = sorted(pending_ids, reverse=True)[-limit:]
+    unique_pending_ids = sorted(pending_ids.keys(), reverse=True)[-limit:]
     infos = []
     with click.progressbar(unique_pending_ids) as pending_ids_progress:
         for buildid in pending_ids_progress:
@@ -225,14 +230,15 @@ def show_pending_failures(limit: int, sort: Collection[str],
 
             # Keys must be in TABLE_HEADER
             swat_url = f"{BASE_URL}/collection/{collection['id']}/"
-            infos.append({'Build': attributes['buildid'],
-                          'Status': status,
-                          'Test': attributes['targetname'],
-                          'Worker': attributes['workername'],
-                          'Completed': attributes['completed'],
-                          'SWAT URL': swat_url,
-                          'Autobuilder URL': attributes['url'],
-                          'Owner': collection['attributes']['owner'],
+            infos.append({Field.BUILD: attributes['buildid'],
+                          Field.STATUS: status,
+                          Field.TEST: attributes['targetname'],
+                          Field.WORKER: attributes['workername'],
+                          Field.COMPLETED: attributes['completed'],
+                          Field.SWAT_URL: swat_url,
+                          Field.AUTOBUILDER_URL: attributes['url'],
+                          Field.OWNER: collection['attributes']['owner'],
+                          Field.STEPS: pending_ids[buildid]
                           })
 
             if open_url_with:
@@ -248,8 +254,9 @@ def show_pending_failures(limit: int, sort: Collection[str],
         Field.OWNER,
         Field.WORKER,
         Field.COMPLETED,
-        # Field.SWAT_URL,
-        Field.AUTOBUILDER_URL,
+        Field.SWAT_URL,
+        # Field.AUTOBUILDER_URL,
+        # Field.STEPS,
     ]
     headers = [str(f) for f in shown_fields]
     table = [[info[field] for field in shown_fields]
@@ -258,8 +265,8 @@ def show_pending_failures(limit: int, sort: Collection[str],
     print(tabulate.tabulate(table, headers=headers))
 
     logging.info("%s entries found (%s warnings and %s errors)", len(infos),
-                 len([i for i in infos if i['Status'] == Status.ERROR]),
-                 len([i for i in infos if i['Status'] == Status.WARNING]))
+                 len([i for i in infos if i[Field.STATUS] == Status.ERROR]),
+                 len([i for i in infos if i[Field.STATUS] == Status.WARNING]))
 
 
 if __name__ == '__main__':
