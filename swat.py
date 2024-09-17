@@ -1,130 +1,20 @@
 #!/usr/bin/env python3
 
-import requests
-import pickle
-import pathlib
 import click
 import logging
-import json
 import tabulate
-import enum
-import time
 import subprocess
 import shlex
-from typing import Collection
+import swatbot
+import os
+import tempfile
+import yaml
+import pathlib
 
 logger = logging.getLogger(__name__)
 
 BINDIR = pathlib.Path(__file__).parent.resolve()
 DATADIR = BINDIR / "data"
-CACHEDIR = DATADIR / "cache"
-
-COOKIESFILE = DATADIR / 'cookies'
-
-BASE_URL = "https://swatbot.yoctoproject.org"
-LOGIN_URL = f"{BASE_URL}/accounts/login/"
-REST_BASE_URL = f"{BASE_URL}/rest"
-
-_SESSION = None
-
-
-class RefreshPolicy(enum.Enum):
-    NO = enum.auto()
-    FORCE = enum.auto()
-    AUTO = enum.auto()
-
-
-class Status(enum.IntEnum):
-    WARNING = 1
-    ERROR = 2
-    UNKNOWN = -1
-
-    @staticmethod
-    def from_int(status: int) -> 'Status':
-        try:
-            return Status(status)
-        except ValueError:
-            return Status.UNKNOWN
-
-    def __str__(self):
-        return self.name.title()
-
-
-class Field(enum.StrEnum):
-    BUILD = 'Build'
-    STATUS = 'Status'
-    TEST = 'Test'
-    OWNER = 'Owner'
-    WORKER = 'Worker'
-    COMPLETED = 'Completed'
-    SWAT_URL = 'SWAT URL'
-    AUTOBUILDER_URL = 'Autobuilder URL'
-    STEPS = 'Steps'
-
-
-def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
-    if policy == RefreshPolicy.FORCE:
-        return 0
-    if policy == RefreshPolicy.NO:
-        return -1
-    return auto
-
-
-FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
-AUTO_REFRESH_S = 60 * 60 * 24 * 7
-
-
-def get_session() -> requests.Session:
-    global _SESSION
-    if not _SESSION:
-        _SESSION = requests.Session()
-
-        with COOKIESFILE.open('rb') as f:
-            _SESSION.cookies.update(pickle.load(f))
-
-    return _SESSION
-
-
-def get_json(path: str, max_cache_age: int = -1):
-    CACHEDIR.mkdir(parents=True, exist_ok=True)
-    cachefile = CACHEDIR / f"{path.replace('/', '_')}.json"
-
-    if cachefile.exists():
-        if max_cache_age < 0:
-            use_cache = True
-        else:
-            age = time.time() - cachefile.stat().st_mtime
-            use_cache = age < max_cache_age
-
-        if use_cache:
-            logger.debug("Loading cache file for %s", path)
-            with cachefile.open('r') as f:
-                return json.load(f)
-
-    logger.debug("Fetching %s", path)
-    r = get_session().get(f"{REST_BASE_URL}{path}")
-    r.raise_for_status()
-    with cachefile.open('w') as f:
-        f.write(r.text)
-
-    return json.loads(r.text)
-
-
-def get_build(buildid: int, refresh: RefreshPolicy = RefreshPolicy.NO):
-    maxage = refresh_policy_max_age(refresh, AUTO_REFRESH_S)
-    return get_json(f"/build/{buildid}/", maxage)['data']
-
-
-def get_build_collection(collectionid: int,
-                         refresh: RefreshPolicy = RefreshPolicy.NO):
-    maxage = refresh_policy_max_age(refresh, AUTO_REFRESH_S)
-    return get_json(f"/buildcollection/{collectionid}/", maxage)['data']
-
-
-def get_stepfailures(refresh: RefreshPolicy = RefreshPolicy.NO):
-    logger.info("Loading build failures...")
-    maxage = refresh_policy_max_age(refresh, FAILURES_AUTO_REFRESH_S)
-    return get_json("/stepfailure/", maxage)['data']
 
 
 @click.group()
@@ -141,132 +31,172 @@ def main(verbose: int):
 @click.argument('user')
 @click.argument('password')
 def login(user: str, password: str):
-    logger.info("Sending logging request...")
-    session = requests.Session()
-    r = session.get(LOGIN_URL)
-    r.raise_for_status()
+    swatbot.login(user, password)
 
-    data = {
-        "csrfmiddlewaretoken": session.cookies['csrftoken'],
-        "username": user,
-        "password": password
-    }
-    r = session.post(LOGIN_URL, data=data)
 
-    if r.status_code not in [requests.codes.ok, requests.codes.not_found]:
-        r.raise_for_status()
+failures_list_options = [
+    click.option('--limit', '-l', type=click.INT, default=0,
+                 help="Only parse the n last failures waiting for triage"),
+    click.option('--sort', '-s', multiple=True, default=["Build"],
+                 type=click.Choice([str(f) for f in swatbot.Field],
+                                   case_sensitive=False),
+                 help="Specify sort order"),
+    click.option('--refresh', '-r',
+                 type=click.Choice([p.name for p in swatbot.RefreshPolicy],
+                                   case_sensitive=False),
+                 default="auto",
+                 help="Fetch data from server instead of using cache"),
+    click.option('--test-filter', '-t', multiple=True,
+                 help="Only show some tests"),
+    click.option('--owner-filter', '-o', multiple=True,
+                 help='Only show some owners ("none" for no owner)'),
+    click.option('--ignore-test-filter', '-T', multiple=True,
+                 help="Ignore some tests"),
+    click.option('--status-filter', '-S', multiple=True,
+                 type=click.Choice([str(s) for s in swatbot.Status],
+                                   case_sensitive=False),
+                 help="Only show some statuses"),
+]
 
-    COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
-    with COOKIESFILE.open('wb') as f:
-        pickle.dump(session.cookies, f)
-    logger.info("Logging success")
+
+def add_options(options):
+    def _add_options(func):
+        for option in reversed(options):
+            func = option(func)
+        return func
+    return _add_options
 
 
 @main.command()
-@click.option('--limit', '-l', type=click.INT, default=0,
-              help="Only parse the n last failures waiting for triage")
-@click.option('--sort', '-s', multiple=True, default=["Build"],
-              type=click.Choice([str(f) for f in Field],
-                                case_sensitive=False),
-              help="Specify sort order")
-@click.option('--refresh', '-r',
-              type=click.Choice([p.name for p in RefreshPolicy],
-                                case_sensitive=False),
-              default="auto",
-              help="Fetch data from server instead of using cache")
-@click.option('--test-filter', '-t', multiple=True,
-              help="Only show some tests")
-@click.option('--owner-filter', '-o', multiple=True,
-              help='Only show some owners ("none" for no owner)')
-@click.option('--ignore-test-filter', '-T', multiple=True,
-              help="Ignore some tests")
-@click.option('--status-filter', '-S', multiple=True,
-              type=click.Choice([str(s) for s in Status],
-                                case_sensitive=False),
-              help="Only show some statuses")
+@add_options(failures_list_options)
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
-def show_pending_failures(limit: int, sort: Collection[str],
-                          refresh: str,
-                          test_filter: Collection[str],
-                          ignore_test_filter: Collection[str],
-                          status_filter: Collection[str],
-                          owner_filter: Collection[str],
-                          open_url_with: str):
-    statusenum_filter = [Status[s.upper()] for s in status_filter]
-    owners = [None if str(f).lower() == "none" else f for f in owner_filter]
-    refreshpol = RefreshPolicy[refresh.upper()]
-    failures = get_stepfailures(refresh=refreshpol)
-    pending_ids: dict[str, list[str]] = {}
-    for failure in failures:
-        if failure['attributes']['triage'] == 0:
-            buildid = failure['relationships']['build']['data']['id']
-            stepname = failure['attributes']['stepname']
-            pending_ids.setdefault(buildid, []).append(stepname)
+def show_pending_failures(open_url_with: str, *args, **kwargs):
+    infos = swatbot.get_failure_infos(*args, **kwargs)
 
-    logger.info("Loading build failures details...")
-    unique_pending_ids = sorted(pending_ids.keys(), reverse=True)[-limit:]
-    infos = []
-    with click.progressbar(unique_pending_ids) as pending_ids_progress:
-        for buildid in pending_ids_progress:
-            build = get_build(buildid, refresh=refreshpol)
-            attributes = build['attributes']
-            relationships = build['relationships']
-            collectionid = relationships['buildcollection']['data']['id']
-            collection = get_build_collection(collectionid, refresh=refreshpol)
-
-            if owners and collection['attributes']['owner'] not in owners:
-                continue
-
-            if test_filter and attributes['targetname'] not in test_filter:
-                continue
-
-            if attributes['targetname'] in ignore_test_filter:
-                continue
-
-            status = Status.from_int(attributes['status'])
-            if statusenum_filter and status not in statusenum_filter:
-                continue
-
-            # Keys must be in TABLE_HEADER
-            swat_url = f"{BASE_URL}/collection/{collection['id']}/"
-            infos.append({Field.BUILD: attributes['buildid'],
-                          Field.STATUS: status,
-                          Field.TEST: attributes['targetname'],
-                          Field.WORKER: attributes['workername'],
-                          Field.COMPLETED: attributes['completed'],
-                          Field.SWAT_URL: swat_url,
-                          Field.AUTOBUILDER_URL: attributes['url'],
-                          Field.OWNER: collection['attributes']['owner'],
-                          Field.STEPS: pending_ids[buildid]
-                          })
-
-            if open_url_with:
-                subprocess.run(shlex.split(f"{open_url_with} {swat_url}"))
-
-    def sortfn(x):
-        return tuple([x[Field(k)] for k in sort])
+    for info in infos:
+        if open_url_with:
+            url = info[swatbot.Field.SWAT_URL]
+            subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
     shown_fields = [
-        Field.BUILD,
-        Field.STATUS,
-        Field.TEST,
-        Field.OWNER,
-        Field.WORKER,
-        Field.COMPLETED,
-        Field.SWAT_URL,
-        # Field.AUTOBUILDER_URL,
-        # Field.STEPS,
+        swatbot.Field.BUILD,
+        swatbot.Field.STATUS,
+        swatbot.Field.TEST,
+        swatbot.Field.OWNER,
+        swatbot.Field.WORKER,
+        swatbot.Field.COMPLETED,
+        swatbot.Field.SWAT_URL,
+        # swatbot.Field.AUTOBUILDER_URL,
+        # swatbot.Field.STEPS,
     ]
     headers = [str(f) for f in shown_fields]
-    table = [[info[field] for field in shown_fields]
-             for info in sorted(infos, key=sortfn)]
+    table = [[info[field] for field in shown_fields] for info in infos]
 
     print(tabulate.tabulate(table, headers=headers))
 
     logging.info("%s entries found (%s warnings and %s errors)", len(infos),
-                 len([i for i in infos if i[Field.STATUS] == Status.ERROR]),
-                 len([i for i in infos if i[Field.STATUS] == Status.WARNING]))
+                 len([i for i in infos
+                      if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]),
+                 len([i for i in infos
+                      if i[swatbot.Field.STATUS] == swatbot.Status.WARNING]))
+
+
+@main.command()
+@add_options(failures_list_options)
+@click.option('--open-url-with',
+              help="Open the swatbot url with given program")
+def review_pending_failures(open_url_with: str, *args, **kwargs):
+    infos = swatbot.get_failure_infos(*args, **kwargs)
+
+    userinfos_file = DATADIR / "userinfos.yaml"
+    if userinfos_file.exists():
+        with userinfos_file.open('r') as f:
+            pretty_userinfos = yaml.load(f, Loader=yaml.Loader)
+            userinfos = {bid: {swatbot.Field(k): v for k, v in info.items()}
+                         for bid, info in pretty_userinfos.items()}
+    else:
+        userinfos = {}
+
+    if not infos:
+        return
+
+    running = True
+    entry = 0
+    while running:
+        info = infos[entry]
+        userinfo = userinfos.setdefault(info[swatbot.Field.BUILD], {})
+
+        simple_fields = [
+            swatbot.Field.BUILD,
+            swatbot.Field.STATUS,
+            swatbot.Field.TEST,
+            swatbot.Field.OWNER,
+            swatbot.Field.WORKER,
+            swatbot.Field.COMPLETED,
+            swatbot.Field.SWAT_URL,
+            swatbot.Field.AUTOBUILDER_URL,
+        ]
+        table = [[k, info[k]] for k in simple_fields]
+        table.append([swatbot.Field.STEPS,
+                      "\n".join(info[swatbot.Field.STEPS])])
+        usernotes = userinfo.get(swatbot.Field.USER_NOTES)
+        if usernotes:
+            table.append([swatbot.Field.USER_NOTES, usernotes])
+
+        print()
+        print(tabulate.tabulate(table))
+        print()
+
+        if open_url_with:
+            url = info[swatbot.Field.SWAT_URL]
+            subprocess.run(shlex.split(f"{open_url_with} {url}"))
+
+        print("n(ext)")
+        print("p(revious)")
+        print("s(et-status)")
+        print("e(dit-notes)")
+        print("q(uit)")
+
+        while True:
+            line = input('action: ')
+            if line.strip() in ["n", "next"]:
+                if entry < len(infos) - 1:
+                    entry += 1
+                else:
+                    logger.warning("This is the last entry")
+                    continue
+            elif line.strip() in ["p", "prev", "previous"]:
+                if entry >= 1:
+                    entry -= 1
+                else:
+                    logger.warning("This is the first entry")
+                    continue
+            elif line.strip() in ["q", "quit"]:
+                running = False
+            elif line.strip() in ["e", "edit-notes"]:
+                editor = os.environ.get("EDITOR", "vim")
+
+                with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                    if usernotes:
+                        f.write(usernotes)
+                    f.close()
+                    subprocess.run(shlex.split(f"{editor} {f.name}"))
+                    with open(f.name, mode='r') as fr:
+                        userinfo[swatbot.Field.USER_NOTES] = fr.read()
+                    os.unlink(f.name)
+
+            else:
+                logger.warning("Invalid command")
+                continue
+            break
+
+    pretty_userinfos = {bid: {str(k): v for k, v in info.items()}
+                        for bid, info in userinfos.items()}
+
+    # TODO: version file
+    with userinfos_file.open('w') as f:
+        yaml.dump(pretty_userinfos, f)
 
 
 if __name__ == '__main__':
