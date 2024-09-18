@@ -8,6 +8,8 @@ import logging
 import json
 import enum
 import time
+import yaml
+import shutil
 from typing import Any, Collection
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,7 @@ DATADIR = BINDIR / "data"
 CACHEDIR = DATADIR / "cache"
 
 COOKIESFILE = DATADIR / 'cookies'
+USERINFOFILE = DATADIR / "userinfos.yaml"
 
 BASE_URL = "https://swatbot.yoctoproject.org"
 LOGIN_URL = f"{BASE_URL}/accounts/login/"
@@ -58,6 +61,16 @@ class Field(enum.StrEnum):
     AUTOBUILDER_URL = 'Autobuilder URL'
     STEPS = 'Steps'
     USER_NOTES = 'Notes'
+    USER_STATUS = 'New triage status'
+
+
+class TriageStatus(enum.IntEnum):
+    PENDING = 0
+    MAIL_SENT = 1
+    BUG = 2
+    OTHER = 3
+    NOT_FOR_SWAT = 4
+    CANCELLED = 5
 
 
 def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
@@ -120,7 +133,6 @@ def get_build_collection(collectionid: int,
 
 
 def get_stepfailures(refresh: RefreshPolicy = RefreshPolicy.NO):
-    logger.info("Loading build failures...")
     maxage = refresh_policy_max_age(refresh, FAILURES_AUTO_REFRESH_S)
     return get_json("/stepfailure/", maxage)['data']
 
@@ -156,6 +168,17 @@ def get_failure_infos(limit: int, sort: Collection[str],
     statusenum_filter = [Status[s.upper()] for s in status_filter]
     owners = [None if str(f).lower() == "none" else f for f in owner_filter]
     refreshpol = RefreshPolicy[refresh.upper()]
+
+    logger.info("Loading saved data...")
+    if USERINFOFILE.exists():
+        with USERINFOFILE.open('r') as f:
+            pretty_userinfos = yaml.load(f, Loader=yaml.Loader)
+            userinfos = {bid: {Field(k): v for k, v in info.items()}
+                         for bid, info in pretty_userinfos.items()}
+    else:
+        userinfos = {}
+
+    logger.info("Loading build failures...")
     failures = get_stepfailures(refresh=refreshpol)
     pending_ids: dict[str, list[str]] = {}
     for failure in failures:
@@ -199,9 +222,24 @@ def get_failure_infos(limit: int, sort: Collection[str],
                           Field.AUTOBUILDER_URL: attributes['url'],
                           Field.OWNER: collection['attributes']['owner'],
                           Field.STEPS: pending_ids[buildid],
+                          **userinfos.get(attributes['buildid'], {}),
                           })
 
     def sortfn(x):
         return tuple([x[Field(k)] for k in sort])
 
     return sorted(infos, key=sortfn)
+
+
+def save_user_infos(infos: Collection[dict[Field, Any]]):
+    saved_fields = [Field.USER_NOTES, Field.USER_STATUS]
+
+    pretty_userinfos = {info[Field.BUILD]: {str(k): info[k]
+                                            for k in saved_fields if k in info}
+                        for info in infos}
+
+    if USERINFOFILE.exists():
+        shutil.copy(USERINFOFILE,
+                    USERINFOFILE.with_stem(f'{USERINFOFILE.stem}-backup'))
+    with USERINFOFILE.open('w') as f:
+        yaml.dump(pretty_userinfos, f)
