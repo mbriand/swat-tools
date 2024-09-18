@@ -33,3 +33,7 @@ def get_abints() -> dict[int, str]:
                         for bug in json.loads(r.text)['bugs']}
 
     return KNOWN_ABINTS
+
+
+def get_bug_url(bugid: int) -> str:
+    return f"https://bugzilla.yoctoproject.org/show_bug.cgi?id={bugid}"

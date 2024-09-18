@@ -59,7 +59,7 @@ class Field(enum.StrEnum):
     COMPLETED = 'Completed'
     SWAT_URL = 'SWAT URL'
     AUTOBUILDER_URL = 'Autobuilder URL'
-    STEPS = 'Steps'
+    FAILURES = 'Failures'
     USER_NOTES = 'Notes'
     USER_STATUS = 'New triage status'
 
@@ -159,6 +159,17 @@ def login(user: str, password: str):
     logger.info("Logging success")
 
 
+def get_user_infos() -> dict[int, dict[Field, Any]]:
+    logger.info("Loading saved data...")
+    if USERINFOFILE.exists():
+        with USERINFOFILE.open('r') as f:
+            pretty_userinfos = yaml.load(f, Loader=yaml.Loader)
+            userinfos = {bid: {Field(k): v for k, v in info.items()}
+                         for bid, info in pretty_userinfos.items()}
+            return userinfos
+    return {}
+
+
 def get_failure_infos(limit: int, sort: Collection[str],
                       refresh: str,
                       test_filter: Collection[str],
@@ -169,23 +180,17 @@ def get_failure_infos(limit: int, sort: Collection[str],
     owners = [None if str(f).lower() == "none" else f for f in owner_filter]
     refreshpol = RefreshPolicy[refresh.upper()]
 
-    logger.info("Loading saved data...")
-    if USERINFOFILE.exists():
-        with USERINFOFILE.open('r') as f:
-            pretty_userinfos = yaml.load(f, Loader=yaml.Loader)
-            userinfos = {bid: {Field(k): v for k, v in info.items()}
-                         for bid, info in pretty_userinfos.items()}
-    else:
-        userinfos = {}
+    userinfos = get_user_infos()
 
     logger.info("Loading build failures...")
     failures = get_stepfailures(refresh=refreshpol)
-    pending_ids: dict[str, list[str]] = {}
+    pending_ids: dict[int, dict[int, str]] = {}
     for failure in failures:
         if failure['attributes']['triage'] == 0:
-            buildid = failure['relationships']['build']['data']['id']
+            buildid = int(failure['relationships']['build']['data']['id'])
+            failureid = int(failure['id'])
             stepname = failure['attributes']['stepname']
-            pending_ids.setdefault(buildid, []).append(stepname)
+            pending_ids.setdefault(buildid, {})[failureid] = stepname
 
     logger.info("Loading build failures details...")
     unique_pending_ids = sorted(pending_ids.keys(), reverse=True)[:limit]
@@ -221,7 +226,7 @@ def get_failure_infos(limit: int, sort: Collection[str],
                           Field.SWAT_URL: swat_url,
                           Field.AUTOBUILDER_URL: attributes['url'],
                           Field.OWNER: collection['attributes']['owner'],
-                          Field.STEPS: pending_ids[buildid],
+                          Field.FAILURES: pending_ids[buildid],
                           **userinfos.get(attributes['buildid'], {}),
                           })
 

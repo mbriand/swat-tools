@@ -113,7 +113,7 @@ def show_pending_failures(open_url_with: str, *args, **kwargs):
                       if i[swatbot.Field.STATUS] == swatbot.Status.WARNING]))
 
 
-def review_status_menu(info: dict[swatbot.Field, Any]):
+def review_status_menu(info: dict[swatbot.Field, Any]) -> bool:
     print("a(b-int)")
     print("b(ug-opened)")
     print("m(ail-sent)")
@@ -132,7 +132,9 @@ def review_status_menu(info: dict[swatbot.Field, Any]):
                 abint = input('Bug number:').strip()
                 if abint.isnumeric() and int(abint) in abints:
                     newstatus = {'status': swatbot.TriageStatus.BUG,
-                                 'comment': int(abint)
+                                 'comment': int(abint),
+                                 'log': input('Log URL:').strip(),
+                                 'failures': info[swatbot.Field.FAILURES]
                                  }
                     break
                 elif abint.strip() in ["q", "quit"]:
@@ -142,23 +144,29 @@ def review_status_menu(info: dict[swatbot.Field, Any]):
                     print(tabulate.tabulate(abints.items()))
         elif line.strip() in ["b", "bug-opened"]:
             newstatus = {'status': swatbot.TriageStatus.BUG,
-                         'comment': input('Bug URL:').strip()
+                         'comment': input('Bug URL:').strip(),
+                         'log': input('Log URL:').strip(),
+                         'failures': info[swatbot.Field.FAILURES]
                          }
         elif line.strip() in ["m", "mail-sent"]:
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                         'comment': input('Comment:').strip()
+                         'comment': input('Comment:').strip(),
+                         'failures': info[swatbot.Field.FAILURES]
                          }
         elif line.strip() in ["i", "mail-sent-by-me"]:
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                         'comment': f"Mail sent by {MAILNAME}"
+                         'comment': f"Mail sent by {MAILNAME}",
+                         'failures': info[swatbot.Field.FAILURES]
                          }
         elif line.strip() in ["o", "other"]:
             newstatus = {'status': swatbot.TriageStatus.OTHER,
-                         'comment': input('Comment:').strip()
+                         'comment': input('Comment:').strip(),
+                         'failures': info[swatbot.Field.FAILURES]
                          }
         elif line.strip() in ["n", "not-for-swat"]:
             newstatus = {'status': swatbot.TriageStatus.NOT_FOR_SWAT,
-                         'comment': input('Comment:').strip()
+                         'comment': input('Comment:').strip(),
+                         'failures': info[swatbot.Field.FAILURES]
                          }
         elif line.strip() in ["q", "quit"]:
             pass
@@ -169,6 +177,9 @@ def review_status_menu(info: dict[swatbot.Field, Any]):
 
     if newstatus:
         info[swatbot.Field.USER_STATUS] = newstatus
+        return True
+
+    return False
 
 
 def review_menu(infos: list[dict[swatbot.Field, Any]],
@@ -184,11 +195,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
     while True:
         line = input('action: ')
         if line.strip() in ["n", "next"]:
-            if entry < len(infos) - 1:
-                entry += 1
-            else:
-                logger.warning("This is the last entry")
-                continue
+            entry += 1
         elif line.strip() in ["p", "prev", "previous"]:
             if entry >= 1:
                 entry -= 1
@@ -210,11 +217,16 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
                     info[swatbot.Field.USER_NOTES] = fr.read()
                 os.unlink(f.name)
         elif line.strip() in ["s", "set-status"]:
-            review_status_menu(info)
+            updated = review_status_menu(info)
+            if updated:
+                entry += 1
         else:
             logger.warning("Invalid command")
             continue
         break
+
+    if entry >= len(infos):
+        return None
 
     return entry
 
@@ -244,8 +256,8 @@ def review_pending_failures(open_url_with: str, *args, **kwargs):
             swatbot.Field.AUTOBUILDER_URL,
         ]
         table = [[k, info[k]] for k in simple_fields]
-        table.append([swatbot.Field.STEPS,
-                      "\n".join(info[swatbot.Field.STEPS])])
+        table.append([swatbot.Field.FAILURES,
+                      "\n".join(info[swatbot.Field.FAILURES].values())])
 
         usernotes = info.get(swatbot.Field.USER_NOTES)
         if usernotes:
@@ -272,6 +284,67 @@ def review_pending_failures(open_url_with: str, *args, **kwargs):
         entry = review_menu(infos, entry)
 
     swatbot.save_user_infos(infos)
+
+
+@main.command()
+@click.option('--dry-run', '-n', type=bool,
+              help="Only shows what would be done")
+def publish_new_reviews(dry_run: bool):
+    userinfos = swatbot.get_user_infos()
+
+    # TODO: always refresh
+    logger.info("Loading build failures...")
+    failures = swatbot.get_stepfailures(refresh=swatbot.RefreshPolicy.NO)
+    pending_failures = {int(failure['id']) for failure in failures
+                        if failure['attributes']['triage'] == 0}
+
+    reviews: dict[tuple[swatbot.TriageStatus, Any], list[dict]] = {}
+    for buildid, info in userinfos.items():
+        if swatbot.Field.USER_STATUS not in info:
+            continue
+
+        userstatus = info[swatbot.Field.USER_STATUS]
+        status = userstatus.get('status')
+        comment = userstatus.get('comment')
+        if not status or not comment:
+            continue
+
+        # Make sure failures are still pending
+        userstatus['failures'] = {k: v for
+                                  k, v in userstatus['failures'].items()
+                                  if k in pending_failures}
+
+        reviews.setdefault((status, comment), []).append(userstatus)
+
+    for (status, comment), entries in reviews.items():
+        bugurl = None
+
+        if status == swatbot.TriageStatus.BUG:
+            logs = "\n".join([entry['log'] for entry in entries])
+            try:
+                bugid = int(comment)
+            except ValueError:
+                bugid = None
+
+            if bugid:
+                bugurl = bugzilla.get_bug_url(bugid)
+                logging.info('Need to update %s with %s', bugurl, logs)
+            else:
+                print(f"Please update {comment} ticket id with: {logs}")
+
+        for entry in entries:
+            if bugurl:
+                for failureid, stepname in entry['failures'].items():
+                    logging.info('Need to update failure %s (%s) '
+                                 'to status %s (%s) with "%s"',
+                                 failureid, stepname, status,
+                                 status.name.title(), bugurl)
+            else:
+                for failureid, stepname in entry['failures'].items():
+                    logging.info('Need to update failure %s (%s) '
+                                 'to status %s (%s) with "%s"',
+                                 failureid, stepname, status,
+                                 status.name.title(), comment)
 
 
 if __name__ == '__main__':
