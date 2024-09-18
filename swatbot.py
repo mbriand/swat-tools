@@ -188,7 +188,7 @@ def get_failure_infos(limit: int, sort: Collection[str],
             pending_ids.setdefault(buildid, []).append(stepname)
 
     logger.info("Loading build failures details...")
-    unique_pending_ids = sorted(pending_ids.keys(), reverse=True)[-limit:]
+    unique_pending_ids = sorted(pending_ids.keys(), reverse=True)[:limit]
     infos = []
     with click.progressbar(unique_pending_ids) as pending_ids_progress:
         for buildid in pending_ids_progress:

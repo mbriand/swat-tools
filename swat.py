@@ -9,6 +9,7 @@ import swatbot
 import os
 import tempfile
 import pathlib
+import bugzilla
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,14 @@ def show_pending_failures(open_url_with: str, *args, **kwargs):
             url = info[swatbot.Field.SWAT_URL]
             subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
+    def format(info, field):
+        if field == swatbot.Field.USER_STATUS:
+            status = info.get(field)
+            if status:
+                return f"{status['status'].name.title()}: {status['comment']}"
+            return None
+        return info[field]
+
     shown_fields = [
         swatbot.Field.BUILD,
         swatbot.Field.STATUS,
@@ -90,11 +99,10 @@ def show_pending_failures(open_url_with: str, *args, **kwargs):
         swatbot.Field.WORKER,
         swatbot.Field.COMPLETED,
         swatbot.Field.SWAT_URL,
-        # swatbot.Field.AUTOBUILDER_URL,
-        # swatbot.Field.STEPS,
+        swatbot.Field.USER_STATUS,
     ]
     headers = [str(f) for f in shown_fields]
-    table = [[info[field] for field in shown_fields] for info in infos]
+    table = [[format(info, field) for field in shown_fields] for info in infos]
 
     print(tabulate.tabulate(table, headers=headers))
 
@@ -106,7 +114,7 @@ def show_pending_failures(open_url_with: str, *args, **kwargs):
 
 
 def review_status_menu(info: dict[swatbot.Field, Any]):
-    # print("a(b-int)")  # TODO
+    print("a(b-int)")
     print("b(ug-opened)")
     print("m(ail-sent)")
     print(f"(ma)i(l-sent-by-me): {MAILNAME}")
@@ -114,10 +122,25 @@ def review_status_menu(info: dict[swatbot.Field, Any]):
     print("n(ot-for-swat)")
     print("q(uit): Go back to previous menu")
 
-    newstatus = None
+    newstatus: Optional[dict] = None
     while True:
         line = input('action: ')
-        if line.strip() in ["b", "bug-opened"]:
+
+        if line.strip() in ["a", "ab-int"]:
+            abints = bugzilla.get_abints()
+            while True:
+                abint = input('Bug number:').strip()
+                if abint.isnumeric() and int(abint) in abints:
+                    newstatus = {'status': swatbot.TriageStatus.BUG,
+                                 'comment': int(abint)
+                                 }
+                    break
+                elif abint.strip() in ["q", "quit"]:
+                    break
+                else:
+                    logging.warning("Unknown AB-INT issue: %s", abint)
+                    print(tabulate.tabulate(abints.items()))
+        elif line.strip() in ["b", "bug-opened"]:
             newstatus = {'status': swatbot.TriageStatus.BUG,
                          'comment': input('Bug URL:').strip()
                          }
@@ -209,8 +232,6 @@ def review_pending_failures(open_url_with: str, *args, **kwargs):
     entry: Optional[int] = 0
     while entry is not None:
         info = infos[entry]
-        import pprint
-        pprint.pprint(info)
 
         simple_fields = [
             swatbot.Field.BUILD,
