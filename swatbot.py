@@ -184,18 +184,21 @@ def get_failure_infos(limit: int, sort: Collection[str],
 
     logger.info("Loading build failures...")
     failures = get_stepfailures(refresh=refreshpol)
-    pending_ids: dict[int, dict[int, str]] = {}
+    pending_ids: dict[int, dict[int, dict[str, Any]]] = {}
     for failure in failures:
         if failure['attributes']['triage'] == 0:
             buildid = int(failure['relationships']['build']['data']['id'])
             failureid = int(failure['id'])
-            stepname = failure['attributes']['stepname']
-            pending_ids.setdefault(buildid, {})[failureid] = stepname
+            urls = {u.split()[0].rsplit('/')[-1]: u
+                    for u in failure['attributes']['urls'].split()}
+            faildata = {'stepname': failure['attributes']['stepname'],
+                        'urls': urls}
+            pending_ids.setdefault(buildid, {})[failureid] = faildata
 
     logger.info("Loading build failures details...")
-    unique_pending_ids = sorted(pending_ids.keys(), reverse=True)[:limit]
     infos = []
-    with click.progressbar(unique_pending_ids) as pending_ids_progress:
+    limited_pending_ids = sorted(pending_ids.keys(), reverse=True)[:limit]
+    with click.progressbar(limited_pending_ids) as pending_ids_progress:
         for buildid in pending_ids_progress:
             build = get_build(buildid, refresh=refreshpol)
             attributes = build['attributes']
