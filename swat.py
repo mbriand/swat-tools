@@ -60,6 +60,11 @@ failures_list_options = [
                  type=click.Choice([str(s) for s in swatbot.Status],
                                    case_sensitive=False),
                  help="Only show some statuses"),
+    click.option('--completed-after', '-A',
+                 type=click.DateTime(),
+                 help="Only show failures after a given date"),
+    click.option('--with-notes', '-N', is_flag=True,
+                 help="Only show failures with attached note")
 ]
 
 
@@ -76,8 +81,7 @@ def add_options(options):
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
 def show_pending_failures(open_url_with: str, *args, **kwargs):
-    infos = swatbot.get_failure_infos(*args, **kwargs)
-    userinfos = swatbot.get_user_infos()
+    infos, userinfos = swatbot.get_failure_infos(*args, **kwargs)
 
     for info in infos:
         if open_url_with:
@@ -99,19 +103,28 @@ def show_pending_failures(open_url_with: str, *args, **kwargs):
                         break
                 status_strs.append(status_str)
             return "\n".join(status_strs)
+        if field == swatbot.Field.USER_NOTES:
+            notes = userinfo.get(field, "").replace("\n", " ")
+            maxlen = 40
+            if len(notes) > maxlen:
+                notes = f"{notes[:maxlen-3]}..."
+            return notes
         return str(info[field])
 
     shown_fields = [
         swatbot.Field.BUILD,
-        swatbot.Field.STATUS,
-        swatbot.Field.TEST,
-        swatbot.Field.OWNER,
+        swatbot.Field.STATUS if len(kwargs['status_filter']) != 1 else None,
+        swatbot.Field.TEST if len({info[swatbot.Field.TEST]
+                                   for info in infos}) != 1 else None,
+        swatbot.Field.OWNER if len(kwargs['owner_filter']) != 1 else None,
         swatbot.Field.WORKER,
         swatbot.Field.COMPLETED,
         swatbot.Field.SWAT_URL,
         swatbot.Field.FAILURES,
         swatbot.Field.USER_STATUS,
+        swatbot.Field.USER_NOTES,
     ]
+    shown_fields = [f for f in shown_fields if f]
     headers = [str(f) for f in shown_fields]
     table = [[format(info, userinfos.get(info[swatbot.Field.BUILD], {}), field)
               for field in shown_fields] for info in infos]
@@ -146,8 +159,10 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
     print("a ab-int")
     print("b bug opened")
     print("m mail sent")
-    print(f"i mail sent by {MAILNAME}")
+    if MAILNAME:
+        print(f"i mail sent by {MAILNAME}")
     print("o other")
+    print("f other: Fixed")
     print("t not for swat")
     print("r reset status")
     print()
@@ -205,13 +220,17 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                          'comment': input('Comment:').strip(),
                          }
-        elif line.strip() == "i":
+        elif line.strip() == "i" and MAILNAME:
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                          'comment': f"Mail sent by {MAILNAME}",
                          }
         elif line.strip() == "o":
             newstatus = {'status': swatbot.TriageStatus.OTHER,
                          'comment': input('Comment:').strip(),
+                         }
+        elif line.strip() == "f":
+            newstatus = {'status': swatbot.TriageStatus.OTHER,
+                         'comment': 'Fixed',
                          }
         elif line.strip() == "n":
             newstatus = {'status': swatbot.TriageStatus.NOT_FOR_SWAT,
@@ -247,16 +266,25 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
 @add_options(failures_list_options)
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
-def review_pending_failures(open_url_with: str, *args, **kwargs):
-    infos = swatbot.get_failure_infos(*args, **kwargs)
-    userinfos = swatbot.get_user_infos()
+@click.option('--include-already-reviewed', '-a', is_flag=True,
+              help="Include already reviewed issues")
+def review_pending_failures(open_url_with: str, include_already_reviewed: bool,
+                            *args, **kwargs):
+    infos, userinfos = swatbot.get_failure_infos(*args, **kwargs)
+
+    if not include_already_reviewed:
+        infos = [info for info in infos
+                 if not userinfos.get(info[swatbot.Field.BUILD],
+                                      {}).get(swatbot.Field.USER_STATUS, [])]
 
     if not infos:
         return
 
     entry: Optional[int] = 0
+    prev_entry = None
     while entry is not None:
         info = infos[entry]
+        userinfo = userinfos.get(info[swatbot.Field.BUILD], {})
 
         simple_fields = [
             swatbot.Field.BUILD,
@@ -271,7 +299,7 @@ def review_pending_failures(open_url_with: str, *args, **kwargs):
         table = [[k, info[k]] for k in simple_fields]
 
         status_strs = []
-        statuses = info.get(swatbot.Field.USER_STATUS, [])
+        statuses = userinfo.get(swatbot.Field.USER_STATUS, [])
         failures = info[swatbot.Field.FAILURES]
         for failure in failures:
             status_str = ""
@@ -286,21 +314,23 @@ def review_pending_failures(open_url_with: str, *args, **kwargs):
                       "\n".join([f['stepname'] for f in failures.values()]),
                       "\n".join(status_strs)])
 
-        usernotes = info.get(swatbot.Field.USER_NOTES)
+        usernotes = userinfo.get(swatbot.Field.USER_NOTES)
         if usernotes:
             table.append([swatbot.Field.USER_NOTES, usernotes])
 
         print()
+        print(f"Progress: {entry+1}/{len(infos)}")
         print(tabulate.tabulate(table))
         print()
 
-        if open_url_with:
-            url = info[swatbot.Field.SWAT_URL]
+        if open_url_with and prev_entry != entry:
+            url = info[swatbot.Field.AUTOBUILDER_URL]
             subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
-        entry = review_menu(infos, entry)
+        prev_entry = entry
+        entry = review_menu(infos, userinfos, entry)
 
-    swatbot.save_user_infos(infos)
+    swatbot.save_user_infos(userinfos)
 
 
 @main.command()
@@ -309,18 +339,17 @@ def review_pending_failures(open_url_with: str, *args, **kwargs):
 def publish_new_reviews(dry_run: bool):
     userinfos = swatbot.get_user_infos()
 
-    # TODO: always refresh
     logger.info("Loading build failures...")
-    failures = swatbot.get_stepfailures(refresh=swatbot.RefreshPolicy.NO)
-    pending_failures = {int(failure['id']) for failure in failures
+    failures = swatbot.get_stepfailures(refresh=swatbot.RefreshPolicy.FORCE)
+    pending_failures = {int(failure['id']): failure for failure in failures
                         if failure['attributes']['triage'] == 0}
 
     reviews: dict[tuple[swatbot.TriageStatus, Any], list[dict]] = {}
-    for buildid, info in userinfos.items():
-        if swatbot.Field.USER_STATUS not in info:
+    for buildid, userinfo in userinfos.items():
+        if swatbot.Field.USER_STATUS not in userinfo:
             continue
 
-        userstatuses = info[swatbot.Field.USER_STATUS]
+        userstatuses = userinfo.get(swatbot.Field.USER_STATUS, [])
         for userstatus in userstatuses:
             status = userstatus.get('status')
             comment = userstatus.get('comment')
@@ -338,47 +367,49 @@ def publish_new_reviews(dry_run: bool):
         bugurl = None
 
         if status == swatbot.TriageStatus.BUG:
-            logs = [entry['log'] for entry in entries]
+            logs = [entry['bugzilla-comment'] for entry in entries]
             try:
                 bugid = int(comment)
             except ValueError:
                 bugid = None
 
             if bugid:
-                bugurl = bugzilla.get_bug_url(bugid)
+                comment = bugurl = bugzilla.get_bug_url(bugid)
                 logging.debug('Need to update %s with %s', bugurl,
                               ", ".join(logs))
                 strlogs = '\n'.join(logs)
                 if not dry_run:
-                    print(f"Please update {bugurl} ticket id with:\n"
-                          f"{strlogs}\n")
+                    print(f"\nPlease update {bugurl} ticket id with:\n"
+                          f"{'-'*40}\n"
+                          f"{strlogs}\n"
+                          f"{'-'*40}\n")
             else:
                 strlogs = '\n'.join(logs)
                 if not dry_run:
-                    print(f"Please update {comment} ticket id with:\n"
-                          f"{strlogs}\n")
+                    print(f"\nPlease update {comment} ticket id with:\n"
+                          f"{'-'*40}\n"
+                          f"{strlogs}\n"
+                          f"{'-'*40}\n")
 
         for entry in entries:
-            if bugurl:
-                for failureid, stepname in entry['failures'].items():
-                    logging.debug('Need to update failure %s (%s) '
-                                  'to status %s (%s) with "%s"',
-                                  failureid, stepname, status,
-                                  status.name.title(), bugurl)
-                    if not dry_run:
-                        print(f'Please update failure {failureid} '
-                              f'to status {status.name.title()} '
-                              f'with "{bugurl}"')
-            else:
-                for failureid, stepname in entry['failures'].items():
-                    logging.debug('Need to update failure %s (%s) '
-                                  'to status %s (%s) with "%s"',
-                                  failureid, stepname, status,
-                                  status.name.title(), comment)
-                    if not dry_run:
-                        print(f'Please update failure {failureid} '
-                              f'to status {status.name.title()} '
-                              f'with "{comment}"')
+            for failureid, failuredata in entry['failures'].items():
+                logging.debug('Need to update failure %s (%s) '
+                              'to status %s (%s) with "%s"',
+                              failureid, failuredata['stepname'], status,
+                              status.name.title(), comment)
+                if not dry_run:
+                    # TODO: remove and publish result using REST
+                    failure = pending_failures[failureid]
+                    buildid = failure['relationships']['build']['data']['id']
+                    build = swatbot.get_build(buildid)
+                    buildcollection = build['relationships']['buildcollection']
+                    colid = buildcollection['data']['id']
+                    swat_url = f"{swatbot.BASE_URL}/collection/{colid}/"
+
+                    print(f'Please update failure {failureid} '
+                          f'("{failuredata["stepname"]}" on {swat_url} ) '
+                          f'to status {status.name.title()} '
+                          f'with "{comment}"')
 
 
 if __name__ == '__main__':

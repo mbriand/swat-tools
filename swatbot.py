@@ -10,6 +10,8 @@ import enum
 import time
 import yaml
 import shutil
+import re
+from datetime import datetime
 from typing import Any, Collection
 
 logger = logging.getLogger(__name__)
@@ -175,10 +177,17 @@ def get_failure_infos(limit: int, sort: Collection[str],
                       test_filter: Collection[str],
                       ignore_test_filter: Collection[str],
                       status_filter: Collection[str],
-                      owner_filter: Collection[str]) -> list[dict[Field, Any]]:
+                      owner_filter: Collection[str],
+                      completed_after: datetime,
+                      with_notes: bool
+                      ) -> tuple[list[dict[Field, Any]],
+                                 dict[int, dict[Field, Any]]]:
     statusenum_filter = [Status[s.upper()] for s in status_filter]
     owners = [None if str(f).lower() == "none" else f for f in owner_filter]
     refreshpol = RefreshPolicy[refresh.upper()]
+
+    if completed_after:
+        completed_after = completed_after.astimezone()
 
     userinfos = get_user_infos()
 
@@ -209,7 +218,9 @@ def get_failure_infos(limit: int, sort: Collection[str],
             if owners and collection['attributes']['owner'] not in owners:
                 continue
 
-            if test_filter and attributes['targetname'] not in test_filter:
+            matches = [True for f in test_filter
+                       if re.match(f"^{f}$", attributes['targetname'])]
+            if test_filter and not matches:
                 continue
 
             if attributes['targetname'] in ignore_test_filter:
@@ -218,6 +229,16 @@ def get_failure_infos(limit: int, sort: Collection[str],
             status = Status.from_int(attributes['status'])
             if statusenum_filter and status not in statusenum_filter:
                 continue
+
+            if completed_after and attributes['completed']:
+                completed = datetime.fromisoformat(attributes['completed'])
+                if completed < completed_after:
+                    continue
+
+            if with_notes:
+                userinfo = userinfos.setdefault(attributes['buildid'], {})
+                if not userinfo.get(Field.USER_NOTES):
+                    continue
 
             # Keys must be in TABLE_HEADER
             swat_url = f"{BASE_URL}/collection/{collection['id']}/"
@@ -230,13 +251,12 @@ def get_failure_infos(limit: int, sort: Collection[str],
                           Field.AUTOBUILDER_URL: attributes['url'],
                           Field.OWNER: collection['attributes']['owner'],
                           Field.FAILURES: pending_ids[buildid],
-                          **userinfos.get(attributes['buildid'], {}),
                           })
 
     def sortfn(x):
         return tuple([x[Field(k)] for k in sort])
 
-    return sorted(infos, key=sortfn)
+    return (sorted(infos, key=sortfn), userinfos)
 
 
 def save_user_infos(userinfos: dict[int, dict[Field, Any]]):
