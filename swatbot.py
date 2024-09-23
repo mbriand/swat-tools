@@ -239,15 +239,15 @@ def get_failure_infos(limit: int, sort: Collection[str],
     return sorted(infos, key=sortfn)
 
 
-def save_user_infos(infos: Collection[dict[Field, Any]]):
-    saved_fields = [Field.USER_NOTES, Field.USER_STATUS]
+def save_user_infos(userinfos: dict[int, dict[Field, Any]]):
+    pretty_userinfos = {bid: {str(k): v for k, v in info.items()}
+                        for bid, info in userinfos.items()}
 
-    pretty_userinfos = {info[Field.BUILD]: {str(k): info[k]
-                                            for k in saved_fields if k in info}
-                        for info in infos}
-
-    if USERINFOFILE.exists():
-        shutil.copy(USERINFOFILE,
-                    USERINFOFILE.with_stem(f'{USERINFOFILE.stem}-backup'))
     with USERINFOFILE.open('w') as f:
         yaml.dump(pretty_userinfos, f)
+
+    i = 0
+    while USERINFOFILE.with_stem(f'{USERINFOFILE.stem}-backup-{i}').exists():
+        i += 1
+    shutil.copy(USERINFOFILE,
+                USERINFOFILE.with_stem(f'{USERINFOFILE.stem}-backup-{i}'))

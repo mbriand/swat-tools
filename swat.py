@@ -77,18 +77,19 @@ def add_options(options):
               help="Open the swatbot url with given program")
 def show_pending_failures(open_url_with: str, *args, **kwargs):
     infos = swatbot.get_failure_infos(*args, **kwargs)
+    userinfos = swatbot.get_user_infos()
 
     for info in infos:
         if open_url_with:
             url = info[swatbot.Field.SWAT_URL]
             subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
-    def format(info, field):
+    def format(info, userinfo, field):
         if field == swatbot.Field.FAILURES:
             return "\n".join([f['stepname'] for f in info[field].values()])
         if field == swatbot.Field.USER_STATUS:
             status_strs = []
-            statuses = info.get(field, [])
+            statuses = userinfo.get(field, [])
             for failure in info[swatbot.Field.FAILURES]:
                 status_str = ""
                 for status in statuses:
@@ -112,18 +113,35 @@ def show_pending_failures(open_url_with: str, *args, **kwargs):
         swatbot.Field.USER_STATUS,
     ]
     headers = [str(f) for f in shown_fields]
-    table = [[format(info, field) for field in shown_fields] for info in infos]
+    table = [[format(info, userinfos.get(info[swatbot.Field.BUILD], {}), field)
+              for field in shown_fields] for info in infos]
 
     print(tabulate.tabulate(table, headers=headers))
 
     logging.info("%s entries found (%s warnings and %s errors)", len(infos),
                  len([i for i in infos
-                      if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]),
+                      if i[swatbot.Field.STATUS] == swatbot.Status.WARNING]),
                  len([i for i in infos
-                      if i[swatbot.Field.STATUS] == swatbot.Status.WARNING]))
+                      if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]))
+
+
+def edit_text(text: Optional[str]) -> str:
+    editor = os.environ.get("EDITOR", "vim")
+
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        if text:
+            f.write(text)
+        f.close()
+        subprocess.run(shlex.split(f"{editor} {f.name}"))
+        with open(f.name, mode='r') as fr:
+            newtext = fr.read()
+        os.unlink(f.name)
+
+    return newtext
 
 
 def review_menu(infos: list[dict[swatbot.Field, Any]],
+                userinfos: dict[int, dict[swatbot.Field, Any]],
                 entry: int) -> Optional[int]:
     print("a ab-int")
     print("b bug opened")
@@ -139,6 +157,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
     print("q quit")
 
     info = infos[entry]
+    userinfo = userinfos.setdefault(info[swatbot.Field.BUILD], {})
     failures = info[swatbot.Field.FAILURES]
     first_failure = min(failures)
     newstatus: Optional[dict] = None
@@ -156,41 +175,32 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
         elif line.strip() == "q":
             return None
         elif line.strip() == "e":
-            editor = os.environ.get("EDITOR", "vim")
-
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-                usernotes = info.get(swatbot.Field.USER_NOTES)
-                if usernotes:
-                    f.write(usernotes)
-                f.close()
-                subprocess.run(shlex.split(f"{editor} {f.name}"))
-                with open(f.name, mode='r') as fr:
-                    info[swatbot.Field.USER_NOTES] = fr.read()
-                os.unlink(f.name)
-        elif line.strip() == "a":
+            newnotes = edit_text(userinfo.get(swatbot.Field.USER_NOTES))
+            userinfo[swatbot.Field.USER_NOTES] = newnotes
+        elif line.strip() in ["a", "b"]:
             abints = bugzilla.get_abints()
             while True:
-                abint = input('Bug number:').strip()
-                if 'stdio' in failures[first_failure]['urls']:
-                    log = failures[first_failure]['urls']['stdio']
-                else:
-                    log = input('Log URL:').strip()
-                if abint.isnumeric() and int(abint) in abints:
+                bugnum = input('Bug number:').strip()
+                if bugnum.isnumeric() and (int(bugnum) in abints
+                                           or line.strip() == "b"):
+                    print("Please set the comment content")
+                    print(failures[first_failure]['urls'])
+                    if 'stdio' in failures[first_failure]['urls']:
+                        log = failures[first_failure]['urls']['stdio']
+                        bcomment = edit_text(log)
+                    else:
+                        bcomment = edit_text(None)
                     newstatus = {'status': swatbot.TriageStatus.BUG,
-                                 'comment': int(abint),
-                                 'log': log,
+                                 'comment': int(bugnum),
+                                 'bugzilla-comment': bcomment,
                                  }
                     break
-                elif abint.strip() == "q":
+                elif bugnum.strip() == "q":
                     break
                 else:
-                    logging.warning("Unknown AB-INT issue: %s", abint)
-                    print(tabulate.tabulate(abints.items()))
-        elif line.strip() == "b":
-            newstatus = {'status': swatbot.TriageStatus.BUG,
-                         'comment': input('Bug URL:').strip(),
-                         'log': input('Log URL:').strip(),
-                         }
+                    logging.warning("Invalid issue: %s", bugnum)
+                    if line.strip() == "a":
+                        print(tabulate.tabulate(abints.items()))
         elif line.strip() == "m":
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                          'comment': input('Comment:').strip(),
@@ -208,23 +218,24 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
                          'comment': input('Comment:').strip(),
                          }
         elif line.strip() == "r":
-            info[swatbot.Field.USER_STATUS] = []
+            userinfo[swatbot.Field.USER_STATUS] = []
         else:
             logger.warning("Invalid command")
             continue
         break
 
     if newstatus:
-        newstatus['failures'] = {first_failure: failures[first_failure]}
-        info[swatbot.Field.USER_STATUS] = [newstatus]
+        # newstatus['failures'] = {first_failure: failures[first_failure]}
+        newstatus['failures'] = failures
+        userinfo[swatbot.Field.USER_STATUS] = [newstatus]
 
-        if len(failures) > 1:
-            otherstatus = {'status': swatbot.TriageStatus.OTHER,
-                           'comment': 'Previous step failed',
-                           }
-            otherstatus['failures'] = {k: v for k, v in failures.items()
-                                       if k != first_failure}
-            info[swatbot.Field.USER_STATUS].append(otherstatus)
+        # if len(failures) > 1:
+        #     otherstatus = {'status': swatbot.TriageStatus.OTHER,
+        #                    'comment': 'Previous step failed',
+        #                    }
+        #     otherstatus['failures'] = {k: v for k, v in failures.items()
+        #                                if k != first_failure}
+        #     userinfo[swatbot.Field.USER_STATUS].append(otherstatus)
 
     if entry >= len(infos):
         return None
@@ -238,6 +249,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
               help="Open the swatbot url with given program")
 def review_pending_failures(open_url_with: str, *args, **kwargs):
     infos = swatbot.get_failure_infos(*args, **kwargs)
+    userinfos = swatbot.get_user_infos()
 
     if not infos:
         return
