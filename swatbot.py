@@ -84,7 +84,7 @@ def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
 
 
 FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
-AUTO_REFRESH_S = 60 * 60 * 24 * 7
+AUTO_REFRESH_S = 60 * 60 * 24 * 30
 
 
 def get_session() -> requests.Session:
@@ -137,6 +137,11 @@ def get_build_collection(collectionid: int,
 def get_stepfailures(refresh: RefreshPolicy = RefreshPolicy.NO):
     maxage = refresh_policy_max_age(refresh, FAILURES_AUTO_REFRESH_S)
     return get_json("/stepfailure/", maxage)['data']
+
+
+def get_stepfailure(failureid: int, refresh: RefreshPolicy = RefreshPolicy.NO):
+    maxage = refresh_policy_max_age(refresh, FAILURES_AUTO_REFRESH_S)
+    return get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 
 def login(user: str, password: str):
@@ -261,7 +266,7 @@ def get_failure_infos(limit: int, sort: Collection[str],
 
 def save_user_infos(userinfos: dict[int, dict[Field, Any]]):
     pretty_userinfos = {bid: {str(k): v for k, v in info.items()}
-                        for bid, info in userinfos.items()}
+                        for bid, info in userinfos.items() if info}
 
     with USERINFOFILE.open('w') as f:
         yaml.dump(pretty_userinfos, f)

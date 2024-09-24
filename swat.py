@@ -39,7 +39,7 @@ def login(user: str, password: str):
 
 
 failures_list_options = [
-    click.option('--limit', '-l', type=click.INT, default=0,
+    click.option('--limit', '-l', type=click.INT, default=None,
                  help="Only parse the n last failures waiting for triage"),
     click.option('--sort', '-s', multiple=True, default=["Build"],
                  type=click.Choice([str(f) for f in swatbot.Field],
@@ -338,58 +338,70 @@ def review_pending_failures(open_url_with: str, include_already_reviewed: bool,
               help="Only shows what would be done")
 def publish_new_reviews(dry_run: bool):
     userinfos = swatbot.get_user_infos()
+    failures = swatbot.get_stepfailures(refresh=swatbot.RefreshPolicy.NO)
 
-    logger.info("Loading build failures...")
-    failures = swatbot.get_stepfailures(refresh=swatbot.RefreshPolicy.FORCE)
-    pending_failures = {int(failure['id']): failure for failure in failures
-                        if failure['attributes']['triage'] == 0}
-
+    logger.info("Checking failures status...")
     reviews: dict[tuple[swatbot.TriageStatus, Any], list[dict]] = {}
-    for buildid, userinfo in userinfos.items():
-        if swatbot.Field.USER_STATUS not in userinfo:
-            continue
-
-        userstatuses = userinfo.get(swatbot.Field.USER_STATUS, [])
-        for userstatus in userstatuses:
-            status = userstatus.get('status')
-            comment = userstatus.get('comment')
-            if not status or not comment:
+    with click.progressbar(userinfos.items()) as userinfos_progress:
+        for buildid, userinfo in userinfos_progress:
+            if swatbot.Field.USER_STATUS not in userinfo:
                 continue
 
-            # Make sure failures are still pending
-            userstatus['failures'] = {k: v for
-                                      k, v in userstatus['failures'].items()
-                                      if k in pending_failures}
+            userstatuses = userinfo.get(swatbot.Field.USER_STATUS, [])
+            for userstatus in userstatuses:
+                status = userstatus.get('status')
+                comment = userstatus.get('comment')
+                if not status or not comment:
+                    continue
 
-            reviews.setdefault((status, comment), []).append(userstatus)
+                def is_pending(failure_id):
+                    refresh = refresh = swatbot.RefreshPolicy.FORCE
+                    failure = swatbot.get_stepfailure(failure_id,
+                                                      refresh=refresh)
+                    return failure['attributes']['triage'] == 0
+
+                # Make sure failures are still pending
+                # TODO: update saved userstatus so we won't fetch it again
+                # later
+                userstatus['failures'] = {k: v for k, v
+                                          in userstatus['failures'].items()
+                                          if is_pending(k)}
+
+                reviews.setdefault((status, comment), []).append(userstatus)
+
+            # Cleaning old reviews
+            if userstatuses and not any([s['failures'] for s in userstatuses]):
+                del userinfo[swatbot.Field.USER_STATUS]
 
     for (status, comment), entries in reviews.items():
         bugurl = None
 
         if status == swatbot.TriageStatus.BUG:
-            logs = [entry['bugzilla-comment'] for entry in entries]
+            logs = [entry['bugzilla-comment'] for entry in entries
+                    if entry['failures']]
             try:
                 bugid = int(comment)
             except ValueError:
                 bugid = None
 
-            if bugid:
-                comment = bugurl = bugzilla.get_bug_url(bugid)
-                logging.debug('Need to update %s with %s', bugurl,
-                              ", ".join(logs))
-                strlogs = '\n'.join(logs)
-                if not dry_run:
-                    print(f"\nPlease update {bugurl} ticket id with:\n"
-                          f"{'-'*40}\n"
-                          f"{strlogs}\n"
-                          f"{'-'*40}\n")
-            else:
-                strlogs = '\n'.join(logs)
-                if not dry_run:
-                    print(f"\nPlease update {comment} ticket id with:\n"
-                          f"{'-'*40}\n"
-                          f"{strlogs}\n"
-                          f"{'-'*40}\n")
+            if logs:
+                if bugid:
+                    comment = bugurl = bugzilla.get_bug_url(bugid)
+                    logging.debug('Need to update %s with %s', bugurl,
+                                  ", ".join(logs))
+                    strlogs = '\n'.join(logs)
+                    if not dry_run:
+                        print(f"\nPlease update {bugurl} ticket id with:\n"
+                              f"{'-'*40}\n"
+                              f"{strlogs}\n"
+                              f"{'-'*40}\n")
+                else:
+                    strlogs = '\n'.join(logs)
+                    if not dry_run:
+                        print(f"\nPlease update {comment} ticket id with:\n"
+                              f"{'-'*40}\n"
+                              f"{strlogs}\n"
+                              f"{'-'*40}\n")
 
         for entry in entries:
             for failureid, failuredata in entry['failures'].items():
@@ -399,17 +411,21 @@ def publish_new_reviews(dry_run: bool):
                               status.name.title(), comment)
                 if not dry_run:
                     # TODO: remove and publish result using REST
-                    failure = pending_failures[failureid]
+                    failure = [f for f in failures
+                               if int(f['id']) == failureid][0]
                     buildid = failure['relationships']['build']['data']['id']
                     build = swatbot.get_build(buildid)
+                    bid = build['attributes']['buildid']
                     buildcollection = build['relationships']['buildcollection']
                     colid = buildcollection['data']['id']
                     swat_url = f"{swatbot.BASE_URL}/collection/{colid}/"
 
                     print(f'Please update failure {failureid} '
-                          f'("{failuredata["stepname"]}" on {swat_url} ) '
+                          f'("{failuredata["stepname"]}" on {swat_url} {bid}) '
                           f'to status {status.name.title()} '
                           f'with "{comment}"')
+
+    swatbot.save_user_infos(userinfos)
 
 
 if __name__ == '__main__':
