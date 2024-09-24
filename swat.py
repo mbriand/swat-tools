@@ -6,19 +6,46 @@ import tabulate
 import subprocess
 import shlex
 import swatbot
-import os
-import tempfile
 import pathlib
 import bugzilla
+import webrequests
+import review
 from typing import Any, Optional
+import re
 
 logger = logging.getLogger(__name__)
 
 BINDIR = pathlib.Path(__file__).parent.resolve()
 DATADIR = BINDIR / "data"
 
-MAILNAME = subprocess.run(["git", "config", "--global", "user.name"],
-                          capture_output=True).stdout.decode().strip()
+
+def add_options(options):
+    def _add_options(func):
+        for option in reversed(options):
+            func = option(func)
+        return func
+    return _add_options
+
+
+def parse_filters(kwargs) -> dict[str, Any]:
+    statuses = [swatbot.Status[s.upper()] for s in kwargs['status_filter']]
+    tests = [re.compile(f"^{f}$") for f in kwargs['test_filter']]
+    ignoretests = [re.compile(f"^{f}$") for f in kwargs['ignore_test_filter']]
+    owners = [None if str(f).lower() == "none" else f
+              for f in kwargs['owner_filter']]
+
+    completed_after = None
+    if kwargs['completed_after']:
+        completed_after = kwargs['completed_after'].astimezone()
+
+    filters = {'test': tests,
+               'ignore-test': ignoretests,
+               'status': statuses,
+               'owner': owners,
+               'completed-after': completed_after,
+               'with-notes': kwargs['with_notes']
+               }
+    return filters
 
 
 @click.group()
@@ -46,7 +73,7 @@ failures_list_options = [
                                    case_sensitive=False),
                  help="Specify sort order"),
     click.option('--refresh', '-r',
-                 type=click.Choice([p.name for p in swatbot.RefreshPolicy],
+                 type=click.Choice([p.name for p in webrequests.RefreshPolicy],
                                    case_sensitive=False),
                  default="auto",
                  help="Fetch data from server instead of using cache"),
@@ -68,23 +95,22 @@ failures_list_options = [
 ]
 
 
-def add_options(options):
-    def _add_options(func):
-        for option in reversed(options):
-            func = option(func)
-        return func
-    return _add_options
-
-
 @main.command()
 @add_options(failures_list_options)
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
-def show_pending_failures(open_url_with: str, *args, **kwargs):
-    infos, userinfos = swatbot.get_failure_infos(*args, **kwargs)
+def show_pending_failures(refresh: str, open_url_with: str,
+                          limit: int, sort: list[str],
+                          *args, **kwargs):
+    refreshpol = webrequests.RefreshPolicy[refresh.upper()]
 
-    for info in infos:
-        if open_url_with:
+    filters = parse_filters(kwargs)
+    infos, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
+                                                 refresh=refreshpol,
+                                                 filters=filters)
+
+    if open_url_with:
+        for info in infos:
             url = info[swatbot.Field.SWAT_URL]
             subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
@@ -138,139 +164,22 @@ def show_pending_failures(open_url_with: str, *args, **kwargs):
                       if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]))
 
 
-def edit_text(text: Optional[str]) -> str:
-    editor = os.environ.get("EDITOR", "vim")
-
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-        if text:
-            f.write(text)
-        f.close()
-        subprocess.run(shlex.split(f"{editor} {f.name}"))
-        with open(f.name, mode='r') as fr:
-            newtext = fr.read()
-        os.unlink(f.name)
-
-    return newtext
-
-
-def review_menu(infos: list[dict[swatbot.Field, Any]],
-                userinfos: dict[int, dict[swatbot.Field, Any]],
-                entry: int) -> Optional[int]:
-    print("a ab-int")
-    print("b bug opened")
-    print("m mail sent")
-    if MAILNAME:
-        print(f"i mail sent by {MAILNAME}")
-    print("o other")
-    print("f other: Fixed")
-    print("t not for swat")
-    print("r reset status")
-    print()
-    print("n next")
-    print("p previous")
-    print("e edit notes")
-    print("q quit")
-
-    info = infos[entry]
-    userinfo = userinfos.setdefault(info[swatbot.Field.BUILD], {})
-    failures = info[swatbot.Field.FAILURES]
-    first_failure = min(failures)
-    newstatus: Optional[dict] = None
-
-    while True:
-        line = input('action: ')
-        if line.strip() == "n":
-            entry += 1
-        elif line.strip() == "p":
-            if entry >= 1:
-                entry -= 1
-            else:
-                logger.warning("This is the first entry")
-                continue
-        elif line.strip() == "q":
-            return None
-        elif line.strip() == "e":
-            newnotes = edit_text(userinfo.get(swatbot.Field.USER_NOTES))
-            userinfo[swatbot.Field.USER_NOTES] = newnotes
-        elif line.strip() in ["a", "b"]:
-            abints = bugzilla.get_abints()
-            while True:
-                bugnum = input('Bug number:').strip()
-                if bugnum.isnumeric() and (int(bugnum) in abints
-                                           or line.strip() == "b"):
-                    print("Please set the comment content")
-                    print(failures[first_failure]['urls'])
-                    if 'stdio' in failures[first_failure]['urls']:
-                        log = failures[first_failure]['urls']['stdio']
-                        bcomment = edit_text(log)
-                    else:
-                        bcomment = edit_text(None)
-                    newstatus = {'status': swatbot.TriageStatus.BUG,
-                                 'comment': int(bugnum),
-                                 'bugzilla-comment': bcomment,
-                                 }
-                    break
-                elif bugnum.strip() == "q":
-                    break
-                else:
-                    logging.warning("Invalid issue: %s", bugnum)
-                    if line.strip() == "a":
-                        print(tabulate.tabulate(abints.items()))
-        elif line.strip() == "m":
-            newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                         'comment': input('Comment:').strip(),
-                         }
-        elif line.strip() == "i" and MAILNAME:
-            newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                         'comment': f"Mail sent by {MAILNAME}",
-                         }
-        elif line.strip() == "o":
-            newstatus = {'status': swatbot.TriageStatus.OTHER,
-                         'comment': input('Comment:').strip(),
-                         }
-        elif line.strip() == "f":
-            newstatus = {'status': swatbot.TriageStatus.OTHER,
-                         'comment': 'Fixed',
-                         }
-        elif line.strip() == "n":
-            newstatus = {'status': swatbot.TriageStatus.NOT_FOR_SWAT,
-                         'comment': input('Comment:').strip(),
-                         }
-        elif line.strip() == "r":
-            userinfo[swatbot.Field.USER_STATUS] = []
-        else:
-            logger.warning("Invalid command")
-            continue
-        break
-
-    if newstatus:
-        # newstatus['failures'] = {first_failure: failures[first_failure]}
-        newstatus['failures'] = failures
-        userinfo[swatbot.Field.USER_STATUS] = [newstatus]
-
-        # if len(failures) > 1:
-        #     otherstatus = {'status': swatbot.TriageStatus.OTHER,
-        #                    'comment': 'Previous step failed',
-        #                    }
-        #     otherstatus['failures'] = {k: v for k, v in failures.items()
-        #                                if k != first_failure}
-        #     userinfo[swatbot.Field.USER_STATUS].append(otherstatus)
-
-    if entry >= len(infos):
-        return None
-
-    return entry
-
-
 @main.command()
 @add_options(failures_list_options)
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
 @click.option('--include-already-reviewed', '-a', is_flag=True,
               help="Include already reviewed issues")
-def review_pending_failures(open_url_with: str, include_already_reviewed: bool,
+def review_pending_failures(refresh: str, open_url_with: str,
+                            include_already_reviewed: bool,
+                            limit: int, sort: list[str],
                             *args, **kwargs):
-    infos, userinfos = swatbot.get_failure_infos(*args, **kwargs)
+    refreshpol = webrequests.RefreshPolicy[refresh.upper()]
+
+    filters = parse_filters(kwargs)
+    infos, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
+                                                 refresh=refreshpol,
+                                                 filters=filters)
 
     if not include_already_reviewed:
         infos = [info for info in infos
@@ -328,7 +237,7 @@ def review_pending_failures(open_url_with: str, include_already_reviewed: bool,
             subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
         prev_entry = entry
-        entry = review_menu(infos, userinfos, entry)
+        entry = review.review_menu(infos, userinfos, entry)
 
     swatbot.save_user_infos(userinfos)
 
@@ -337,71 +246,22 @@ def review_pending_failures(open_url_with: str, include_already_reviewed: bool,
 @click.option('--dry-run', '-n', is_flag=True,
               help="Only shows what would be done")
 def publish_new_reviews(dry_run: bool):
-    userinfos = swatbot.get_user_infos()
-    failures = swatbot.get_stepfailures(refresh=swatbot.RefreshPolicy.NO)
-
-    logger.info("Checking failures status...")
-    reviews: dict[tuple[swatbot.TriageStatus, Any], list[dict]] = {}
-    with click.progressbar(userinfos.items()) as userinfos_progress:
-        for buildid, userinfo in userinfos_progress:
-            if swatbot.Field.USER_STATUS not in userinfo:
-                continue
-
-            userstatuses = userinfo.get(swatbot.Field.USER_STATUS, [])
-            for userstatus in userstatuses:
-                status = userstatus.get('status')
-                comment = userstatus.get('comment')
-                if not status or not comment:
-                    continue
-
-                def is_pending(failure_id):
-                    refresh = refresh = swatbot.RefreshPolicy.FORCE
-                    failure = swatbot.get_stepfailure(failure_id,
-                                                      refresh=refresh)
-                    return failure['attributes']['triage'] == 0
-
-                # Make sure failures are still pending
-                # TODO: update saved userstatus so we won't fetch it again
-                # later
-                userstatus['failures'] = {k: v for k, v
-                                          in userstatus['failures'].items()
-                                          if is_pending(k)}
-
-                reviews.setdefault((status, comment), []).append(userstatus)
-
-            # Cleaning old reviews
-            if userstatuses and not any([s['failures'] for s in userstatuses]):
-                del userinfo[swatbot.Field.USER_STATUS]
+    reviews = review.get_new_reviews()
 
     for (status, comment), entries in reviews.items():
         bugurl = None
 
         if status == swatbot.TriageStatus.BUG:
+            bugid = int(comment)
             logs = [entry['bugzilla-comment'] for entry in entries
                     if entry['failures']]
-            try:
-                bugid = int(comment)
-            except ValueError:
-                bugid = None
 
             if logs:
-                if bugid:
-                    comment = bugurl = bugzilla.get_bug_url(bugid)
-                    logging.debug('Need to update %s with %s', bugurl,
-                                  ", ".join(logs))
-                    strlogs = '\n'.join(logs)
-                    if not dry_run:
-                        print(f"\nPlease update {bugurl} ticket id with:\n"
-                              f"{'-'*40}\n"
-                              f"{strlogs}\n"
-                              f"{'-'*40}\n")
-                else:
-                    strlogs = '\n'.join(logs)
-                    if not dry_run:
-                        print(f"\nPlease update {comment} ticket id with:\n"
-                              f"{'-'*40}\n"
-                              f"{strlogs}\n"
-                              f"{'-'*40}\n")
+                comment = bugurl = bugzilla.get_bug_url(bugid)
+                logging.debug('Need to update %s with %s', bugurl,
+                              ", ".join(logs))
+                if not dry_run:
+                    bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
         for entry in entries:
             for failureid, failuredata in entry['failures'].items():
@@ -410,22 +270,8 @@ def publish_new_reviews(dry_run: bool):
                               failureid, failuredata['stepname'], status,
                               status.name.title(), comment)
                 if not dry_run:
-                    # TODO: remove and publish result using REST
-                    failure = [f for f in failures
-                               if int(f['id']) == failureid][0]
-                    buildid = failure['relationships']['build']['data']['id']
-                    build = swatbot.get_build(buildid)
-                    bid = build['attributes']['buildid']
-                    buildcollection = build['relationships']['buildcollection']
-                    colid = buildcollection['data']['id']
-                    swat_url = f"{swatbot.BASE_URL}/collection/{colid}/"
-
-                    print(f'Please update failure {failureid} '
-                          f'("{failuredata["stepname"]}" on {swat_url} {bid}) '
-                          f'to status {status.name.title()} '
-                          f'with "{comment}"')
-
-    swatbot.save_user_infos(userinfos)
+                    swatbot.publish_status(failureid, failuredata, status,
+                                           comment)
 
 
 if __name__ == '__main__':
