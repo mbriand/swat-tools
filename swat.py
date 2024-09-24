@@ -38,7 +38,8 @@ def parse_filters(kwargs) -> dict[str, Any]:
     if kwargs['completed_after']:
         completed_after = kwargs['completed_after'].astimezone()
 
-    filters = {'test': tests,
+    filters = {'build': kwargs['build_filter'],
+               'test': tests,
                'ignore-test': ignoretests,
                'status': statuses,
                'owner': owners,
@@ -79,6 +80,8 @@ failures_list_options = [
                  help="Fetch data from server instead of using cache"),
     click.option('--test-filter', '-t', multiple=True,
                  help="Only show some tests"),
+    click.option('--build-filter', '-b', type=click.INT, multiple=True,
+                 help="Only show some builds"),
     click.option('--owner-filter', '-o', multiple=True,
                  help='Only show some owners ("none" for no owner)'),
     click.option('--ignore-test-filter', '-T', multiple=True,
@@ -90,8 +93,8 @@ failures_list_options = [
     click.option('--completed-after', '-A',
                  type=click.DateTime(),
                  help="Only show failures after a given date"),
-    click.option('--with-notes', '-N', is_flag=True,
-                 help="Only show failures with attached note")
+    click.option('--with-notes', '-N', type=click.BOOL, default=None,
+                 help="Only show failures with or without attached note")
 ]
 
 
