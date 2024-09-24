@@ -12,7 +12,8 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
-def prompt_bug_infos(failures: dict[int, dict[str, Any]], is_abint: bool):
+def prompt_bug_infos(info: dict[swatbot.Field, Any],
+                     failures: dict[int, dict[str, Any]], is_abint: bool):
     abints = bugzilla.get_abints()
     if is_abint:
         print(tabulate.tabulate(abints.items()))
@@ -22,10 +23,11 @@ def prompt_bug_infos(failures: dict[int, dict[str, Any]], is_abint: bool):
         bugnum = input('Bug number:').strip()
         if bugnum.isnumeric() and (int(bugnum) in abints or not is_abint):
             print("Please set the comment content")
-            print(failures[first_failure]['urls'])
             if 'stdio' in failures[first_failure]['urls']:
+                testmachine = " ".join([info[swatbot.Field.TEST],
+                                        info[swatbot.Field.WORKER]])
                 log = failures[first_failure]['urls']['stdio']
-                bcomment = utils.edit_text(log)
+                bcomment = utils.edit_text("\n".join([testmachine, log]))
             else:
                 bcomment = utils.edit_text(None)
             newstatus = {'status': swatbot.TriageStatus.BUG,
@@ -78,7 +80,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
             newnotes = utils.edit_text(userinfo.get(swatbot.Field.USER_NOTES))
             userinfo[swatbot.Field.USER_NOTES] = newnotes
         elif line.strip() in ["a", "b"]:
-            newstatus = prompt_bug_infos(failures, line.strip() == "a")
+            newstatus = prompt_bug_infos(info, failures, line.strip() == "a")
         elif line.strip() == "m":
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                          'comment': input('Comment:').strip(),
