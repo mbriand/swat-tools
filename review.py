@@ -121,6 +121,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
 def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
     userinfos = swatbot.get_user_infos()
 
+    logger.info("Loading pending reviews...")
     reviews: dict[tuple[swatbot.TriageStatus, Any], list[dict]] = {}
     with click.progressbar(userinfos.items()) as userinfos_progress:
         for buildid, userinfo in userinfos_progress:

@@ -6,6 +6,7 @@ import logging
 import enum
 import time
 import utils
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +40,11 @@ def get_session() -> requests.Session:
     return _SESSION
 
 
-def save_cookies(session: requests.Session):
+def save_cookies():
     COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
-    with COOKIESFILE.open('wb') as f:
-        pickle.dump(session.cookies, f)
+    if _SESSION:
+        with COOKIESFILE.open('wb') as f:
+            pickle.dump(_SESSION.cookies, f)
 
 
 def get(url: str, max_cache_age: int = -1):
@@ -69,3 +71,12 @@ def get(url: str, max_cache_age: int = -1):
         f.write(r.text)
 
     return r.text
+
+
+def post(url: str, data: dict[str, Any]):
+    logger.debug("Sending POST request to %s with %s", url, data)
+    r = get_session().post(url, data=data)
+
+    if not r.ok:
+        print(r.text)
+    r.raise_for_status()

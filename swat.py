@@ -251,6 +251,7 @@ def review_pending_failures(refresh: str, open_url_with: str,
 def publish_new_reviews(dry_run: bool):
     reviews = review.get_new_reviews()
 
+    logger.info("Publishing new reviews...")
     for (status, comment), entries in reviews.items():
         bugurl = None
 
@@ -261,17 +262,17 @@ def publish_new_reviews(dry_run: bool):
 
             if logs:
                 comment = bugurl = bugzilla.get_bug_url(bugid)
-                logging.debug('Need to update %s with %s', bugurl,
-                              ", ".join(logs))
+                logging.info('Need to update %s with %s', bugurl,
+                             ", ".join(logs).replace('\n', ' '))
                 if not dry_run:
                     bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
         for entry in entries:
             for failureid, failuredata in entry['failures'].items():
-                logging.debug('Need to update failure %s (%s) '
-                              'to status %s (%s) with "%s"',
-                              failureid, failuredata['stepname'], status,
-                              status.name.title(), comment)
+                logging.info('Need to update failure %s (%s) '
+                             'to status %s (%s) with "%s"',
+                             failureid, failuredata['stepname'], status,
+                             status.name.title(), comment)
                 if not dry_run:
                     swatbot.publish_status(failureid, failuredata, status,
                                            comment)

@@ -98,23 +98,26 @@ def get_stepfailure(failureid: int, refresh: webrequests.RefreshPolicy =
     return get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 
+def _get_csrftoken() -> str:
+    session = webrequests.get_session()
+    return session.cookies['csrftoken']
+
+
 def login(user: str, password: str):
     logger.info("Sending logging request...")
-    session = requests.Session()
-    r = session.get(LOGIN_URL)
-    r.raise_for_status()
+    webrequests.get(LOGIN_URL, 0)
 
     data = {
-        "csrfmiddlewaretoken": session.cookies['csrftoken'],
+        "csrfmiddlewaretoken": _get_csrftoken(),
         "username": user,
         "password": password
     }
-    r = session.post(LOGIN_URL, data=data)
+    r = webrequests.post(LOGIN_URL, data=data)
 
     if r.status_code not in [requests.codes.ok, requests.codes.not_found]:
         r.raise_for_status()
 
-    webrequests.save_cookies(session)
+    webrequests.save_cookies()
     logger.info("Logging success")
 
 
@@ -256,3 +259,10 @@ def publish_status(failureid: int,
           f'("{failuredata["stepname"]}" on {swat_url} {bid}) '
           f'to status {status.name.title()} '
           f'with "{comment}"')
+
+    data = {"csrfmiddlewaretoken": _get_csrftoken(),
+            "failureid": failureid,
+            "status": status.value,
+            "notes": comment
+            }
+    webrequests.post(swat_url, data)
