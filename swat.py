@@ -60,8 +60,8 @@ def main(verbose: int):
 
 
 @main.command()
-@click.argument('user')
-@click.argument('password')
+@click.option('--user', '-u', prompt=True)
+@click.option('--password', '-p', prompt=True, hide_input=True)
 def login(user: str, password: str):
     swatbot.login(user, password)
 

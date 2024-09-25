@@ -112,10 +112,7 @@ def login(user: str, password: str):
         "username": user,
         "password": password
     }
-    r = webrequests.post(LOGIN_URL, data=data)
-
-    if r.status_code not in [requests.codes.ok, requests.codes.not_found]:
-        r.raise_for_status()
+    webrequests.post(LOGIN_URL, data=data)
 
     webrequests.save_cookies()
     logger.info("Logging success")
