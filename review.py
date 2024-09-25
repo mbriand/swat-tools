@@ -43,21 +43,23 @@ def prompt_bug_infos(info: dict[swatbot.Field, Any],
 
 def review_menu(infos: list[dict[swatbot.Field, Any]],
                 userinfos: dict[int, dict[swatbot.Field, Any]],
-                entry: int) -> Optional[int]:
-    print("a ab-int")
-    print("b bug opened")
-    print("m mail sent")
-    if utils.MAILNAME:
-        print(f"i mail sent by {utils.MAILNAME}")
-    print("o other")
-    print("f other: Fixed")
-    print("t not for swat")
-    print("r reset status")
-    print()
-    print("n next")
-    print("p previous")
-    print("e edit notes")
-    print("q quit")
+                entry: int,
+                show_menu: bool) -> Optional[int]:
+    if show_menu:
+        print("a ab-int")
+        print("b bug opened")
+        print("m mail sent")
+        if utils.MAILNAME:
+            print(f"i mail sent by {utils.MAILNAME}")
+        print("o other")
+        print("f other: Fixed")
+        print("t not for swat")
+        print("r reset status")
+        print()
+        print("n next")
+        print("p previous")
+        print("e edit notes")
+        print("q quit")
 
     info = infos[entry]
     userinfo = userinfos.setdefault(info[swatbot.Field.BUILD], {})
@@ -65,7 +67,11 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
     newstatus: Optional[dict] = None
 
     while True:
-        line = input('action: ')
+        try:
+            line = input('action: ')
+        except EOFError:
+            return None
+
         if line.strip() == "n":
             entry += 1
         elif line.strip() == "p":

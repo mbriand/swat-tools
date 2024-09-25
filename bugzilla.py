@@ -19,7 +19,7 @@ def get_abints() -> dict[int, str]:
             'order': 'order=bug_id%20DESC',
             'query_format': 'advanced',
             'resolution': '---',
-            'short_desc': 'AB-INT%3A.*',
+            'short_desc': 'AB-INT.*',
             'short_desc_type': 'regexp',
             'include_fields': 'id,summary',
         }

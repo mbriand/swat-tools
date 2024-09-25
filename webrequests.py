@@ -6,6 +6,7 @@ import logging
 import enum
 import time
 import utils
+import pathlib
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,16 @@ def save_cookies():
             pickle.dump(_SESSION.cookies, f)
 
 
-def get(url: str, max_cache_age: int = -1):
-    utils.CACHEDIR.mkdir(parents=True, exist_ok=True)
+def _get_cache_file(url: str) -> pathlib.Path:
     filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
     cachefile = utils.CACHEDIR / f"{filestem}.json"
+
+    return cachefile
+
+
+def get(url: str, max_cache_age: int = -1):
+    cachefile = _get_cache_file(url)
+    cachefile.parent.mkdir(parents=True, exist_ok=True)
 
     if cachefile.exists():
         if max_cache_age < 0:
@@ -71,6 +78,10 @@ def get(url: str, max_cache_age: int = -1):
         f.write(r.text)
 
     return r.text
+
+
+def invalidate_cache(url: str):
+    _get_cache_file(url).unlink(missing_ok=True)
 
 
 def post(url: str, data: dict[str, Any]):

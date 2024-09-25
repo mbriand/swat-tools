@@ -91,6 +91,10 @@ def get_stepfailures(refresh: webrequests.RefreshPolicy =
     return get_json("/stepfailure/", maxage)['data']
 
 
+def invalidate_stepfailures_cache():
+    webrequests.invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
+
+
 def get_stepfailure(failureid: int, refresh: webrequests.RefreshPolicy =
                     webrequests.RefreshPolicy.AUTO):
     maxage = webrequests.refresh_policy_max_age(refresh,
@@ -192,6 +196,10 @@ def _info_match_filters(info: dict[Field, Any],
         if filters['with-notes'] ^ bool(userinfo.get(Field.USER_NOTES)):
             return False
 
+    if filters['with-new-status'] is not None:
+        if filters['with-new-status'] ^ bool(userinfo.get(Field.USER_STATUS)):
+            return False
+
     return True
 
 
@@ -244,18 +252,13 @@ def publish_status(failureid: int,
                    failuredata,  # TODO: remove
                    status: TriageStatus, comment: str):
     # TODO: remove and publish result using REST API
+    # TODO: try to post on an url without collection ID ?
     failure = get_stepfailure(failureid, refresh=webrequests.RefreshPolicy.NO)
     buildid = failure['relationships']['build']['data']['id']
     build = get_build(buildid, refresh=webrequests.RefreshPolicy.NO)
-    bid = build['attributes']['buildid']
     buildcollection = build['relationships']['buildcollection']
     colid = buildcollection['data']['id']
     swat_url = f"{BASE_URL}/collection/{colid}/"
-
-    print(f'Please update failure {failureid} '
-          f'("{failuredata["stepname"]}" on {swat_url} {bid}) '
-          f'to status {status.name.title()} '
-          f'with "{comment}"')
 
     data = {"csrfmiddlewaretoken": _get_csrftoken(),
             "failureid": failureid,

@@ -2,16 +2,18 @@
 
 import click
 import logging
-import tabulate
-import subprocess
-import shlex
-import swatbot
 import pathlib
-import bugzilla
-import webrequests
-import review
-from typing import Any, Optional
 import re
+import shlex
+import subprocess
+import sys
+import tabulate
+from typing import Any, Optional
+
+import bugzilla
+import review
+import swatbot
+import webrequests
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,8 @@ def parse_filters(kwargs) -> dict[str, Any]:
                'status': statuses,
                'owner': owners,
                'completed-after': completed_after,
-               'with-notes': kwargs['with_notes']
+               'with-notes': kwargs['with_notes'],
+               'with-new-status': kwargs['with_new_status'],
                }
     return filters
 
@@ -94,7 +97,9 @@ failures_list_options = [
                  type=click.DateTime(),
                  help="Only show failures after a given date"),
     click.option('--with-notes', '-N', type=click.BOOL, default=None,
-                 help="Only show failures with or without attached note")
+                 help="Only show failures with or without attached note"),
+    click.option('--with-new-status', type=click.BOOL, default=None,
+                 help="Only show failures with or without new (local) status"),
 ]
 
 
@@ -167,6 +172,55 @@ def show_pending_failures(refresh: str, open_url_with: str,
                       if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]))
 
 
+def show_failure(info: dict[swatbot.Field, Any],
+                 userinfo: dict[swatbot.Field, Any],
+                 abints: dict[int, str]):
+    simple_fields = [
+        swatbot.Field.BUILD,
+        swatbot.Field.STATUS,
+        swatbot.Field.TEST,
+        swatbot.Field.OWNER,
+        swatbot.Field.WORKER,
+        swatbot.Field.COMPLETED,
+        swatbot.Field.SWAT_URL,
+        swatbot.Field.AUTOBUILDER_URL,
+    ]
+    table = [[k, info[k]] for k in simple_fields]
+
+    statuses = userinfo.get(swatbot.Field.USER_STATUS, [])
+    failures = info[swatbot.Field.FAILURES]
+    for i, (failureid, failure) in enumerate(failures.items()):
+        status_str = ""
+        for status in statuses:
+            if failureid in status['failures']:
+                statusfrags = []
+
+                statusname = status['status'].name.title()
+                statusfrags.append(f"{statusname}: {status['comment']}")
+
+                if status['status'] == swatbot.TriageStatus.BUG:
+                    bugid = int(status['comment'])
+                    if bugid in abints:
+                        bugtitle = abints[bugid]
+                        statusfrags.append(f", {bugtitle}")
+
+                if status.get('bugzilla-comment'):
+                    statusfrags.append("\n")
+                    statusfrags.append(status['bugzilla-comment'])
+
+                status_str += "".join(statusfrags)
+
+                break
+        table.append([swatbot.Field.FAILURES if i == 0 else "",
+                      failure['stepname'], status_str])
+
+    usernotes = userinfo.get(swatbot.Field.USER_NOTES)
+    if usernotes:
+        table.append([swatbot.Field.USER_NOTES, usernotes])
+
+    print(tabulate.tabulate(table))
+
+
 @main.command()
 @add_options(failures_list_options)
 @click.option('--open-url-with',
@@ -178,6 +232,7 @@ def review_pending_failures(refresh: str, open_url_with: str,
                             limit: int, sort: list[str],
                             *args, **kwargs):
     refreshpol = webrequests.RefreshPolicy[refresh.upper()]
+    abints = bugzilla.get_abints()
 
     filters = parse_filters(kwargs)
     infos, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
@@ -194,53 +249,34 @@ def review_pending_failures(refresh: str, open_url_with: str,
 
     entry: Optional[int] = 0
     prev_entry = None
+    kbinter = False
     while entry is not None:
-        info = infos[entry]
-        userinfo = userinfos.get(info[swatbot.Field.BUILD], {})
+        try:
+            info = infos[entry]
+            userinfo = userinfos.get(info[swatbot.Field.BUILD], {})
 
-        simple_fields = [
-            swatbot.Field.BUILD,
-            swatbot.Field.STATUS,
-            swatbot.Field.TEST,
-            swatbot.Field.OWNER,
-            swatbot.Field.WORKER,
-            swatbot.Field.COMPLETED,
-            swatbot.Field.SWAT_URL,
-            swatbot.Field.AUTOBUILDER_URL,
-        ]
-        table = [[k, info[k]] for k in simple_fields]
+            if open_url_with and prev_entry != entry:
+                url = info[swatbot.Field.AUTOBUILDER_URL]
+                subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
-        status_strs = []
-        statuses = userinfo.get(swatbot.Field.USER_STATUS, [])
-        failures = info[swatbot.Field.FAILURES]
-        for failure in failures:
-            status_str = ""
-            for status in statuses:
-                if failure in status['failures']:
-                    status_str = f"{status['status'].name.title()}: " \
-                        f"{status['comment']}"
-                    break
-            status_strs.append(status_str)
+            show_menu = not kbinter
+            if show_menu:
+                print()
+                print(f"Progress: {entry+1}/{len(infos)}")
+                show_failure(info, userinfo, abints)
+                print()
 
-        table.append([swatbot.Field.FAILURES,
-                      "\n".join([f['stepname'] for f in failures.values()]),
-                      "\n".join(status_strs)])
-
-        usernotes = userinfo.get(swatbot.Field.USER_NOTES)
-        if usernotes:
-            table.append([swatbot.Field.USER_NOTES, usernotes])
-
-        print()
-        print(f"Progress: {entry+1}/{len(infos)}")
-        print(tabulate.tabulate(table))
-        print()
-
-        if open_url_with and prev_entry != entry:
-            url = info[swatbot.Field.AUTOBUILDER_URL]
-            subprocess.run(shlex.split(f"{open_url_with} {url}"))
-
-        prev_entry = entry
-        entry = review.review_menu(infos, userinfos, entry)
+            prev_entry = entry
+            entry = review.review_menu(infos, userinfos, entry, show_menu)
+        except KeyboardInterrupt:
+            if kbinter:
+                sys.exit(1)
+            else:
+                print()
+                print("^C pressed. Press again to quit without saving")
+                kbinter = True
+                continue
+        kbinter = False
 
     swatbot.save_user_infos(userinfos)
 
@@ -260,7 +296,7 @@ def publish_new_reviews(dry_run: bool):
             logs = [entry['bugzilla-comment'] for entry in entries
                     if entry['failures']]
 
-            if logs:
+            if any(logs):
                 comment = bugurl = bugzilla.get_bug_url(bugid)
                 logging.info('Need to update %s with %s', bugurl,
                              ", ".join(logs).replace('\n', ' '))
@@ -276,6 +312,9 @@ def publish_new_reviews(dry_run: bool):
                 if not dry_run:
                     swatbot.publish_status(failureid, failuredata, status,
                                            comment)
+
+    if not dry_run:
+        swatbot.invalidate_stepfailures_cache()
 
 
 if __name__ == '__main__':
