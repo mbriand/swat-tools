@@ -276,6 +276,12 @@ def review_pending_failures(refresh: str, open_url_with: str,
                 print("^C pressed. Press again to quit without saving")
                 kbinter = True
                 continue
+        except Exception as e:
+            filename = swatbot.save_user_infos(userinfos, suffix="-crash")
+            logging.error("Got exception, saving userinfos in a crash file: "
+                          "You may want to retrieve data from there (%s)",
+                          filename)
+            raise e
         kbinter = False
 
     swatbot.save_user_infos(userinfos)

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
-import requests
 import click
-import logging
-import json
 import enum
-import yaml
+import json
+import logging
+import pathlib
 import shutil
 import utils
-import webrequests
+import yaml
 from datetime import datetime
 from typing import Any, Collection
+
+import webrequests
 
 logger = logging.getLogger(__name__)
 
@@ -150,18 +151,23 @@ def get_user_infos() -> dict[int, dict[Field, Any]]:
     return {}
 
 
-def save_user_infos(userinfos: dict[int, dict[Field, Any]]):
+def save_user_infos(userinfos: dict[int, dict[Field, Any]], suffix=""
+                    ) -> pathlib.Path:
     pretty_userinfos = {bid: {str(k): v for k, v in info.items()}
                         for bid, info in userinfos.items() if info}
 
-    with USERINFOFILE.open('w') as f:
+    filename = USERINFOFILE.with_stem(f'{USERINFOFILE.stem}{suffix}')
+    with filename.open('w') as f:
         yaml.dump(pretty_userinfos, f)
 
+    # Create backup files. We might remove this once the code becomes more
+    # stable
     i = 0
-    while USERINFOFILE.with_stem(f'{USERINFOFILE.stem}-backup-{i}').exists():
+    while filename.with_stem(f'{filename.stem}-backup-{i}').exists():
         i += 1
-    shutil.copy(USERINFOFILE,
-                USERINFOFILE.with_stem(f'{USERINFOFILE.stem}-backup-{i}'))
+    shutil.copy(filename, filename.with_stem(f'{filename.stem}-backup-{i}'))
+
+    return filename
 
 
 def _info_match_filters(info: dict[Field, Any],
