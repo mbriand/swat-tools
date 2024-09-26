@@ -248,8 +248,15 @@ def get_failure_infos(limit: int, sort: Collection[str],
             if _info_match_filters(info, userinfo, filters):
                 infos.append(info)
 
+    def get_field(info, field):
+        if field in info:
+            return info[field]
+        if field in userinfos[info[Field.BUILD]]:
+            return userinfos[info[Field.BUILD]][field]
+        return None
+
     def sortfn(x):
-        return tuple([x[Field(k)] for k in sort])
+        return tuple([get_field(x, Field(k)) for k in sort])
 
     return (sorted(infos, key=sortfn), userinfos)
 

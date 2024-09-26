@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 import tabulate
+import textwrap
 from typing import Any, Optional
 
 import bugzilla
@@ -139,10 +140,7 @@ def show_pending_failures(refresh: str, open_url_with: str,
             return "\n".join(status_strs)
         if field == swatbot.Field.USER_NOTES:
             notes = userinfo.get(field, "").replace("\n", " ")
-            maxlen = 40
-            if len(notes) > maxlen:
-                notes = f"{notes[:maxlen-3]}..."
-            return notes
+            return textwrap.shorten(notes, 80)
         return str(info[field])
 
     shown_fields = [
@@ -206,7 +204,9 @@ def show_failure(info: dict[swatbot.Field, Any],
 
                 if status.get('bugzilla-comment'):
                     statusfrags.append("\n")
-                    statusfrags.append(status['bugzilla-comment'])
+                    bcom = [textwrap.fill(line)
+                            for line in status['bugzilla-comment'].split('\n')]
+                    statusfrags.append("\n".join(bcom))
 
                 status_str += "".join(statusfrags)
 
@@ -216,7 +216,7 @@ def show_failure(info: dict[swatbot.Field, Any],
 
     usernotes = userinfo.get(swatbot.Field.USER_NOTES)
     if usernotes:
-        table.append([swatbot.Field.USER_NOTES, usernotes])
+        table.append([swatbot.Field.USER_NOTES, textwrap.fill(usernotes, 60)])
 
     print(tabulate.tabulate(table))
 

@@ -103,7 +103,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
             newstatus = {'status': swatbot.TriageStatus.OTHER,
                          'comment': 'Fixed',
                          }
-        elif line.strip() == "n":
+        elif line.strip() == "t":
             newstatus = {'status': swatbot.TriageStatus.NOT_FOR_SWAT,
                          'comment': input('Comment:').strip(),
                          }
