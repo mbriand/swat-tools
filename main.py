@@ -225,10 +225,7 @@ def show_failure(info: dict[swatbot.Field, Any],
 @add_options(failures_list_options)
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
-@click.option('--include-already-reviewed', '-a', is_flag=True,
-              help="Include already reviewed issues")
 def review_pending_failures(refresh: str, open_url_with: str,
-                            include_already_reviewed: bool,
                             limit: int, sort: list[str],
                             *args, **kwargs):
     refreshpol = webrequests.RefreshPolicy[refresh.upper()]
@@ -238,11 +235,6 @@ def review_pending_failures(refresh: str, open_url_with: str,
     infos, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
                                                  refresh=refreshpol,
                                                  filters=filters)
-
-    if not include_already_reviewed:
-        infos = [info for info in infos
-                 if not userinfos.get(info[swatbot.Field.BUILD],
-                                      {}).get(swatbot.Field.USER_STATUS, [])]
 
     if not infos:
         return
