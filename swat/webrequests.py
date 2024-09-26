@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Wrapper for requests module with cookies persistence and basic cache."""
+
 import enum
 import logging
 import pathlib
@@ -18,12 +20,15 @@ _SESSION = None
 
 
 class RefreshPolicy(enum.Enum):
+    """A cache refresh policy."""
+
     NO = enum.auto()
     FORCE = enum.auto()
     AUTO = enum.auto()
 
 
 def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
+    """Get the maximum age before refresh for a given policy."""
     if policy == RefreshPolicy.FORCE:
         return 0
     if policy == RefreshPolicy.NO:
@@ -32,6 +37,7 @@ def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
 
 
 def get_session() -> requests.Session:
+    """Get the underlying requests object."""
     global _SESSION
     if not _SESSION:
         _SESSION = requests.Session()
@@ -43,10 +49,16 @@ def get_session() -> requests.Session:
 
 
 def save_cookies():
+    """Save cookies so they can be used for later sessions."""
     COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
     if _SESSION:
         with COOKIESFILE.open('wb') as f:
             pickle.dump(_SESSION.cookies, f)
+
+
+def invalidate_cache(url: str):
+    """Invalidate cache for a given URL."""
+    _get_cache_file(url).unlink(missing_ok=True)
 
 
 def _get_cache_file(url: str) -> pathlib.Path:
@@ -57,6 +69,7 @@ def _get_cache_file(url: str) -> pathlib.Path:
 
 
 def get(url: str, max_cache_age: int = -1):
+    """Do a GET request."""
     cachefile = _get_cache_file(url)
     cachefile.parent.mkdir(parents=True, exist_ok=True)
 
@@ -81,11 +94,8 @@ def get(url: str, max_cache_age: int = -1):
     return r.text
 
 
-def invalidate_cache(url: str):
-    _get_cache_file(url).unlink(missing_ok=True)
-
-
 def post(url: str, data: dict[str, Any]):
+    """Do a POST request."""
     logger.debug("Sending POST request to %s with %s", url, data)
     r = get_session().post(url, data=data)
 

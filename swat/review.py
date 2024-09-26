@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Swatbot review functions."""
+
 import click
 import logging
 import tabulate
@@ -13,8 +15,8 @@ from . import webrequests
 logger = logging.getLogger(__name__)
 
 
-def prompt_bug_infos(info: dict[swatbot.Field, Any],
-                     failures: dict[int, dict[str, Any]], is_abint: bool):
+def _prompt_bug_infos(info: dict[swatbot.Field, Any],
+                      failures: dict[int, dict[str, Any]], is_abint: bool):
     abints = bugzilla.get_abints()
     if is_abint:
         print(tabulate.tabulate(abints.items()))
@@ -46,6 +48,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
                 userinfos: dict[int, dict[swatbot.Field, Any]],
                 entry: int,
                 show_menu: bool) -> Optional[int]:
+    """Allow a user to interactively triage a failure."""
     if show_menu:
         print("a ab-int")
         print("b bug opened")
@@ -87,7 +90,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
             newnotes = utils.edit_text(userinfo.get(swatbot.Field.USER_NOTES))
             userinfo[swatbot.Field.USER_NOTES] = newnotes
         elif line.strip() in ["a", "b"]:
-            newstatus = prompt_bug_infos(info, failures, line.strip() == "a")
+            newstatus = _prompt_bug_infos(info, failures, line.strip() == "a")
         elif line.strip() == "m":
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                          'comment': input('Comment:').strip(),
@@ -126,6 +129,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
 
 
 def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
+    """Get a list of new reviews waiting to be published on swatbot server."""
     userinfos = swatbot.get_user_infos()
 
     logger.info("Loading pending reviews...")

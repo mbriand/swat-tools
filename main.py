@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+
+"""A tool helping triage of Yocto autobuilder failures."""
+
 import click
 import logging
 import pathlib
@@ -22,7 +25,7 @@ BINDIR = pathlib.Path(__file__).parent.resolve()
 DATADIR = BINDIR / "data"
 
 
-def add_options(options):
+def _add_options(options):
     def _add_options(func):
         for option in reversed(options):
             func = option(func)
@@ -31,6 +34,11 @@ def add_options(options):
 
 
 def parse_filters(kwargs) -> dict[str, Any]:
+    """Parse filter arguments.
+
+    Parse filter values givean as program argument and generate a dictionary to
+    be used with get_failure_infos().
+    """
     statuses = [swatbot.Status[s.upper()] for s in kwargs['status_filter']]
     tests = [re.compile(f"^{f}$") for f in kwargs['test_filter']]
     ignoretests = [re.compile(f"^{f}$") for f in kwargs['ignore_test_filter']]
@@ -56,6 +64,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
 @click.group()
 @click.option('-v', '--verbose', count=True, help="Increase verbosity")
 def main(verbose: int):
+    """Handle triage of Yocto autobuilder failures."""
     if verbose >= 1:
         loglevel = logging.DEBUG
     else:
@@ -67,6 +76,7 @@ def main(verbose: int):
 @click.option('--user', '-u', prompt=True)
 @click.option('--password', '-p', prompt=True, hide_input=True)
 def login(user: str, password: str):
+    """Login to the swatbot Django interface."""
     swatbot.login(user, password)
 
 
@@ -105,12 +115,13 @@ failures_list_options = [
 
 
 @main.command()
-@add_options(failures_list_options)
+@_add_options(failures_list_options)
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
 def show_pending_failures(refresh: str, open_url_with: str,
                           limit: int, sort: list[str],
                           *args, **kwargs):
+    """Show all failures waiting for triage."""
     refreshpol = webrequests.RefreshPolicy[refresh.upper()]
 
     filters = parse_filters(kwargs)
@@ -123,6 +134,7 @@ def show_pending_failures(refresh: str, open_url_with: str,
             url = info[swatbot.Field.SWAT_URL]
             subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
+    # Generate a list of formatted infos on failures.
     def format(info, userinfo, field):
         if field == swatbot.Field.FAILURES:
             return "\n".join([f['stepname'] for f in info[field].values()])
@@ -170,9 +182,10 @@ def show_pending_failures(refresh: str, open_url_with: str,
                       if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]))
 
 
-def show_failure(info: dict[swatbot.Field, Any],
-                 userinfo: dict[swatbot.Field, Any],
-                 abints: dict[int, str]):
+def _show_failure(info: dict[swatbot.Field, Any],
+                  userinfo: dict[swatbot.Field, Any],
+                  abints: dict[int, str]):
+    """Show info on one given failure in a pretty way."""
     simple_fields = [
         swatbot.Field.BUILD,
         swatbot.Field.STATUS,
@@ -189,6 +202,9 @@ def show_failure(info: dict[swatbot.Field, Any],
     failures = info[swatbot.Field.FAILURES]
     for i, (failureid, failure) in enumerate(failures.items()):
         status_str = ""
+
+        # Create strings for all failures and the attributed new status (if one
+        # was set).
         for status in statuses:
             if failureid in status['failures']:
                 statusfrags = []
@@ -222,12 +238,13 @@ def show_failure(info: dict[swatbot.Field, Any],
 
 
 @main.command()
-@add_options(failures_list_options)
+@_add_options(failures_list_options)
 @click.option('--open-url-with',
               help="Open the swatbot url with given program")
 def review_pending_failures(refresh: str, open_url_with: str,
                             limit: int, sort: list[str],
                             *args, **kwargs):
+    """Review failures waiting for triage."""
     refreshpol = webrequests.RefreshPolicy[refresh.upper()]
     abints = bugzilla.get_abints()
 
@@ -255,7 +272,7 @@ def review_pending_failures(refresh: str, open_url_with: str,
             if show_menu:
                 print()
                 print(f"Progress: {entry+1}/{len(infos)}")
-                show_failure(info, userinfo, abints)
+                _show_failure(info, userinfo, abints)
                 print()
 
             prev_entry = entry
@@ -283,12 +300,14 @@ def review_pending_failures(refresh: str, open_url_with: str,
 @click.option('--dry-run', '-n', is_flag=True,
               help="Only shows what would be done")
 def publish_new_reviews(dry_run: bool):
+    """Publish new triage status modified locally."""
     reviews = review.get_new_reviews()
 
     logger.info("Publishing new reviews...")
     for (status, comment), entries in reviews.items():
         bugurl = None
 
+        # Bug entry: need to also publish a new comment on bugzilla.
         if status == swatbot.TriageStatus.BUG:
             bugid = int(comment)
             logs = [entry['bugzilla-comment'] for entry in entries

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Various helpers with no better place to."""
+
 import os
 import pathlib
 import shlex
@@ -16,6 +18,7 @@ MAILNAME = subprocess.run(["git", "config", "--global", "user.name"],
 
 
 def edit_text(text: Optional[str]) -> str:
+    """Edit a text string in user preferred editor."""
     editor = os.environ.get("EDITOR", "vim")
 
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:

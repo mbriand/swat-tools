@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Interraction with the swatbot Django server."""
+
 import click
 import enum
 import json
@@ -23,12 +25,15 @@ REST_BASE_URL = f"{BASE_URL}/rest"
 
 
 class Status(enum.IntEnum):
+    """The status of a failure."""
+
     WARNING = 1
     ERROR = 2
     UNKNOWN = -1
 
     @staticmethod
     def from_int(status: int) -> 'Status':
+        """Get Status instance from an integer status value."""
         try:
             return Status(status)
         except ValueError:
@@ -39,6 +44,8 @@ class Status(enum.IntEnum):
 
 
 class Field(enum.StrEnum):
+    """A filed in failure info."""
+
     BUILD = 'Build'
     STATUS = 'Status'
     TEST = 'Test'
@@ -53,6 +60,8 @@ class Field(enum.StrEnum):
 
 
 class TriageStatus(enum.IntEnum):
+    """A status to set on a failure."""
+
     PENDING = 0
     MAIL_SENT = 1
     BUG = 2
@@ -65,50 +74,13 @@ FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
 AUTO_REFRESH_S = 60 * 60 * 24 * 30
 
 
-def get_json(path: str, max_cache_age: int = -1):
-    data = webrequests.get(f"{REST_BASE_URL}{path}", max_cache_age)
-    return json.loads(data)
-
-
-def get_build(buildid: int,
-              refresh: webrequests.RefreshPolicy =
-              webrequests.RefreshPolicy.AUTO
-              ):
-    maxage = webrequests.refresh_policy_max_age(refresh, AUTO_REFRESH_S)
-    return get_json(f"/build/{buildid}/", maxage)['data']
-
-
-def get_build_collection(collectionid: int,
-                         refresh: webrequests.RefreshPolicy =
-                         webrequests.RefreshPolicy.AUTO):
-    maxage = webrequests.refresh_policy_max_age(refresh, AUTO_REFRESH_S)
-    return get_json(f"/buildcollection/{collectionid}/", maxage)['data']
-
-
-def get_stepfailures(refresh: webrequests.RefreshPolicy =
-                     webrequests.RefreshPolicy.AUTO):
-    maxage = webrequests.refresh_policy_max_age(refresh,
-                                                FAILURES_AUTO_REFRESH_S)
-    return get_json("/stepfailure/", maxage)['data']
-
-
-def invalidate_stepfailures_cache():
-    webrequests.invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
-
-
-def get_stepfailure(failureid: int, refresh: webrequests.RefreshPolicy =
-                    webrequests.RefreshPolicy.AUTO):
-    maxage = webrequests.refresh_policy_max_age(refresh,
-                                                FAILURES_AUTO_REFRESH_S)
-    return get_json(f"/stepfailure/{failureid}/", maxage)['data']
-
-
 def _get_csrftoken() -> str:
     session = webrequests.get_session()
     return session.cookies['csrftoken']
 
 
 def login(user: str, password: str):
+    """Login to the swatbot Django interface."""
     logger.info("Sending logging request...")
     webrequests.get(LOGIN_URL, 0)
 
@@ -123,8 +95,56 @@ def login(user: str, password: str):
     logger.info("Logging success")
 
 
+def _get_json(path: str, max_cache_age: int = -1):
+    data = webrequests.get(f"{REST_BASE_URL}{path}", max_cache_age)
+    return json.loads(data)
+
+
+def get_build(buildid: int,
+              refresh: webrequests.RefreshPolicy =
+              webrequests.RefreshPolicy.AUTO
+              ):
+    """Get info on a given build."""
+    maxage = webrequests.refresh_policy_max_age(refresh, AUTO_REFRESH_S)
+    return _get_json(f"/build/{buildid}/", maxage)['data']
+
+
+def get_build_collection(collectionid: int,
+                         refresh: webrequests.RefreshPolicy =
+                         webrequests.RefreshPolicy.AUTO):
+    """Get info on a given build collection."""
+    maxage = webrequests.refresh_policy_max_age(refresh, AUTO_REFRESH_S)
+    return _get_json(f"/buildcollection/{collectionid}/", maxage)['data']
+
+
+def invalidate_stepfailures_cache():
+    """Invalidate cache for pending failures.
+
+    This can be used to force fetching failures on next build, when we suspect
+    it might have changed remotely.
+    """
+    webrequests.invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
+
+
+def get_stepfailures(refresh: webrequests.RefreshPolicy =
+                     webrequests.RefreshPolicy.AUTO):
+    """Get info on all failures."""
+    maxage = webrequests.refresh_policy_max_age(refresh,
+                                                FAILURES_AUTO_REFRESH_S)
+    return _get_json("/stepfailure/", maxage)['data']
+
+
+def get_stepfailure(failureid: int, refresh: webrequests.RefreshPolicy =
+                    webrequests.RefreshPolicy.AUTO):
+    """Get info on a given failure."""
+    maxage = webrequests.refresh_policy_max_age(refresh,
+                                                FAILURES_AUTO_REFRESH_S)
+    return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
+
+
 def get_pending_failures(refresh: webrequests.RefreshPolicy
                          ) -> dict[int, dict[int, dict[str, Any]]]:
+    """Get info on all pending failures."""
     failures = get_stepfailures(refresh=refresh)
     pending_ids: dict[int, dict[int, dict[str, Any]]] = {}
     for failure in failures:
@@ -141,6 +161,7 @@ def get_pending_failures(refresh: webrequests.RefreshPolicy
 
 
 def get_user_infos() -> dict[int, dict[Field, Any]]:
+    """Load user infos stored during previous review session."""
     logger.info("Loading saved data...")
     if USERINFOFILE.exists():
         with USERINFOFILE.open('r') as f:
@@ -153,6 +174,7 @@ def get_user_infos() -> dict[int, dict[Field, Any]]:
 
 def save_user_infos(userinfos: dict[int, dict[Field, Any]], suffix=""
                     ) -> pathlib.Path:
+    """Store user infos for later runs."""
     pretty_userinfos = {bid: {str(k): v for k, v in info.items()}
                         for bid, info in userinfos.items() if info}
 
@@ -214,11 +236,14 @@ def get_failure_infos(limit: int, sort: Collection[str],
                       filters: dict[str, Any]
                       ) -> tuple[list[dict[Field, Any]],
                                  dict[int, dict[Field, Any]]]:
+    """Get consolidated list of failure infos and local reviews infos."""
     userinfos = get_user_infos()
 
     logger.info("Loading build failures...")
     pending_ids = get_pending_failures(refresh)
 
+    # Generate a list of all pending failures, fetching details from the remote
+    # server as needed.
     logger.info("Loading build failures details...")
     infos = []
     limited_pending_ids = sorted(pending_ids.keys(), reverse=True)[:limit]
@@ -248,6 +273,7 @@ def get_failure_infos(limit: int, sort: Collection[str],
             if _info_match_filters(info, userinfo, filters):
                 infos.append(info)
 
+    # Sort all failures as requested.
     def get_field(info, field):
         if field in info:
             return info[field]
@@ -264,6 +290,7 @@ def get_failure_infos(limit: int, sort: Collection[str],
 def publish_status(failureid: int,
                    failuredata,  # TODO: remove
                    status: TriageStatus, comment: str):
+    """Publish new triage status to the swatbot Django server."""
     # TODO: remove and publish result using REST API
     # Here we need to send a POST request to the page of any collection, there
     # is no need to use the page of the collection corresponding the failure we
