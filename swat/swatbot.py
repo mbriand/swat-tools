@@ -6,12 +6,12 @@ import json
 import logging
 import pathlib
 import shutil
-import utils
 import yaml
 from datetime import datetime
 from typing import Any, Collection
 
-import webrequests
+from . import utils
+from . import webrequests
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from typing import Optional
 
-BINDIR = pathlib.Path(__file__).parent.resolve()
+BINDIR = pathlib.Path(__file__).parent.parent.resolve()
 DATADIR = BINDIR / "data"
 CACHEDIR = DATADIR / "cache"
 

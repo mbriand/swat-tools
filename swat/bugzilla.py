@@ -2,7 +2,8 @@
 
 import logging
 import json
-import webrequests
+
+from . import webrequests
 
 logger = logging.getLogger(__name__)
 

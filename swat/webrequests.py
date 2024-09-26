@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-import requests
-import pickle
-import logging
 import enum
-import time
-import utils
+import logging
 import pathlib
+import pickle
+import requests
+import time
 from typing import Any
+
+from . import utils
 
 logger = logging.getLogger(__name__)
 

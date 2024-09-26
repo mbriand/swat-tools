@@ -11,10 +11,10 @@ import tabulate
 import textwrap
 from typing import Any, Optional
 
-import bugzilla
-import review
-import swatbot
-import webrequests
+from swat import bugzilla
+from swat import review
+from swat import swatbot
+from swat import webrequests
 
 logger = logging.getLogger(__name__)
 

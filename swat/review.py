@@ -3,11 +3,12 @@
 import click
 import logging
 import tabulate
-import swatbot
-import bugzilla
-import utils
-import webrequests
 from typing import Any, Optional
+
+from . import swatbot
+from . import bugzilla
+from . import utils
+from . import webrequests
 
 logger = logging.getLogger(__name__)
 
