@@ -49,7 +49,7 @@ class Field(enum.StrEnum):
     AUTOBUILDER_URL = 'Autobuilder URL'
     FAILURES = 'Failures'
     USER_NOTES = 'Notes'
-    USER_STATUS = 'New triage status'
+    USER_STATUS = 'Triage'
 
 
 class TriageStatus(enum.IntEnum):
