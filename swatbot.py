@@ -265,13 +265,10 @@ def publish_status(failureid: int,
                    failuredata,  # TODO: remove
                    status: TriageStatus, comment: str):
     # TODO: remove and publish result using REST API
-    # TODO: try to post on an url without collection ID ?
-    failure = get_stepfailure(failureid, refresh=webrequests.RefreshPolicy.NO)
-    buildid = failure['relationships']['build']['data']['id']
-    build = get_build(buildid, refresh=webrequests.RefreshPolicy.NO)
-    buildcollection = build['relationships']['buildcollection']
-    colid = buildcollection['data']['id']
-    swat_url = f"{BASE_URL}/collection/{colid}/"
+    # Here we need to send a POST request to the page of any collection, there
+    # is no need to use the page of the collection corresponding the failure we
+    # want to update. Just use collection 1.
+    swat_url = f"{BASE_URL}/collection/1/"
 
     data = {"csrfmiddlewaretoken": _get_csrftoken(),
             "failureid": failureid,

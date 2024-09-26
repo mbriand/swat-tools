@@ -38,7 +38,7 @@ def prompt_bug_infos(info: dict[swatbot.Field, Any],
         elif bugnum.strip() == "q":
             return None
         else:
-            logging.warning("Invalid issue: %s", bugnum)
+            logger.warning("Invalid issue: %s", bugnum)
 
 
 def review_menu(infos: list[dict[swatbot.Field, Any]],
@@ -138,7 +138,12 @@ def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
             for userstatus in userstatuses:
                 status = userstatus.get('status')
                 comment = userstatus.get('comment')
-                if not status or not comment:
+                if not status:
+                    continue
+
+                if not comment:
+                    logger.warning("Review for failure %s is missing comment: "
+                                   "skipping", buildid)
                     continue
 
                 def is_pending(failure_id):
