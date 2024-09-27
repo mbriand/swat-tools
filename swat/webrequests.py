@@ -42,8 +42,9 @@ def get_session() -> requests.Session:
     if not _SESSION:
         _SESSION = requests.Session()
 
-        with COOKIESFILE.open('rb') as f:
-            _SESSION.cookies.update(pickle.load(f))
+        if COOKIESFILE.exists():
+            with COOKIESFILE.open('rb') as f:
+                _SESSION.cookies.update(pickle.load(f))
 
     return _SESSION
 
@@ -68,7 +69,7 @@ def _get_cache_file(url: str) -> pathlib.Path:
     return cachefile
 
 
-def get(url: str, max_cache_age: int = -1):
+def get(url: str, max_cache_age: int = -1) -> str:
     """Do a GET request."""
     cachefile = _get_cache_file(url)
     cachefile.parent.mkdir(parents=True, exist_ok=True)
@@ -94,11 +95,10 @@ def get(url: str, max_cache_age: int = -1):
     return r.text
 
 
-def post(url: str, data: dict[str, Any]):
+def post(url: str, data: dict[str, Any]) -> str:
     """Do a POST request."""
     logger.debug("Sending POST request to %s with %s", url, data)
     r = get_session().post(url, data=data)
 
-    if not r.ok:
-        print(r.text)
     r.raise_for_status()
+    return r.text

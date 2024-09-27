@@ -7,6 +7,7 @@ import enum
 import json
 import logging
 import pathlib
+import requests
 import shutil
 import yaml
 from datetime import datetime
@@ -89,7 +90,15 @@ def login(user: str, password: str):
         "username": user,
         "password": password
     }
-    webrequests.post(LOGIN_URL, data=data)
+
+    try:
+        webrequests.post(LOGIN_URL, data=data)
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code != requests.codes.NOT_FOUND:
+            raise e
+    else:
+        logger.warning("Unexpected reply, login probably failed")
+        return
 
     webrequests.save_cookies()
     logger.info("Logging success")
@@ -97,7 +106,15 @@ def login(user: str, password: str):
 
 def _get_json(path: str, max_cache_age: int = -1):
     data = webrequests.get(f"{REST_BASE_URL}{path}", max_cache_age)
-    return json.loads(data)
+    try:
+        json_data = json.loads(data)
+    except json.decoder.JSONDecodeError:
+        webrequests.invalidate_cache(f"{REST_BASE_URL}{path}")
+        if "Please login to see this page." in data:
+            raise Exception("Not logged in swatbot")
+        else:
+            raise Exception("Failed to parse server reply")
+    return json_data
 
 
 def get_build(buildid: int,
