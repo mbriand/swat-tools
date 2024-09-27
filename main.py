@@ -327,8 +327,7 @@ def publish_new_reviews(dry_run: bool):
                              failureid, failuredata['stepname'], status,
                              status.name.title(), comment)
                 if not dry_run:
-                    swatbot.publish_status(failureid, failuredata, status,
-                                           comment)
+                    swatbot.publish_status(failureid, status, comment)
 
     if not dry_run:
         swatbot.invalidate_stepfailures_cache()

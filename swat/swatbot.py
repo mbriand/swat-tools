@@ -305,7 +305,6 @@ def get_failure_infos(limit: int, sort: Collection[str],
 
 
 def publish_status(failureid: int,
-                   failuredata,  # TODO: remove
                    status: TriageStatus, comment: str):
     """Publish new triage status to the swatbot Django server."""
     # TODO: remove and publish result using REST API
