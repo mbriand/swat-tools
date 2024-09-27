@@ -9,7 +9,7 @@ from . import webrequests
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://bugzilla.yoctoproject.org/rest/"
+BASE_URL = "https://bugzilla.yoctoproject.org/"
 REST_BASE_URL = f"{BASE_URL}/rest/"
 
 KNOWN_ABINTS = None
