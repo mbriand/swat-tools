@@ -5,6 +5,7 @@
 import click
 import logging
 import tabulate
+from simple_term_menu import TerminalMenu
 from typing import Any, Optional
 
 from . import swatbot
@@ -16,55 +17,112 @@ logger = logging.getLogger(__name__)
 
 
 def _prompt_bug_infos(info: dict[swatbot.Field, Any],
-                      failures: dict[int, dict[str, Any]], is_abint: bool):
-    abints = bugzilla.get_abints()
-    if is_abint:
-        print(tabulate.tabulate(abints.items()))
-
+                      is_abint: bool):
+    """Create new status of type BUG for a given failure."""
+    failures = info[swatbot.Field.FAILURES]
     first_failure = min(failures)
-    while True:
-        bugnum = input('Bug number:').strip()
-        if bugnum.isnumeric() and (int(bugnum) in abints or not is_abint):
-            print("Please set the comment content")
-            if 'stdio' in failures[first_failure]['urls']:
-                testmachine = " ".join([info[swatbot.Field.TEST],
-                                        info[swatbot.Field.WORKER]])
-                log = failures[first_failure]['urls']['stdio']
-                bcomment = utils.edit_text("\n".join([testmachine, log]))
-            else:
-                bcomment = utils.edit_text(None)
-            newstatus = {'status': swatbot.TriageStatus.BUG,
-                         'comment': int(bugnum),
-                         'bugzilla-comment': bcomment,
-                         }
-            return newstatus
-        elif bugnum.strip() == "q":
+    if is_abint:
+        abints = bugzilla.get_abints()
+        abint_list = [f"{k} {v}" for (k, v) in abints.items()]
+
+        abint_menu = TerminalMenu(abint_list, title="Bug", search_key=None,
+                                  raise_error_on_interrupt=True)
+        abint_index = abint_menu.show()
+
+        if not abint_index:
             return None
-        else:
-            logger.warning("Invalid issue: %s", bugnum)
+        bugnum, _, _ = abint_list[abint_index].partition(' ')
+    else:
+        while True:
+            bugnum_str = input('Bug number:').strip()
+            if bugnum_str.isnumeric():
+                bugnum = int(bugnum_str)
+                break
+            elif bugnum_str.strip() == "q":
+                return None
+            else:
+                logger.warning("Invalid issue: %s", bugnum_str)
+
+    print("Please set the comment content")
+    if 'stdio' in failures[first_failure]['urls']:
+        testmachine = " ".join([info[swatbot.Field.TEST],
+                                info[swatbot.Field.WORKER]])
+        log = failures[first_failure]['urls']['stdio']
+        bcomment = utils.edit_text("\n".join([testmachine, log]))
+    else:
+        bcomment = utils.edit_text(None)
+
+    newstatus = {'status': swatbot.TriageStatus.BUG,
+                 'comment': bugnum,
+                 'bugzilla-comment': bcomment,
+                 }
+    return newstatus
+
+
+def _create_new_status(info: dict[swatbot.Field, Any],
+                       userinfo: dict[swatbot.Field, Any],
+                       command: str) -> dict:
+    """Create new status for a given failure."""
+    if command in ["a", "b"]:
+        newstatus = _prompt_bug_infos(info, command == "a")
+    elif command == "m":
+        newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
+                     'comment': input('Comment:').strip(),
+                     }
+    elif command == "i" and utils.MAILNAME:
+        newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
+                     'comment': f"Mail sent by {utils.MAILNAME}",
+                     }
+    elif command == "o":
+        newstatus = {'status': swatbot.TriageStatus.OTHER,
+                     'comment': input('Comment:').strip(),
+                     }
+    elif command == "f":
+        newstatus = {'status': swatbot.TriageStatus.OTHER,
+                     'comment': 'Fixed',
+                     }
+    elif command == "t":
+        newstatus = {'status': swatbot.TriageStatus.NOT_FOR_SWAT,
+                     'comment': input('Comment:').strip(),
+                     }
+
+    return newstatus
+
+
+_commands = [
+    "[a] ab-int",
+    "[b] bug opened",
+    "[c] cancelled no errors",
+    "[m] mail sent",
+    f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
+    "[o] other",
+    "[f] other: Fixed",
+    "[t] not for swat",
+    "[r] reset status",
+    None,
+    "[e] edit notes",
+    "[n] next",
+    "[p] previous",
+    "[l] list all failures",
+    "[q] quit",
+]
+
+
+valid_commands = [c for c in _commands if c != ""]
 
 
 def review_menu(infos: list[dict[swatbot.Field, Any]],
                 userinfos: dict[int, dict[swatbot.Field, Any]],
                 entry: int,
-                show_menu: bool) -> Optional[int]:
+                statusbar: str) -> Optional[int]:
     """Allow a user to interactively triage a failure."""
-    if show_menu:
-        print("a ab-int")
-        print("b bug opened")
-        print("c cancelled no errors")
-        print("m mail sent")
-        if utils.MAILNAME:
-            print(f"i mail sent by {utils.MAILNAME}")
-        print("o other")
-        print("f other: Fixed")
-        print("t not for swat")
-        print("r reset status")
-        print()
-        print("n next")
-        print("p previous")
-        print("e edit notes")
-        print("q quit")
+    default_action = "n"
+    default_index = [c[1] if c and len(c) > 1 else None
+                     for c in valid_commands].index(default_action)
+    action_menu = TerminalMenu(valid_commands, title="Action",
+                               cursor_index=default_index,
+                               status_bar=statusbar,
+                               raise_error_on_interrupt=True)
 
     info = infos[entry]
     userinfo = userinfos.setdefault(info[swatbot.Field.BUILD], {})
@@ -73,58 +131,33 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
 
     while True:
         try:
-            line = input('action: ')
+            command_index = action_menu.show()
+            if command_index is None:
+                return None
+            command = valid_commands[command_index][1]
         except EOFError:
             return None
 
-        if line.strip() == "n":
+        if command == "q":  # Quit
+            return None
+        elif command == "n":  # Next
             entry += 1
-        elif line.strip() == "p":
+        elif command == "p":  # Previous
             if entry >= 1:
                 entry -= 1
             else:
                 logger.warning("This is the first entry")
                 continue
-        elif line.strip() == "q":
-            return None
-        elif line.strip() == "e":
+        elif command == "l":  # List
+            entry = _list_failures_menu(infos, userinfos, entry)
+        elif command == "e":  # Edit notes
             newnotes = utils.edit_text(userinfo.get(swatbot.Field.USER_NOTES))
             userinfo[swatbot.Field.USER_NOTES] = newnotes
-        elif line.strip() in ["a", "b"]:
-            newstatus = _prompt_bug_infos(info, failures, line.strip() == "a")
-        elif line.strip() == "m":
-            newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                         'comment': input('Comment:').strip(),
-                         }
-        elif line.strip() == "c":
-            if info[swatbot.Field.STATUS] == swatbot.Status.CANCELLED:
-                newstatus = {'status': swatbot.TriageStatus.CANCELLED,
-                             'comment': "cancelled",
-                             }
-            else:
-                logger.warning("Refusing to mark as cancelled "
-                               "a build with %s status",
-                               info[swatbot.Field.STATUS])
-        elif line.strip() == "i" and utils.MAILNAME:
-            newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                         'comment': f"Mail sent by {utils.MAILNAME}",
-                         }
-        elif line.strip() == "o":
-            newstatus = {'status': swatbot.TriageStatus.OTHER,
-                         'comment': input('Comment:').strip(),
-                         }
-        elif line.strip() == "f":
-            newstatus = {'status': swatbot.TriageStatus.OTHER,
-                         'comment': 'Fixed',
-                         }
-        elif line.strip() == "t":
-            newstatus = {'status': swatbot.TriageStatus.NOT_FOR_SWAT,
-                         'comment': input('Comment:').strip(),
-                         }
-        elif line.strip() == "r":
+        elif command in ["a", "b", "m", "i", "o", "f", "t"]:  # Set new status
+            newstatus = _create_new_status(info, userinfo, command)
+        elif command == "r":  # Reset status
             userinfo[swatbot.Field.USER_STATUS] = []
         else:
-            logger.warning("Invalid command")
             continue
         break
 
@@ -134,6 +167,35 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
 
     if entry >= len(infos):
         return None
+
+    return entry
+
+
+def _list_failures_menu(infos: list[dict[swatbot.Field, Any]],
+                        userinfos: dict[int, dict[swatbot.Field, Any]],
+                        entry: int) -> int:
+    """Allow the user to select the failure to review in a menu."""
+    def preview_failure(fstr):
+        fnum = int(fstr.split()[0])
+        idx = [i for (i, info) in enumerate(infos)
+               if info[swatbot.Field.BUILD] == fnum][0]
+        return swatbot.get_failure_description(infos[idx], userinfos[fnum])
+
+    shown_fields = [
+        swatbot.Field.BUILD,
+        swatbot.Field.TEST,
+        swatbot.Field.OWNER,
+    ]
+    entries = [[info[f] for f in shown_fields] for info in infos]
+    tabulated_entries = tabulate.tabulate(entries, tablefmt="plain")
+    failures_menu = TerminalMenu(tabulated_entries.splitlines(),
+                                 title="Failures",
+                                 cursor_index=entry,
+                                 preview_command=preview_failure,
+                                 raise_error_on_interrupt=True)
+    newentry = failures_menu.show()
+    if newentry is not None:
+        entry = newentry
 
     return entry
 

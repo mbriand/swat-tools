@@ -185,61 +185,6 @@ def show_pending_failures(refresh: str, open_url_with: str,
                       if i[swatbot.Field.STATUS] == swatbot.Status.CANCELLED]))
 
 
-def _show_failure(info: dict[swatbot.Field, Any],
-                  userinfo: dict[swatbot.Field, Any],
-                  abints: dict[int, str]):
-    """Show info on one given failure in a pretty way."""
-    simple_fields = [
-        swatbot.Field.BUILD,
-        swatbot.Field.STATUS,
-        swatbot.Field.TEST,
-        swatbot.Field.OWNER,
-        swatbot.Field.WORKER,
-        swatbot.Field.COMPLETED,
-        swatbot.Field.SWAT_URL,
-        swatbot.Field.AUTOBUILDER_URL,
-    ]
-    table = [[k, info[k]] for k in simple_fields]
-
-    statuses = userinfo.get(swatbot.Field.USER_STATUS, [])
-    failures = info[swatbot.Field.FAILURES]
-    for i, (failureid, failure) in enumerate(failures.items()):
-        status_str = ""
-
-        # Create strings for all failures and the attributed new status (if one
-        # was set).
-        for status in statuses:
-            if failureid in status['failures']:
-                statusfrags = []
-
-                statusname = status['status'].name.title()
-                statusfrags.append(f"{statusname}: {status['comment']}")
-
-                if status['status'] == swatbot.TriageStatus.BUG:
-                    bugid = int(status['comment'])
-                    if bugid in abints:
-                        bugtitle = abints[bugid]
-                        statusfrags.append(f", {bugtitle}")
-
-                if status.get('bugzilla-comment'):
-                    statusfrags.append("\n")
-                    bcom = [textwrap.fill(line)
-                            for line in status['bugzilla-comment'].split('\n')]
-                    statusfrags.append("\n".join(bcom))
-
-                status_str += "".join(statusfrags)
-
-                break
-        table.append([swatbot.Field.FAILURES if i == 0 else "",
-                      failure['stepname'], status_str])
-
-    usernotes = userinfo.get(swatbot.Field.USER_NOTES)
-    if usernotes:
-        table.append([swatbot.Field.USER_NOTES, textwrap.fill(usernotes, 60)])
-
-    print(tabulate.tabulate(table))
-
-
 @main.command()
 @_add_options(failures_list_options)
 @click.option('--open-url-with',
@@ -249,7 +194,6 @@ def review_pending_failures(refresh: str, open_url_with: str,
                             *args, **kwargs):
     """Review failures waiting for triage."""
     refreshpol = webrequests.RefreshPolicy[refresh.upper()]
-    abints = bugzilla.get_abints()
 
     filters = parse_filters(kwargs)
     infos, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
@@ -271,21 +215,20 @@ def review_pending_failures(refresh: str, open_url_with: str,
                 url = info[swatbot.Field.AUTOBUILDER_URL]
                 subprocess.run(shlex.split(f"{open_url_with} {url}"))
 
-            show_menu = not kbinter
-            if show_menu:
-                print()
-                print(f"Progress: {entry+1}/{len(infos)}")
-                _show_failure(info, userinfo, abints)
+            if not kbinter:
+                click.clear()
+                print(swatbot.get_failure_description(info, userinfo))
                 print()
 
             prev_entry = entry
-            entry = review.review_menu(infos, userinfos, entry, show_menu)
+            statusbar = f"Progress: {entry+1}/{len(infos)}"
+            entry = review.review_menu(infos, userinfos, entry, statusbar)
         except KeyboardInterrupt:
             if kbinter:
                 sys.exit(1)
             else:
-                print()
                 print("^C pressed. Press again to quit without saving")
+                print()
                 kbinter = True
                 continue
         except Exception as e:

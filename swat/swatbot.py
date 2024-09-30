@@ -9,10 +9,13 @@ import logging
 import pathlib
 import requests
 import shutil
+import tabulate
+import textwrap
 import yaml
 from datetime import datetime
 from typing import Any, Collection
 
+from . import bugzilla
 from . import utils
 from . import webrequests
 
@@ -320,3 +323,59 @@ def publish_status(failureid: int,
             "notes": comment
             }
     webrequests.post(swat_url, data)
+
+
+def get_failure_description(info: dict[Field, Any],
+                            userinfo: dict[Field, Any]) -> str:
+    """Get info on one given failure in a pretty way."""
+    abints = bugzilla.get_abints()
+
+    simple_fields = [
+        Field.BUILD,
+        Field.STATUS,
+        Field.TEST,
+        Field.OWNER,
+        Field.WORKER,
+        Field.COMPLETED,
+        Field.SWAT_URL,
+        Field.AUTOBUILDER_URL,
+    ]
+    table = [[k, info[k]] for k in simple_fields]
+
+    statuses = userinfo.get(Field.USER_STATUS, [])
+    failures = info[Field.FAILURES]
+    for i, (failureid, failure) in enumerate(failures.items()):
+        status_str = ""
+
+        # Create strings for all failures and the attributed new status (if one
+        # was set).
+        for status in statuses:
+            if failureid in status['failures']:
+                statusfrags = []
+
+                statusname = status['status'].name.title()
+                statusfrags.append(f"{statusname}: {status['comment']}")
+
+                if status['status'] == TriageStatus.BUG:
+                    bugid = int(status['comment'])
+                    if bugid in abints:
+                        bugtitle = abints[bugid]
+                        statusfrags.append(f", {bugtitle}")
+
+                if status.get('bugzilla-comment'):
+                    statusfrags.append("\n")
+                    bcom = [textwrap.fill(line)
+                            for line in status['bugzilla-comment'].split('\n')]
+                    statusfrags.append("\n".join(bcom))
+
+                status_str += "".join(statusfrags)
+
+                break
+        table.append([Field.FAILURES if i == 0 else "",
+                      failure['stepname'], status_str])
+
+    usernotes = userinfo.get(Field.USER_NOTES)
+    if usernotes:
+        table.append([Field.USER_NOTES, textwrap.fill(usernotes, 60)])
+
+    return tabulate.tabulate(table, tablefmt="plain")
