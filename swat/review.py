@@ -101,6 +101,9 @@ _commands = [
     "[r] reset status",
     None,
     "[e] edit notes",
+    "[u] open autobuilder URL",
+    "[w] open swatbot URL",
+    None,
     "[n] next",
     "[p] previous",
     "[l] list all failures",
@@ -153,6 +156,10 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
         elif command == "e":  # Edit notes
             newnotes = utils.edit_text(userinfo.get(swatbot.Field.USER_NOTES))
             userinfo[swatbot.Field.USER_NOTES] = newnotes
+        elif command == "u":  # Open autobuilder URL
+            click.launch(info[swatbot.Field.AUTOBUILDER_URL])
+        elif command == "w":  # Open swatbot URL
+            click.launch(info[swatbot.Field.SWAT_URL])
         elif command in ["a", "b", "m", "i", "o", "f", "t"]:  # Set new status
             newstatus = _create_new_status(info, userinfo, command)
         elif command == "r":  # Reset status

@@ -116,9 +116,9 @@ failures_list_options = [
 
 @main.command()
 @_add_options(failures_list_options)
-@click.option('--open-url-with',
-              help="Open the swatbot url with given program")
-def show_pending_failures(refresh: str, open_url_with: str,
+@click.option('--open-url', '-u', is_flag=True,
+              help="Open the autobuilder url in web browser")
+def show_pending_failures(refresh: str, open_url: str,
                           limit: int, sort: list[str],
                           *args, **kwargs):
     """Show all failures waiting for triage."""
@@ -129,10 +129,9 @@ def show_pending_failures(refresh: str, open_url_with: str,
                                                  refresh=refreshpol,
                                                  filters=filters)
 
-    if open_url_with:
+    if open_url:
         for info in infos:
-            url = info[swatbot.Field.SWAT_URL]
-            subprocess.run(shlex.split(f"{open_url_with} {url}"))
+            click.launch(info[swatbot.Field.AUTOBUILDER_URL])
 
     # Generate a list of formatted infos on failures.
     def format(info, userinfo, field):
@@ -187,9 +186,9 @@ def show_pending_failures(refresh: str, open_url_with: str,
 
 @main.command()
 @_add_options(failures_list_options)
-@click.option('--open-url-with',
-              help="Open the swatbot url with given program")
-def review_pending_failures(refresh: str, open_url_with: str,
+@click.option('--open-url', '-u', is_flag=True,
+              help="Open the autobuilder url in web browser")
+def review_pending_failures(refresh: str, open_url: str,
                             limit: int, sort: list[str],
                             *args, **kwargs):
     """Review failures waiting for triage."""
@@ -211,9 +210,8 @@ def review_pending_failures(refresh: str, open_url_with: str,
             info = infos[entry]
             userinfo = userinfos.get(info[swatbot.Field.BUILD], {})
 
-            if open_url_with and prev_entry != entry:
-                url = info[swatbot.Field.AUTOBUILDER_URL]
-                subprocess.run(shlex.split(f"{open_url_with} {url}"))
+            if open_url and prev_entry != entry:
+                click.launch(info[swatbot.Field.AUTOBUILDER_URL])
 
             if not kbinter:
                 click.clear()
