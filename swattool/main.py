@@ -7,17 +7,15 @@ import click
 import logging
 import pathlib
 import re
-import shlex
-import subprocess
 import sys
 import tabulate
 import textwrap
 from typing import Any, Optional
 
-from swat import bugzilla
-from swat import review
-from swat import swatbot
-from swat import webrequests
+from . import bugzilla
+from . import review
+from . import swatbot
+from . import webrequests
 
 logger = logging.getLogger(__name__)
 
