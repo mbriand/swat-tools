@@ -4,9 +4,10 @@
 
 import pathlib
 import subprocess
+import xdg
 
 BINDIR = pathlib.Path(__file__).parent.parent.resolve()
-DATADIR = BINDIR / "data"
+DATADIR = xdg.xdg_cache_home() / "swattool"
 CACHEDIR = DATADIR / "cache"
 
 MAILNAME = subprocess.run(["git", "config", "--global", "user.name"],

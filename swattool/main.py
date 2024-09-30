@@ -5,7 +5,6 @@
 
 import click
 import logging
-import pathlib
 import re
 import sys
 import tabulate
@@ -18,9 +17,6 @@ from . import swatbot
 from . import webrequests
 
 logger = logging.getLogger(__name__)
-
-BINDIR = pathlib.Path(__file__).parent.resolve()
-DATADIR = BINDIR / "data"
 
 
 def _add_options(options):
