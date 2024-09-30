@@ -6,9 +6,10 @@ import enum
 import logging
 import pathlib
 import pickle
-import requests
 import time
 from typing import Any
+
+import requests
 
 from . import utils
 
@@ -43,8 +44,8 @@ def get_session() -> requests.Session:
         _SESSION = requests.Session()
 
         if COOKIESFILE.exists():
-            with COOKIESFILE.open('rb') as f:
-                _SESSION.cookies.update(pickle.load(f))
+            with COOKIESFILE.open('rb') as file:
+                _SESSION.cookies.update(pickle.load(file))
 
     return _SESSION
 
@@ -53,8 +54,8 @@ def save_cookies():
     """Save cookies so they can be used for later sessions."""
     COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
     if _SESSION:
-        with COOKIESFILE.open('wb') as f:
-            pickle.dump(_SESSION.cookies, f)
+        with COOKIESFILE.open('wb') as file:
+            pickle.dump(_SESSION.cookies, file)
 
 
 def invalidate_cache(url: str):
@@ -83,22 +84,22 @@ def get(url: str, max_cache_age: int = -1) -> str:
 
         if use_cache:
             logger.debug("Loading cache file for %s", url)
-            with cachefile.open('r') as f:
-                return f.read(-1)
+            with cachefile.open('r') as file:
+                return file.read(-1)
 
     logger.debug("Fetching %s", url)
-    r = get_session().get(url)
-    r.raise_for_status()
-    with cachefile.open('w') as f:
-        f.write(r.text)
+    req = get_session().get(url)
+    req.raise_for_status()
+    with cachefile.open('w') as file:
+        file.write(req.text)
 
-    return r.text
+    return req.text
 
 
 def post(url: str, data: dict[str, Any]) -> str:
     """Do a POST request."""
     logger.debug("Sending POST request to %s with %s", url, data)
-    r = get_session().post(url, data=data)
+    req = get_session().post(url, data=data)
 
-    r.raise_for_status()
-    return r.text
+    req.raise_for_status()
+    return req.text

@@ -3,13 +3,14 @@
 
 """A tool helping triage of Yocto autobuilder failures."""
 
-import click
 import logging
 import re
 import sys
-import tabulate
 import textwrap
 from typing import Any, Optional
+
+import click
+import tabulate
 
 from . import bugzilla
 from . import review
@@ -128,7 +129,7 @@ def show_pending_failures(refresh: str, open_url: str,
             click.launch(info[swatbot.Field.AUTOBUILDER_URL])
 
     # Generate a list of formatted infos on failures.
-    def format(info, userinfo, field):
+    def format_field(info, userinfo, field):
         if field == swatbot.Field.FAILURES:
             return "\n".join([f['stepname'] for f in info[field].values()])
         if field == swatbot.Field.USER_STATUS:
@@ -163,7 +164,8 @@ def show_pending_failures(refresh: str, open_url: str,
     ]
     shown_fields = [f for f in shown_fields if f]
     headers = [str(f) for f in shown_fields]
-    table = [[format(info, userinfos.get(info[swatbot.Field.BUILD], {}), field)
+    table = [[format_field(info, userinfos.get(info[swatbot.Field.BUILD], {}),
+                           field)
               for field in shown_fields] for info in infos]
 
     print(tabulate.tabulate(table, headers=headers))
@@ -223,12 +225,12 @@ def review_pending_failures(refresh: str, open_url: str,
                 print()
                 kbinter = True
                 continue
-        except Exception as e:
+        except Exception as error:
             filename = swatbot.save_user_infos(userinfos, suffix="-crash")
             logging.error("Got exception, saving userinfos in a crash file: "
                           "You may want to retrieve data from there (%s)",
                           filename)
-            raise e
+            raise error
         kbinter = False
 
     swatbot.save_user_infos(userinfos)
@@ -269,7 +271,3 @@ def publish_new_reviews(dry_run: bool):
 
     if not dry_run:
         swatbot.invalidate_stepfailures_cache()
-
-
-if __name__ == '__main__':
-    main()
