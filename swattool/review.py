@@ -2,11 +2,12 @@
 
 """Swatbot review functions."""
 
-import click
 import logging
+from typing import Any, Optional
+
+import click
 import tabulate
 from simple_term_menu import TerminalMenu
-from typing import Any, Optional
 
 from . import swatbot
 from . import bugzilla
@@ -38,10 +39,11 @@ def _prompt_bug_infos(info: dict[swatbot.Field, Any],
             if bugnum_str.isnumeric():
                 bugnum = int(bugnum_str)
                 break
-            elif bugnum_str.strip() == "q":
+
+            if bugnum_str.strip() == "q":
                 return None
-            else:
-                logger.warning("Invalid issue: %s", bugnum_str)
+
+            logger.warning("Invalid issue: %s", bugnum_str)
 
     print("Please set the comment content")
     if 'stdio' in failures[first_failure]['urls']:
@@ -61,7 +63,6 @@ def _prompt_bug_infos(info: dict[swatbot.Field, Any],
 
 
 def _create_new_status(info: dict[swatbot.Field, Any],
-                       userinfo: dict[swatbot.Field, Any],
                        command: str) -> dict:
     """Create new status for a given failure."""
     if command in ["a", "b"]:
@@ -145,7 +146,8 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
 
         if command == "q":  # Quit
             return None
-        elif command == "n":  # Next
+
+        if command == "n":  # Next
             entry += 1
         elif command == "p":  # Previous
             if entry >= 1:
@@ -170,7 +172,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
             else:
                 logger.warning("Failed to find stdio log")
         elif command in ["a", "b", "m", "i", "o", "f", "t"]:  # Set new status
-            newstatus = _create_new_status(info, userinfo, command)
+            newstatus = _create_new_status(info, command)
         elif command == "r":  # Reset status
             userinfo[swatbot.Field.USER_STATUS] = []
         else:
@@ -253,7 +255,7 @@ def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
                 reviews.setdefault((status, comment), []).append(userstatus)
 
             # Cleaning old reviews
-            if userstatuses and not any([s['failures'] for s in userstatuses]):
+            if userstatuses and not any(s['failures'] for s in userstatuses):
                 del userinfo[swatbot.Field.USER_STATUS]
 
     swatbot.save_user_infos(userinfos)

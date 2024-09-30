@@ -24,3 +24,7 @@ def _get_git_username() -> Optional[str]:
 
 
 MAILNAME = _get_git_username()
+
+
+class SwattoolException(Exception):
+    """A generic swattool error."""

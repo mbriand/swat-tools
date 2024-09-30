@@ -2,18 +2,19 @@
 
 """Interraction with the swatbot Django server."""
 
-import click
 import enum
 import json
 import logging
 import pathlib
-import requests
 import shutil
-import tabulate
 import textwrap
-import yaml
 from datetime import datetime
 from typing import Any, Collection
+
+import click
+import requests
+import tabulate
+import yaml
 
 from . import bugzilla
 from . import utils
@@ -97,9 +98,9 @@ def login(user: str, password: str):
 
     try:
         webrequests.post(LOGIN_URL, data=data)
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code != requests.codes.NOT_FOUND:
-            raise e
+    except requests.exceptions.HTTPError as error:
+        if error.response.status_code != requests.codes.NOT_FOUND:
+            raise error
     else:
         logger.warning("Unexpected reply, login probably failed")
         return
@@ -115,9 +116,8 @@ def _get_json(path: str, max_cache_age: int = -1):
     except json.decoder.JSONDecodeError:
         webrequests.invalidate_cache(f"{REST_BASE_URL}{path}")
         if "Please login to see this page." in data:
-            raise Exception("Not logged in swatbot")
-        else:
-            raise Exception("Failed to parse server reply")
+            raise utils.SwattoolException("Not logged in swatbot")
+        raise utils.SwattoolException("Failed to parse server reply")
     return json_data
 
 
@@ -185,8 +185,8 @@ def get_user_infos() -> dict[int, dict[Field, Any]]:
     """Load user infos stored during previous review session."""
     logger.info("Loading saved data...")
     if USERINFOFILE.exists():
-        with USERINFOFILE.open('r') as f:
-            pretty_userinfos = yaml.load(f, Loader=yaml.Loader)
+        with USERINFOFILE.open('r') as file:
+            pretty_userinfos = yaml.load(file, Loader=yaml.Loader)
             userinfos = {bid: {Field(k): v for k, v in info.items()}
                          for bid, info in pretty_userinfos.items()}
             return userinfos
@@ -200,8 +200,8 @@ def save_user_infos(userinfos: dict[int, dict[Field, Any]], suffix=""
                         for bid, info in userinfos.items() if info}
 
     filename = USERINFOFILE.with_stem(f'{USERINFOFILE.stem}{suffix}')
-    with filename.open('w') as f:
-        yaml.dump(pretty_userinfos, f)
+    with filename.open('w') as file:
+        yaml.dump(pretty_userinfos, file)
 
     # Create backup files. We might remove this once the code becomes more
     # stable
@@ -314,8 +314,8 @@ def get_failure_infos(limit: int, sort: Collection[str],
             return userinfos[info[Field.BUILD]][field]
         return ""
 
-    def sortfn(x):
-        return tuple([get_field(x, Field(k)) for k in sort])
+    def sortfn(elem):
+        return tuple([get_field(elem, Field(k)) for k in sort])
 
     return (sorted(infos, key=sortfn), userinfos)
 
