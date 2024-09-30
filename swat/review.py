@@ -48,9 +48,10 @@ def _prompt_bug_infos(info: dict[swatbot.Field, Any],
         testmachine = " ".join([info[swatbot.Field.TEST],
                                 info[swatbot.Field.WORKER]])
         log = failures[first_failure]['urls']['stdio']
-        bcomment = utils.edit_text("\n".join([testmachine, log]))
+        bcomment = click.edit("\n".join([testmachine, log]),
+                              require_save=False)
     else:
-        bcomment = utils.edit_text(None)
+        bcomment = click.edit(None, require_save=False)
 
     newstatus = {'status': swatbot.TriageStatus.BUG,
                  'comment': bugnum,
@@ -154,7 +155,8 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
         elif command == "l":  # List
             entry = _list_failures_menu(infos, userinfos, entry)
         elif command == "e":  # Edit notes
-            newnotes = utils.edit_text(userinfo.get(swatbot.Field.USER_NOTES))
+            newnotes = click.edit(userinfo.get(swatbot.Field.USER_NOTES),
+                                  require_save=False)
             userinfo[swatbot.Field.USER_NOTES] = newnotes
         elif command == "u":  # Open autobuilder URL
             click.launch(info[swatbot.Field.AUTOBUILDER_URL])
