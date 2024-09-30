@@ -175,11 +175,14 @@ def show_pending_failures(refresh: str, open_url_with: str,
 
     print(tabulate.tabulate(table, headers=headers))
 
-    logging.info("%s entries found (%s warnings and %s errors)", len(infos),
+    logging.info("%s entries found (%s warnings, %s errors and %s cancelled)",
+                 len(infos),
                  len([i for i in infos
                       if i[swatbot.Field.STATUS] == swatbot.Status.WARNING]),
                  len([i for i in infos
-                      if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]))
+                      if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]),
+                 len([i for i in infos
+                      if i[swatbot.Field.STATUS] == swatbot.Status.CANCELLED]))
 
 
 def _show_failure(info: dict[swatbot.Field, Any],

@@ -52,6 +52,7 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
     if show_menu:
         print("a ab-int")
         print("b bug opened")
+        print("c cancelled no errors")
         print("m mail sent")
         if utils.MAILNAME:
             print(f"i mail sent by {utils.MAILNAME}")
@@ -95,6 +96,15 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                          'comment': input('Comment:').strip(),
                          }
+        elif line.strip() == "c":
+            if info[swatbot.Field.STATUS] == swatbot.Status.CANCELLED:
+                newstatus = {'status': swatbot.TriageStatus.CANCELLED,
+                             'comment': "cancelled",
+                             }
+            else:
+                logger.warning("Refusing to mark as cancelled "
+                               "a build with %s status",
+                               info[swatbot.Field.STATUS])
         elif line.strip() == "i" and utils.MAILNAME:
             newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                          'comment': f"Mail sent by {utils.MAILNAME}",

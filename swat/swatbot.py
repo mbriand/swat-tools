@@ -30,6 +30,7 @@ class Status(enum.IntEnum):
 
     WARNING = 1
     ERROR = 2
+    CANCELLED = 6
     UNKNOWN = -1
 
     @staticmethod
