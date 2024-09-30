@@ -374,8 +374,15 @@ def get_failure_description(info: dict[Field, Any],
         table.append([Field.FAILURES if i == 0 else "",
                       failure['stepname'], status_str])
 
+    desc = tabulate.tabulate(table, tablefmt="plain")
+
     usernotes = userinfo.get(Field.USER_NOTES)
     if usernotes:
-        table.append([Field.USER_NOTES, textwrap.fill(usernotes, 60)])
+        # Reserve chars for spacing.
+        reserved = 8
+        termwidth = shutil.get_terminal_size((80, 20)).columns
+        width = termwidth - reserved
+        wrapped = textwrap.indent(textwrap.fill(usernotes, width), " " * 4)
+        desc += f"\n\n{Field.USER_NOTES}:\n{wrapped}"
 
-    return tabulate.tabulate(table, tablefmt="plain")
+    return desc
