@@ -296,11 +296,18 @@ def get_failure_infos(limit: int, sort: Collection[str],
 
     # Sort all failures as requested.
     def get_field(info, field):
+        if field == Field.FAILURES:
+            return sorted(fail['stepname'] for fail in info[field].values())
+        if field == Field.USER_STATUS:
+            triage = userinfos[info[Field.BUILD]].get(field)
+            if triage:
+                return triage[0]['status']
+            return TriageStatus.PENDING
         if field in info:
             return info[field]
         if field in userinfos[info[Field.BUILD]]:
             return userinfos[info[Field.BUILD]][field]
-        return None
+        return ""
 
     def sortfn(x):
         return tuple([get_field(x, Field(k)) for k in sort])
