@@ -104,6 +104,7 @@ _commands = [
     "[e] edit notes",
     "[u] open autobuilder URL",
     "[w] open swatbot URL",
+    "[g] open stdio log of first failed step URL",
     None,
     "[n] next",
     "[p] previous",
@@ -162,6 +163,12 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
             click.launch(info[swatbot.Field.AUTOBUILDER_URL])
         elif command == "w":  # Open swatbot URL
             click.launch(info[swatbot.Field.SWAT_URL])
+        elif command == "g":  # Open stdio log
+            first_failure = min(failures)
+            if 'stdio' in failures[first_failure]['urls']:
+                click.launch(failures[first_failure]['urls']['stdio'])
+            else:
+                logger.warning("Failed to find stdio log")
         elif command in ["a", "b", "m", "i", "o", "f", "t"]:  # Set new status
             newstatus = _create_new_status(info, userinfo, command)
         elif command == "r":  # Reset status

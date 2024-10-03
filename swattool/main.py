@@ -186,9 +186,14 @@ def show_pending_failures(refresh: str, open_url: str,
 
 @main.command()
 @_add_options(failures_list_options)
-@click.option('--open-url', '-u', is_flag=True,
+@click.option('--open-autobuilder-url', '-u', is_flag=True,
               help="Open the autobuilder url in web browser")
-def review_pending_failures(refresh: str, open_url: str,
+@click.option('--open-swatbot-url', '-w', is_flag=True,
+              help="Open the swatbot url in web browser")
+@click.option('--open-stdio-url', '-g', is_flag=True,
+              help="Open the first stdio url in web browser")
+def review_pending_failures(refresh: str, open_autobuilder_url: bool,
+                            open_swatbot_url: bool, open_stdio_url: bool,
                             limit: int, sort: list[str],
                             *args, **kwargs):
     """Review failures waiting for triage."""
@@ -210,8 +215,18 @@ def review_pending_failures(refresh: str, open_url: str,
             info = infos[entry]
             userinfo = userinfos.get(info[swatbot.Field.BUILD], {})
 
-            if open_url and prev_entry != entry:
-                click.launch(info[swatbot.Field.AUTOBUILDER_URL])
+            if prev_entry != entry:
+                if open_autobuilder_url:
+                    click.launch(info[swatbot.Field.AUTOBUILDER_URL])
+                if open_swatbot_url:
+                    click.launch(info[swatbot.Field.SWAT_URL])
+                if open_stdio_url:
+                    failures = info[swatbot.Field.FAILURES]
+                    first_failure = min(failures)
+                    if 'stdio' in failures[first_failure]['urls']:
+                        click.launch(failures[first_failure]['urls']['stdio'])
+                    else:
+                        logger.warning("Failed to find stdio log")
 
             if not kbinter:
                 click.clear()
