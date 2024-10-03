@@ -39,9 +39,11 @@ def parse_filters(kwargs) -> dict[str, Any]:
     owners = [None if str(f).lower() == "none" else f
               for f in kwargs['owner_filter']]
 
-    completed_after = None
+    completed_after = completed_before = None
     if kwargs['completed_after']:
         completed_after = kwargs['completed_after'].astimezone()
+    if kwargs['completed_before']:
+        completed_before = kwargs['completed_before'].astimezone()
 
     filters = {'build': kwargs['build_filter'],
                'test': tests,
@@ -49,6 +51,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
                'status': statuses,
                'owner': owners,
                'completed-after': completed_after,
+               'completed-before': completed_before,
                'with-notes': kwargs['with_notes'],
                'with-new-status': kwargs['with_new_status'],
                }
@@ -101,6 +104,9 @@ failures_list_options = [
     click.option('--completed-after', '-A',
                  type=click.DateTime(),
                  help="Only show failures after a given date"),
+    click.option('--completed-before', '-B',
+                 type=click.DateTime(),
+                 help="Only show failures before a given date"),
     click.option('--with-notes', '-N', type=click.BOOL, default=None,
                  help="Only show failures with or without attached note"),
     click.option('--with-new-status', type=click.BOOL, default=None,

@@ -241,6 +241,11 @@ def _info_match_filters(info: dict[Field, Any],
         if completed < filters['completed-after']:
             return False
 
+    if filters['completed-before'] and info[Field.COMPLETED]:
+        completed = datetime.fromisoformat(info[Field.COMPLETED])
+        if completed > filters['completed-before']:
+            return False
+
     if filters['with-notes'] is not None:
         if filters['with-notes'] ^ bool(userinfo.get(Field.USER_NOTES)):
             return False
