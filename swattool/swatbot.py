@@ -394,7 +394,9 @@ def get_failure_description(info: dict[Field, Any],
         reserved = 8
         termwidth = shutil.get_terminal_size((80, 20)).columns
         width = termwidth - reserved
-        wrapped = textwrap.indent(textwrap.fill(usernotes, width), " " * 4)
+        wrapped_lines = [textwrap.indent(textwrap.fill(line, width), " " * 4)
+                         for line in usernotes.splitlines()]
+        wrapped = "\n".join(wrapped_lines)
         desc += f"\n\n{Field.USER_NOTES}:\n{wrapped}"
 
     return desc
