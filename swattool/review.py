@@ -67,6 +67,10 @@ def _create_new_status(info: dict[swatbot.Field, Any],
     """Create new status for a given failure."""
     if command in ["a", "b"]:
         newstatus = _prompt_bug_infos(info, command == "a")
+    elif command == "c":
+        newstatus = {'status': swatbot.TriageStatus.CANCELLED,
+                     'comment': input('Comment:').strip(),
+                     }
     elif command == "m":
         newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
                      'comment': input('Comment:').strip(),
@@ -171,7 +175,8 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
                 click.launch(failures[first_failure]['urls']['stdio'])
             else:
                 logger.warning("Failed to find stdio log")
-        elif command in ["a", "b", "m", "i", "o", "f", "t"]:  # Set new status
+        elif command in ["a", "b", "c", "m", "i", "o", "f", "t"]:
+            # Set new status
             newstatus = _create_new_status(info, command)
         elif command == "r":  # Reset status
             userinfo[swatbot.Field.USER_STATUS] = []
