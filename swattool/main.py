@@ -211,6 +211,9 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
     prev_entry = None
     kbinter = False
     while entry is not None:
+        if not kbinter:
+            click.clear()
+
         try:
             info = infos[entry]
             userinfo = userinfos.get(info[swatbot.Field.BUILD], {})
@@ -221,6 +224,11 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                 if open_swatbot_url:
                     click.launch(info[swatbot.Field.SWAT_URL])
                 if open_stdio_url:
+                    if info[swatbot.Field.TEST] in ["a-full", "a-quick"]:
+                        # TODO: can we do anything better here ?
+                        logger.warning("Test is %s, "
+                                       "fail log might be the log of a child",
+                                       info[swatbot.Field.TEST])
                     failures = info[swatbot.Field.FAILURES]
                     first_failure = min(failures)
                     if 'stdio' in failures[first_failure]['urls']:
@@ -229,7 +237,6 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                         logger.warning("Failed to find stdio log")
 
             if not kbinter:
-                click.clear()
                 print(swatbot.get_failure_description(info, userinfo))
                 print()
 
