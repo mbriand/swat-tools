@@ -10,6 +10,7 @@ import tabulate
 from simple_term_menu import TerminalMenu
 
 from . import swatbot
+from . import swatbuild
 from . import bugzilla
 from . import utils
 from . import webrequests
@@ -17,11 +18,9 @@ from . import webrequests
 logger = logging.getLogger(__name__)
 
 
-def _prompt_bug_infos(info: dict[swatbot.Field, Any],
+def _prompt_bug_infos(build: swatbuild.Build,
                       is_abint: bool):
     """Create new status of type BUG for a given failure."""
-    failures = info[swatbot.Field.FAILURES]
-    first_failure = min(failures)
     if is_abint:
         abints = bugzilla.get_abints()
         abint_list = [f"{k} {v}" for (k, v) in abints.items()]
@@ -46,10 +45,10 @@ def _prompt_bug_infos(info: dict[swatbot.Field, Any],
             logger.warning("Invalid issue: %s", bugnum_str)
 
     print("Please set the comment content")
-    if 'stdio' in failures[first_failure]['urls']:
-        testmachine = " ".join([info[swatbot.Field.TEST],
-                                info[swatbot.Field.WORKER]])
-        log = failures[first_failure]['urls']['stdio']
+    first_failure = min(build.failures)
+    if 'stdio' in build.failures[first_failure]['urls']:
+        testmachine = " ".join([build.test, build.worker])
+        log = build.failures[first_failure]['urls']['stdio']
         bcomment = click.edit("\n".join([testmachine, log]),
                               require_save=False)
     else:
@@ -62,11 +61,10 @@ def _prompt_bug_infos(info: dict[swatbot.Field, Any],
     return newstatus
 
 
-def _create_new_status(info: dict[swatbot.Field, Any],
-                       command: str) -> dict:
+def _create_new_status(build: swatbuild.Build, command: str) -> dict:
     """Create new status for a given failure."""
     if command in ["a", "b"]:
-        newstatus = _prompt_bug_infos(info, command == "a")
+        newstatus = _prompt_bug_infos(build, command == "a")
     elif command == "c":
         newstatus = {'status': swatbot.TriageStatus.CANCELLED,
                      'comment': input('Comment:').strip(),
@@ -121,8 +119,8 @@ _commands = [
 valid_commands = [c for c in _commands if c != ""]
 
 
-def review_menu(infos: list[dict[swatbot.Field, Any]],
-                userinfos: dict[int, dict[swatbot.Field, Any]],
+def review_menu(builds: list[swatbuild.Build],
+                userinfos: dict[int, dict[swatbuild.Field, Any]],
                 entry: int,
                 statusbar: str) -> Optional[int]:
     """Allow a user to interactively triage a failure."""
@@ -134,9 +132,9 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
                                status_bar=statusbar,
                                raise_error_on_interrupt=True)
 
-    info = infos[entry]
-    userinfo = userinfos.setdefault(info[swatbot.Field.BUILD], {})
-    failures = info[swatbot.Field.FAILURES]
+    build = builds[entry]
+    userinfo = userinfos.setdefault(build.id, {})
+    failures = build.failures
     newstatus: Optional[dict] = None
 
     while True:
@@ -160,56 +158,55 @@ def review_menu(infos: list[dict[swatbot.Field, Any]],
                 logger.warning("This is the first entry")
                 continue
         elif command == "l":  # List
-            entry = _list_failures_menu(infos, userinfos, entry)
+            entry = _list_failures_menu(builds, userinfos, entry)
         elif command == "e":  # Edit notes
-            newnotes = click.edit(userinfo.get(swatbot.Field.USER_NOTES),
+            newnotes = click.edit(userinfo.get(swatbuild.Field.USER_NOTES),
                                   require_save=False)
-            userinfo[swatbot.Field.USER_NOTES] = newnotes
+            userinfo[swatbuild.Field.USER_NOTES] = newnotes
         elif command == "u":  # Open autobuilder URL
-            click.launch(info[swatbot.Field.AUTOBUILDER_URL])
+            click.launch(build.autobuilder_url)
         elif command == "w":  # Open swatbot URL
-            click.launch(info[swatbot.Field.SWAT_URL])
+            click.launch(build.swat_url)
         elif command == "g":  # Open stdio log
-            first_failure = min(failures)
-            if 'stdio' in failures[first_failure]['urls']:
-                click.launch(failures[first_failure]['urls']['stdio'])
+            logurl = build.get_first_failure().get_log_url()
+            if logurl:
+                click.launch(logurl)
             else:
                 logger.warning("Failed to find stdio log")
         elif command in ["a", "b", "c", "m", "i", "o", "f", "t"]:
             # Set new status
-            newstatus = _create_new_status(info, command)
+            newstatus = _create_new_status(build, command)
         elif command == "r":  # Reset status
-            userinfo[swatbot.Field.USER_STATUS] = []
+            userinfo[swatbuild.Field.USER_STATUS] = []
         else:
             continue
         break
 
     if newstatus:
         newstatus['failures'] = failures
-        userinfo[swatbot.Field.USER_STATUS] = [newstatus]
+        userinfo[swatbuild.Field.USER_STATUS] = [newstatus]
 
-    if entry >= len(infos):
+    if entry >= len(builds):
         return None
 
     return entry
 
 
-def _list_failures_menu(infos: list[dict[swatbot.Field, Any]],
-                        userinfos: dict[int, dict[swatbot.Field, Any]],
+def _list_failures_menu(builds: list[swatbuild.Build],
+                        userinfos: dict[int, dict[swatbuild.Field, Any]],
                         entry: int) -> int:
     """Allow the user to select the failure to review in a menu."""
     def preview_failure(fstr):
         fnum = int(fstr.split()[0])
-        idx = [i for (i, info) in enumerate(infos)
-               if info[swatbot.Field.BUILD] == fnum][0]
-        return swatbot.get_failure_description(infos[idx], userinfos[fnum])
+        build = [b for (i, b) in enumerate(builds) if b.id == fnum][0]
+        return build.format_description(userinfos[fnum])
 
     shown_fields = [
-        swatbot.Field.BUILD,
-        swatbot.Field.TEST,
-        swatbot.Field.OWNER,
+        swatbuild.Field.BUILD,
+        swatbuild.Field.TEST,
+        swatbuild.Field.OWNER,
     ]
-    entries = [[info[f] for f in shown_fields] for info in infos]
+    entries = [[build.get(f) for f in shown_fields] for build in builds]
     tabulated_entries = tabulate.tabulate(entries, tablefmt="plain")
     failures_menu = TerminalMenu(tabulated_entries.splitlines(),
                                  title="Failures",
@@ -231,10 +228,10 @@ def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
     reviews: dict[tuple[swatbot.TriageStatus, Any], list[dict]] = {}
     with click.progressbar(userinfos.items()) as userinfos_progress:
         for buildid, userinfo in userinfos_progress:
-            if swatbot.Field.USER_STATUS not in userinfo:
+            if swatbuild.Field.USER_STATUS not in userinfo:
                 continue
 
-            userstatuses = userinfo.get(swatbot.Field.USER_STATUS, [])
+            userstatuses = userinfo.get(swatbuild.Field.USER_STATUS, [])
             for userstatus in userstatuses:
                 status = userstatus.get('status')
                 comment = userstatus.get('comment')
@@ -261,7 +258,7 @@ def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
 
             # Cleaning old reviews
             if userstatuses and not any(s['failures'] for s in userstatuses):
-                del userinfo[swatbot.Field.USER_STATUS]
+                del userinfo[swatbuild.Field.USER_STATUS]
 
     swatbot.save_user_infos(userinfos)
 

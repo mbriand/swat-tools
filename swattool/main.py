@@ -15,6 +15,7 @@ import tabulate
 from . import bugzilla
 from . import review
 from . import swatbot
+from . import swatbuild
 from . import webrequests
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ failures_list_options = [
     click.option('--limit', '-l', type=click.INT, default=None,
                  help="Only parse the n last failures waiting for triage"),
     click.option('--sort', '-s', multiple=True, default=["Build"],
-                 type=click.Choice([str(f) for f in swatbot.Field],
+                 type=click.Choice([str(f) for f in swatbuild.Field],
                                    case_sensitive=False),
                  help="Specify sort order"),
     click.option('--refresh', '-r',
@@ -123,25 +124,24 @@ def show_pending_failures(refresh: str, open_url: str,
                           limit: int, sort: list[str],
                           *args, **kwargs):
     """Show all failures waiting for triage."""
-    refreshpol = webrequests.RefreshPolicy[refresh.upper()]
+    webrequests.set_refresh_policy(webrequests.RefreshPolicy[refresh.upper()])
 
     filters = parse_filters(kwargs)
-    infos, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
-                                                 refresh=refreshpol,
-                                                 filters=filters)
+    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
+                                                  filters=filters)
 
     if open_url:
-        for info in infos:
-            click.launch(info[swatbot.Field.AUTOBUILDER_URL])
+        for build in builds:
+            click.launch(build.autobuilder_url)
 
-    # Generate a list of formatted infos on failures.
-    def format_field(info, userinfo, field):
-        if field == swatbot.Field.FAILURES:
-            return "\n".join([f['stepname'] for f in info[field].values()])
-        if field == swatbot.Field.USER_STATUS:
+    # Generate a list of formatted builds on failures.
+    def format_field(build, userinfo, field):
+        if field == swatbuild.Field.FAILURES:
+            return "\n".join([f.stepname for f in build.get(field).values()])
+        if field == swatbuild.Field.USER_STATUS:
             status_strs = []
             statuses = userinfo.get(field, [])
-            for failure in info[swatbot.Field.FAILURES]:
+            for failure in build.failures:
                 status_str = ""
                 for status in statuses:
                     if failure in status['failures']:
@@ -150,40 +150,39 @@ def show_pending_failures(refresh: str, open_url: str,
                         break
                 status_strs.append(status_str)
             return "\n".join(status_strs)
-        if field == swatbot.Field.USER_NOTES:
+        if field == swatbuild.Field.USER_NOTES:
             notes = userinfo.get(field, "").replace("\n", " ")
             return textwrap.shorten(notes, 80)
-        return str(info[field])
+        return str(build.get(field))
 
     shown_fields = [
-        swatbot.Field.BUILD,
-        swatbot.Field.STATUS if len(kwargs['status_filter']) != 1 else None,
-        swatbot.Field.TEST if len({info[swatbot.Field.TEST]
-                                   for info in infos}) != 1 else None,
-        swatbot.Field.OWNER if len(kwargs['owner_filter']) != 1 else None,
-        swatbot.Field.WORKER,
-        swatbot.Field.COMPLETED,
-        swatbot.Field.SWAT_URL,
-        swatbot.Field.FAILURES,
-        swatbot.Field.USER_STATUS,
-        swatbot.Field.USER_NOTES,
+        swatbuild.Field.BUILD,
+        swatbuild.Field.STATUS if len(kwargs['status_filter']) != 1 else None,
+        swatbuild.Field.TEST if len({build.test
+                                     for build in builds}) != 1 else None,
+        swatbuild.Field.OWNER if len(kwargs['owner_filter']) != 1 else None,
+        swatbuild.Field.WORKER,
+        swatbuild.Field.COMPLETED,
+        swatbuild.Field.SWAT_URL,
+        swatbuild.Field.FAILURES,
+        swatbuild.Field.USER_STATUS,
+        swatbuild.Field.USER_NOTES,
     ]
     shown_fields = [f for f in shown_fields if f]
     headers = [str(f) for f in shown_fields]
-    table = [[format_field(info, userinfos.get(info[swatbot.Field.BUILD], {}),
-                           field)
-              for field in shown_fields] for info in infos]
+    table = [[format_field(build, userinfos.get(build.id, {}), field)
+              for field in shown_fields] for build in builds]
 
     print(tabulate.tabulate(table, headers=headers))
 
     logging.info("%s entries found (%s warnings, %s errors and %s cancelled)",
-                 len(infos),
-                 len([i for i in infos
-                      if i[swatbot.Field.STATUS] == swatbot.Status.WARNING]),
-                 len([i for i in infos
-                      if i[swatbot.Field.STATUS] == swatbot.Status.ERROR]),
-                 len([i for i in infos
-                      if i[swatbot.Field.STATUS] == swatbot.Status.CANCELLED]))
+                 len(builds),
+                 len([b for b in builds
+                      if b.status == swatbot.Status.WARNING]),
+                 len([b for b in builds
+                      if b.status == swatbot.Status.ERROR]),
+                 len([b for b in builds
+                      if b.status == swatbot.Status.CANCELLED]))
 
 
 @main.command()
@@ -199,14 +198,13 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                             limit: int, sort: list[str],
                             *args, **kwargs):
     """Review failures waiting for triage."""
-    refreshpol = webrequests.RefreshPolicy[refresh.upper()]
+    webrequests.set_refresh_policy(webrequests.RefreshPolicy[refresh.upper()])
 
     filters = parse_filters(kwargs)
-    infos, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
-                                                 refresh=refreshpol,
-                                                 filters=filters)
+    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
+                                                  filters=filters)
 
-    if not infos:
+    if not builds:
         return
 
     entry: Optional[int] = 0
@@ -217,34 +215,33 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
             click.clear()
 
         try:
-            info = infos[entry]
-            userinfo = userinfos.get(info[swatbot.Field.BUILD], {})
+            build = builds[entry]
+            userinfo = userinfos.get(build.id, {})
 
             if prev_entry != entry:
                 if open_autobuilder_url:
-                    click.launch(info[swatbot.Field.AUTOBUILDER_URL])
+                    click.launch(build.autobuilder_url)
                 if open_swatbot_url:
-                    click.launch(info[swatbot.Field.SWAT_URL])
+                    click.launch(build.swat_url)
                 if open_stdio_url:
-                    if info[swatbot.Field.TEST] in ["a-full", "a-quick"]:
+                    if build.test in ["a-full", "a-quick"]:
                         # TODO: can we do anything better here ?
                         logger.warning("Test is %s, "
                                        "fail log might be the log of a child",
-                                       info[swatbot.Field.TEST])
-                    failures = info[swatbot.Field.FAILURES]
-                    first_failure = min(failures)
-                    if 'stdio' in failures[first_failure]['urls']:
-                        click.launch(failures[first_failure]['urls']['stdio'])
+                                       build.test)
+                    logurl = build.get_first_failure().get_log_url()
+                    if logurl:
+                        click.launch(logurl)
                     else:
                         logger.warning("Failed to find stdio log")
 
             if not kbinter:
-                print(swatbot.get_failure_description(info, userinfo))
+                print(build.format_description(userinfo))
                 print()
 
             prev_entry = entry
-            statusbar = f"Progress: {entry+1}/{len(infos)}"
-            entry = review.review_menu(infos, userinfos, entry, statusbar)
+            statusbar = f"Progress: {entry+1}/{len(builds)}"
+            entry = review.review_menu(builds, userinfos, entry, statusbar)
         except KeyboardInterrupt:
             if kbinter:
                 sys.exit(1)
@@ -283,17 +280,17 @@ def publish_new_reviews(dry_run: bool):
 
             if any(logs):
                 comment = bugurl = bugzilla.get_bug_url(bugid)
-                logging.info('Need to update %s with %s', bugurl,
-                             ", ".join(logs).replace('\n', ' '))
+                logger.info('Need to update %s with %s', bugurl,
+                            ", ".join(logs).replace('\n', ' '))
                 if not dry_run:
                     bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
         for entry in entries:
             for failureid, failuredata in entry['failures'].items():
-                logging.info('Need to update failure %s (%s) '
-                             'to status %s (%s) with "%s"',
-                             failureid, failuredata['stepname'], status,
-                             status.name.title(), comment)
+                logger.info('Need to update failure %s (%s) '
+                            'to status %s (%s) with "%s"',
+                            failureid, failuredata['stepname'], status,
+                            status.name.title(), comment)
                 if not dry_run:
                     swatbot.publish_status(failureid, status, comment)
 

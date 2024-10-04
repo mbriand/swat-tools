@@ -28,13 +28,21 @@ class RefreshPolicy(enum.Enum):
     AUTO = enum.auto()
 
 
-def refresh_policy_max_age(policy: RefreshPolicy, auto: int) -> int:
+_REFRESH_POLICY = RefreshPolicy.AUTO
+
+
+def refresh_policy_max_age(auto: int) -> int:
     """Get the maximum age before refresh for a given policy."""
-    if policy == RefreshPolicy.FORCE:
+    if _REFRESH_POLICY == RefreshPolicy.FORCE:
         return 0
-    if policy == RefreshPolicy.NO:
+    if _REFRESH_POLICY == RefreshPolicy.NO:
         return -1
     return auto
+
+
+def set_refresh_policy(policy: RefreshPolicy):
+    global _REFRESH_POLICY
+    _REFRESH_POLICY = policy
 
 
 def get_session() -> requests.Session:

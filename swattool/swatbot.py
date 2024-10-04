@@ -7,16 +7,13 @@ import json
 import logging
 import pathlib
 import shutil
-import textwrap
-from datetime import datetime
 from typing import Any, Collection
 
 import click
 import requests
-import tabulate
 import yaml
 
-from . import bugzilla
+from . import swatbuild
 from . import utils
 from . import webrequests
 
@@ -47,22 +44,6 @@ class Status(enum.IntEnum):
 
     def __str__(self):
         return self.name.title()
-
-
-class Field(enum.StrEnum):
-    """A filed in failure info."""
-
-    BUILD = 'Build'
-    STATUS = 'Status'
-    TEST = 'Test'
-    OWNER = 'Owner'
-    WORKER = 'Worker'
-    COMPLETED = 'Completed'
-    SWAT_URL = 'SWAT URL'
-    AUTOBUILDER_URL = 'Autobuilder URL'
-    FAILURES = 'Failures'
-    USER_NOTES = 'Notes'
-    USER_STATUS = 'Triage'
 
 
 class TriageStatus(enum.IntEnum):
@@ -121,20 +102,15 @@ def _get_json(path: str, max_cache_age: int = -1):
     return json_data
 
 
-def get_build(buildid: int,
-              refresh: webrequests.RefreshPolicy =
-              webrequests.RefreshPolicy.AUTO
-              ):
+def get_build(buildid: int):
     """Get info on a given build."""
-    maxage = webrequests.refresh_policy_max_age(refresh, AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S)
     return _get_json(f"/build/{buildid}/", maxage)['data']
 
 
-def get_build_collection(collectionid: int,
-                         refresh: webrequests.RefreshPolicy =
-                         webrequests.RefreshPolicy.AUTO):
+def get_build_collection(collectionid: int):
     """Get info on a given build collection."""
-    maxage = webrequests.refresh_policy_max_age(refresh, AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S)
     return _get_json(f"/buildcollection/{collectionid}/", maxage)['data']
 
 
@@ -147,53 +123,43 @@ def invalidate_stepfailures_cache():
     webrequests.invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
 
 
-def get_stepfailures(refresh: webrequests.RefreshPolicy =
-                     webrequests.RefreshPolicy.AUTO):
+def get_stepfailures():
     """Get info on all failures."""
-    maxage = webrequests.refresh_policy_max_age(refresh,
-                                                FAILURES_AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S)
     return _get_json("/stepfailure/", maxage)['data']
 
 
-def get_stepfailure(failureid: int, refresh: webrequests.RefreshPolicy =
-                    webrequests.RefreshPolicy.AUTO):
+def get_stepfailure(failureid: int):
     """Get info on a given failure."""
-    maxage = webrequests.refresh_policy_max_age(refresh,
-                                                FAILURES_AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S)
     return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 
-def get_pending_failures(refresh: webrequests.RefreshPolicy
-                         ) -> dict[int, dict[int, dict[str, Any]]]:
-    """Get info on all pending failures."""
-    failures = get_stepfailures(refresh=refresh)
-    pending_ids: dict[int, dict[int, dict[str, Any]]] = {}
-    for failure in failures:
-        if failure['attributes']['triage'] == 0:
-            buildid = int(failure['relationships']['build']['data']['id'])
-            failureid = int(failure['id'])
-            urls = {u.split()[0].rsplit('/')[-1]: u
-                    for u in failure['attributes']['urls'].split()}
-            faildata = {'stepname': failure['attributes']['stepname'],
-                        'urls': urls}
-            pending_ids.setdefault(buildid, {})[failureid] = faildata
+def _get_pending_failures() -> dict[int, dict[int, dict]]:
+    failures = get_stepfailures()
+    pending_ids: dict[int, dict[int, dict]] = {}
+    for failure_data in failures:
+        if failure_data['attributes']['triage'] == 0:
+            buildid = int(failure_data['relationships']['build']['data']['id'])
+            failureid = int(failure_data['id'])
+            pending_ids.setdefault(buildid, {})[failureid] = failure_data
 
     return pending_ids
 
 
-def get_user_infos() -> dict[int, dict[Field, Any]]:
+def get_user_infos() -> dict[int, dict[swatbuild.Field, Any]]:
     """Load user infos stored during previous review session."""
     logger.info("Loading saved data...")
     if USERINFOFILE.exists():
         with USERINFOFILE.open('r') as file:
             pretty_userinfos = yaml.load(file, Loader=yaml.Loader)
-            userinfos = {bid: {Field(k): v for k, v in info.items()}
+            userinfos = {bid: {swatbuild.Field(k): v for k, v in info.items()}
                          for bid, info in pretty_userinfos.items()}
             return userinfos
     return {}
 
 
-def save_user_infos(userinfos: dict[int, dict[Field, Any]], suffix=""
+def save_user_infos(userinfos: dict[int, dict[swatbuild.Field, Any]], suffix=""
                     ) -> pathlib.Path:
     """Store user infos for later runs."""
     pretty_userinfos = {bid: {str(k): v for k, v in info.items()}
@@ -213,109 +179,31 @@ def save_user_infos(userinfos: dict[int, dict[Field, Any]], suffix=""
     return filename
 
 
-def _info_match_filters(info: dict[Field, Any],
-                        userinfo: dict[Field, Any],
-                        filters: dict[str, Any]
-                        ) -> bool:
-    if filters['build'] and info[Field.BUILD] not in filters['build']:
-        return False
-
-    if filters['owner'] and info[Field.OWNER] not in filters['owner']:
-        return False
-
-    matches = [True for r in filters['test'] if r.match(info[Field.TEST])]
-    if filters['test'] and not matches:
-        return False
-
-    matches = [True for r in filters['ignore-test']
-               if r.match(info[Field.TEST])]
-    if filters['ignore-test'] and matches:
-        return False
-
-    status = Status.from_int(info[Field.STATUS])
-    if filters['status'] and status not in filters['status']:
-        return False
-
-    if filters['completed-after'] and info[Field.COMPLETED]:
-        completed = datetime.fromisoformat(info[Field.COMPLETED])
-        if completed < filters['completed-after']:
-            return False
-
-    if filters['completed-before'] and info[Field.COMPLETED]:
-        completed = datetime.fromisoformat(info[Field.COMPLETED])
-        if completed > filters['completed-before']:
-            return False
-
-    if filters['with-notes'] is not None:
-        if filters['with-notes'] ^ bool(userinfo.get(Field.USER_NOTES)):
-            return False
-
-    if filters['with-new-status'] is not None:
-        if filters['with-new-status'] ^ bool(userinfo.get(Field.USER_STATUS)):
-            return False
-
-    return True
-
-
 def get_failure_infos(limit: int, sort: Collection[str],
-                      refresh: webrequests.RefreshPolicy,
                       filters: dict[str, Any]
-                      ) -> tuple[list[dict[Field, Any]],
-                                 dict[int, dict[Field, Any]]]:
+                      ) -> tuple[list[swatbuild.Build],
+                                 dict[int, dict[swatbuild.Field, Any]]]:
     """Get consolidated list of failure infos and local reviews infos."""
     userinfos = get_user_infos()
 
     logger.info("Loading build failures...")
-    pending_ids = get_pending_failures(refresh)
+    pending_failures = _get_pending_failures()
 
     # Generate a list of all pending failures, fetching details from the remote
     # server as needed.
     logger.info("Loading build failures details...")
     infos = []
-    limited_pending_ids = sorted(pending_ids.keys(), reverse=True)[:limit]
+    limited_pending_ids = sorted(pending_failures.keys(), reverse=True)[:limit]
     with click.progressbar(limited_pending_ids) as pending_ids_progress:
         for buildid in pending_ids_progress:
-            build = get_build(buildid, refresh=refresh)
-            attributes = build['attributes']
-            relationships = build['relationships']
-            collectionid = relationships['buildcollection']['data']['id']
-            collection = get_build_collection(collectionid, refresh=refresh)
-            status = Status.from_int(attributes['status'])
+            build = swatbuild.Build(buildid, pending_failures[buildid])
 
-            userinfo = userinfos.setdefault(attributes['buildid'], {})
-            swat_url = f"{BASE_URL}/collection/{collection['id']}/"
-
-            info = {Field.BUILD: attributes['buildid'],
-                    Field.STATUS: status,
-                    Field.TEST: attributes['targetname'],
-                    Field.WORKER: attributes['workername'],
-                    Field.COMPLETED: attributes['completed'],
-                    Field.SWAT_URL: swat_url,
-                    Field.AUTOBUILDER_URL: attributes['url'],
-                    Field.OWNER: collection['attributes']['owner'],
-                    Field.FAILURES: pending_ids[buildid],
-                    }
-
-            if _info_match_filters(info, userinfo, filters):
-                infos.append(info)
-
-    # Sort all failures as requested.
-    def get_field(info, field):
-        if field == Field.FAILURES:
-            return sorted(fail['stepname'] for fail in info[field].values())
-        if field == Field.USER_STATUS:
-            triage = userinfos[info[Field.BUILD]].get(field)
-            if triage:
-                return triage[0]['status']
-            return TriageStatus.PENDING
-        if field in info:
-            return info[field]
-        if field in userinfos[info[Field.BUILD]]:
-            return userinfos[info[Field.BUILD]][field]
-        return ""
+            userinfo = userinfos.setdefault(build.id, {})
+            if build.match_filters(filters, userinfo):
+                infos.append(build)
 
     def sortfn(elem):
-        return tuple([get_field(elem, Field(k)) for k in sort])
+        return elem.get_sort_tuple([swatbuild.Field(k) for k in sort])
 
     return (sorted(infos, key=sortfn), userinfos)
 
@@ -335,68 +223,3 @@ def publish_status(failureid: int,
             "notes": comment
             }
     webrequests.post(swat_url, data)
-
-
-def get_failure_description(info: dict[Field, Any],
-                            userinfo: dict[Field, Any]) -> str:
-    """Get info on one given failure in a pretty way."""
-    abints = bugzilla.get_abints()
-
-    simple_fields = [
-        Field.BUILD,
-        Field.STATUS,
-        Field.TEST,
-        Field.OWNER,
-        Field.WORKER,
-        Field.COMPLETED,
-        Field.SWAT_URL,
-        Field.AUTOBUILDER_URL,
-    ]
-    table = [[k, info[k]] for k in simple_fields]
-
-    statuses = userinfo.get(Field.USER_STATUS, [])
-    failures = info[Field.FAILURES]
-    for i, (failureid, failure) in enumerate(failures.items()):
-        status_str = ""
-
-        # Create strings for all failures and the attributed new status (if one
-        # was set).
-        for status in statuses:
-            if failureid in status['failures']:
-                statusfrags = []
-
-                statusname = status['status'].name.title()
-                statusfrags.append(f"{statusname}: {status['comment']}")
-
-                if status['status'] == TriageStatus.BUG:
-                    bugid = int(status['comment'])
-                    if bugid in abints:
-                        bugtitle = abints[bugid]
-                        statusfrags.append(f", {bugtitle}")
-
-                if status.get('bugzilla-comment'):
-                    statusfrags.append("\n")
-                    bcom = [textwrap.fill(line)
-                            for line in status['bugzilla-comment'].split('\n')]
-                    statusfrags.append("\n".join(bcom))
-
-                status_str += "".join(statusfrags)
-
-                break
-        table.append([Field.FAILURES if i == 0 else "",
-                      failure['stepname'], status_str])
-
-    desc = tabulate.tabulate(table, tablefmt="plain")
-
-    usernotes = userinfo.get(Field.USER_NOTES)
-    if usernotes:
-        # Reserve chars for spacing.
-        reserved = 8
-        termwidth = shutil.get_terminal_size((80, 20)).columns
-        width = termwidth - reserved
-        wrapped_lines = [textwrap.indent(textwrap.fill(line, width), " " * 4)
-                         for line in usernotes.splitlines()]
-        wrapped = "\n".join(wrapped_lines)
-        desc += f"\n\n{Field.USER_NOTES}:\n{wrapped}"
-
-    return desc
