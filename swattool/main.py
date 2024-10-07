@@ -16,6 +16,7 @@ from . import bugzilla
 from . import review
 from . import swatbot
 from . import swatbuild
+from . import utils
 from . import webrequests
 
 logger = logging.getLogger(__name__)
@@ -64,11 +65,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
 @click.option('-v', '--verbose', count=True, help="Increase verbosity")
 def main(verbose: int):
     """Handle triage of Yocto autobuilder failures."""
-    if verbose >= 1:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-    logging.basicConfig(level=loglevel)
+    utils.setup_logging(verbose)
 
 
 @main.command()
@@ -251,8 +248,8 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
             if kbinter:
                 sys.exit(1)
             else:
-                print("^C pressed. Press again to quit without saving")
-                print()
+                logger.warning("^C pressed. "
+                               "Press again to quit without saving")
                 kbinter = True
                 continue
         except Exception as error:
