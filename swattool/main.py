@@ -204,6 +204,13 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
     if not builds:
         return
 
+    logger.info("Downloading logs...")
+    with click.progressbar(builds) as builds_progress:
+        for build in builds_progress:
+            logurl = build.get_first_failure().get_log_raw_url()
+            if logurl:
+                webrequests.get(logurl)
+
     click.clear()
 
     entry: Optional[int] = 0
