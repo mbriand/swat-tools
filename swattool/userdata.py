@@ -10,7 +10,6 @@ from typing import Optional
 
 import yaml
 
-from . import swatbuild
 from . import utils
 
 logger = logging.getLogger(__name__)
@@ -19,14 +18,18 @@ USERINFOFILE = utils.DATADIR / "userinfos.yaml"
 
 
 class UserInfo:
+    """A failure user data."""
+
     def __init__(self):
         self.notes = []
         self.triages = []
 
     def get_notes(self) -> str:
+        """Get formatted user notes."""
         return "\n\n".join(self.notes)
 
     def set_notes(self, notes: Optional[str]):
+        """Set user notes."""
         if not notes:
             self.notes = []
         else:
@@ -34,6 +37,8 @@ class UserInfo:
 
 
 class UserInfos(collections.abc.MutableMapping):
+    """A collection of failure user data."""
+
     def __init__(self):
         self.infos = {}
         self.load()

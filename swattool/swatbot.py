@@ -52,9 +52,11 @@ class Status(enum.IntEnum):
         return f"{colors[self]}{text}{reset}"
 
     def as_colored_str(self):
+        """Return status in a pretty colorized string."""
         return self._colorize(self.name.title())
 
     def as_short_colored_str(self):
+        """Return status in a short pretty colorized string."""
         return self._colorize(self.name[:3].title())
 
 

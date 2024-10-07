@@ -16,6 +16,7 @@ TYPHOON_API_URL = f"{TYPHOON_BASE_URL}/api/v2"
 
 
 def get_log_raw_url(buildid: int, stepid: int, logname: str) -> Optional[str]:
+    """Get URL of a raw log file, based on build and step ids."""
     info_url = f"{TYPHOON_API_URL}/builds/{buildid}/steps/{stepid}" \
                f"/logs/{logname}"
 

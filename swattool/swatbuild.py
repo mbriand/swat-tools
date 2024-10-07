@@ -37,6 +37,8 @@ class Field(enum.StrEnum):
 
 
 class Failure:
+    """A Swatbot failure."""
+
     def __init__(self, failure_id: int, failure_data: dict, build: 'Build'):
         self.id = failure_id
         self.build = build
@@ -46,15 +48,19 @@ class Failure:
                      for u in failure_data['attributes']['urls'].split()}
 
     def get_log_url(self, logname: str = "stdio") -> Optional[str]:
+        """Get the URL of a given log webpage."""
         if logname not in self.urls:
             return None
         return self.urls[logname]
 
     def get_log_raw_url(self, logname: str = "stdio") -> Optional[str]:
+        """Get the URL of a raw log file."""
         return logs.get_log_raw_url(self.build.id, self.stepnumber, logname)
 
 
 class Build:
+    """A Swatbot build."""
+
     def __init__(self, buildid: int,
                  pending_failures: dict[int, dict]):
         build = swatbot.get_build(buildid)
@@ -80,6 +86,7 @@ class Build:
     def match_filters(self, filters: dict[str, Any],
                       userinfo: userdata.UserInfo
                       ) -> bool:
+        """Check if this build match given filters."""
         if filters['build'] and self.id not in filters['build']:
             return False
 
@@ -120,6 +127,7 @@ class Build:
         return True
 
     def get(self, field: Field):
+        """Get data from the given field."""
         if field == Field.BUILD:
             return self.id
         if field == Field.STATUS:
@@ -142,12 +150,14 @@ class Build:
         raise utils.SwattoolException(f"Invalid field: {field}")
 
     def get_first_failure(self) -> Failure:
+        """Get the first failure of the build."""
         first_failure = min(self.failures)
         return self.failures[first_failure]
 
     def get_sort_tuple(self, keys: Iterable[Field],
                        userinfos: dict[int, dict[Field, Any]] = {}
                        ) -> tuple:
+        """Get selected fields in sortable fashion."""
         def get_field(field):
             if field == Field.FAILURES:
                 return sorted(fail['stepname']

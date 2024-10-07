@@ -44,6 +44,7 @@ def refresh_policy_max_age(auto: int,
 
 
 def set_refresh_policy(policy: RefreshPolicy):
+    """Set the global refresh policy."""
     global _REFRESH_POLICY
     _REFRESH_POLICY = policy
 
