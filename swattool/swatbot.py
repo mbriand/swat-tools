@@ -5,21 +5,17 @@
 import enum
 import json
 import logging
-import pathlib
-import shutil
 from typing import Any, Collection, Optional
 
 import click
 import requests
-import yaml
 
 from . import swatbuild
+from . import userdata
 from . import utils
 from . import webrequests
 
 logger = logging.getLogger(__name__)
-
-USERINFOFILE = utils.DATADIR / "userinfos.yaml"
 
 BASE_URL = "https://swatbot.yoctoproject.org"
 LOGIN_URL = f"{BASE_URL}/accounts/login/"
@@ -172,44 +168,11 @@ def _get_pending_failures() -> dict[int, dict[int, dict]]:
     return pending_ids
 
 
-def get_user_infos() -> dict[int, dict[swatbuild.Field, Any]]:
-    """Load user infos stored during previous review session."""
-    logger.info("Loading saved data...")
-    if USERINFOFILE.exists():
-        with USERINFOFILE.open('r') as file:
-            pretty_userinfos = yaml.load(file, Loader=yaml.Loader)
-            userinfos = {bid: {swatbuild.Field(k): v for k, v in info.items()}
-                         for bid, info in pretty_userinfos.items()}
-            return userinfos
-    return {}
-
-
-def save_user_infos(userinfos: dict[int, dict[swatbuild.Field, Any]], suffix=""
-                    ) -> pathlib.Path:
-    """Store user infos for later runs."""
-    pretty_userinfos = {bid: {str(k): v for k, v in info.items()}
-                        for bid, info in userinfos.items() if info}
-
-    filename = USERINFOFILE.with_stem(f'{USERINFOFILE.stem}{suffix}')
-    with filename.open('w') as file:
-        yaml.dump(pretty_userinfos, file)
-
-    # Create backup files. We might remove this once the code becomes more
-    # stable
-    i = 0
-    while filename.with_stem(f'{filename.stem}-backup-{i}').exists():
-        i += 1
-    shutil.copy(filename, filename.with_stem(f'{filename.stem}-backup-{i}'))
-
-    return filename
-
-
 def get_failure_infos(limit: int, sort: Collection[str],
                       filters: dict[str, Any]
-                      ) -> tuple[list[swatbuild.Build],
-                                 dict[int, dict[swatbuild.Field, Any]]]:
+                      ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
     """Get consolidated list of failure infos and local reviews infos."""
-    userinfos = get_user_infos()
+    userinfos = userdata.UserInfos()
 
     logger.info("Loading build failures...")
     pending_failures = _get_pending_failures()
@@ -223,8 +186,7 @@ def get_failure_infos(limit: int, sort: Collection[str],
         for buildid in pending_ids_progress:
             build = swatbuild.Build(buildid, pending_failures[buildid])
 
-            userinfo = userinfos.setdefault(build.id, {})
-            if build.match_filters(filters, userinfo):
+            if build.match_filters(filters, userinfos[build.id]):
                 infos.append(build)
 
     def sortfn(elem):

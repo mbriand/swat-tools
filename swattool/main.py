@@ -145,7 +145,7 @@ def show_pending_failures(refresh: str, open_url: str,
             return build.get(swatbuild.Field.STATUS).as_short_colored_str()
         if field == swatbuild.Field.USER_STATUS:
             status_strs = []
-            statuses = userinfo.get(field, [])
+            statuses = userinfo.triages
             for failure in build.failures:
                 status_str = ""
                 for status in statuses:
@@ -156,16 +156,12 @@ def show_pending_failures(refresh: str, open_url: str,
                 status_strs.append(status_str)
             return "\n".join(status_strs)
         if field == swatbuild.Field.USER_NOTES:
-            notes = userinfo.get(field, "").replace("\n", " ")
+            notes = userinfo.get_notes()
             return textwrap.shorten(notes, 80)
         return str(build.get(field))
 
-    has_user_status = any(userinfos.get(build.id,
-                                        {}).get(swatbuild.Field.USER_STATUS)
-                          for build in builds)
-    has_notes = any(userinfos.get(build.id,
-                                  {}).get(swatbuild.Field.USER_NOTES)
-                    for build in builds)
+    has_user_status = any(userinfos[build.id].triages for build in builds)
+    has_notes = any(userinfos[build.id].notes for build in builds)
 
     shown_fields = [
         swatbuild.Field.BUILD,
@@ -275,14 +271,14 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                 kbinter = True
                 continue
         except Exception as error:
-            filename = swatbot.save_user_infos(userinfos, suffix="-crash")
+            filename = userinfos.save(suffix="-crash")
             logging.error("Got exception, saving userinfos in a crash file: "
                           "You may want to retrieve data from there (%s)",
                           filename)
             raise error
         kbinter = False
 
-    swatbot.save_user_infos(userinfos)
+    userinfos.save()
 
 
 @main.command()
@@ -310,11 +306,10 @@ def publish_new_reviews(dry_run: bool):
                     bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
         for entry in entries:
-            for failureid, failuredata in entry['failures'].items():
-                logger.info('Need to update failure %s (%s) '
+            for failureid in entry['failures']:
+                logger.info('Need to update failure %s '
                             'to status %s (%s) with "%s"',
-                            failureid, failuredata['stepname'], status,
-                            status.name.title(), comment)
+                            failureid, status, status.name.title(), comment)
                 if not dry_run:
                     swatbot.publish_status(failureid, status, comment)
 

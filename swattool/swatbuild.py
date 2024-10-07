@@ -14,6 +14,7 @@ import tabulate
 from . import bugzilla
 from . import logs
 from . import swatbot
+from . import userdata
 from . import utils
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class Build:
                          for fid, fdata in pending_failures.items()}
 
     def match_filters(self, filters: dict[str, Any],
-                      userinfo: dict[Field, Any] = {}
+                      userinfo: userdata.UserInfo
                       ) -> bool:
         if filters['build'] and self.id not in filters['build']:
             return False
@@ -108,11 +109,11 @@ class Build:
                 return False
 
         if filters['with-notes'] is not None:
-            if filters['with-notes'] ^ bool(userinfo.get(Field.USER_NOTES)):
+            if filters['with-notes'] ^ bool(userinfo.notes):
                 return False
 
         if filters['with-new-status'] is not None:
-            userstatus = userinfo.get(Field.USER_STATUS)
+            userstatus = userinfo.triages
             if filters['with-new-status'] ^ bool(userstatus):
                 return False
 
@@ -152,19 +153,17 @@ class Build:
                 return sorted(fail['stepname']
                               for fail in self.failures.values())
             if field == Field.USER_STATUS:
-                triage = userinfos[self.id].get(field)
+                triage = userinfos[self.id].triages
                 if triage:
                     return triage[0]['status']
                 return swatbot.TriageStatus.PENDING
-            if field in [Field.USER_STATUS, Field.USER_NOTES]:
-                if field in userinfos.get(self.id, {}):
-                    return userinfos[self.id][field]
-                return ""
+            if field == Field.USER_NOTES:
+                return "\n".join(userinfos[self.id].notes)
             return self.get(field)
 
         return tuple(get_field(k) for k in keys)
 
-    def format_description(self, userinfo: dict[Field, Any] = {}) -> str:
+    def format_description(self, userinfo: userdata.UserInfo) -> str:
         """Get info on one given failure in a pretty way."""
         abints = bugzilla.get_abints()
 
@@ -185,7 +184,7 @@ class Build:
         ]
         table = [[k, format_field(k)] for k in simple_fields]
 
-        statuses = userinfo.get(Field.USER_STATUS, [])
+        statuses = userinfo.triages
         for i, (failureid, failure) in enumerate(self.failures.items()):
             status_str = ""
 
@@ -218,15 +217,18 @@ class Build:
 
         desc = tabulate.tabulate(table, tablefmt="plain")
 
-        usernotes = userinfo.get(Field.USER_NOTES)
-        if usernotes:
+        if userinfo.notes:
             # Reserve chars for spacing.
             reserved = 8
             termwidth = shutil.get_terminal_size((80, 20)).columns
             width = termwidth - reserved
-            wrapped_lns = [textwrap.indent(textwrap.fill(line, width), " " * 4)
-                           for line in usernotes.splitlines()]
-            wrapped = "\n".join(wrapped_lns)
+
+            wrapped_lns = ["\n".join([textwrap.indent(li, " " * 4)
+                                      for line in note.split("\n")
+                                      for li in textwrap.wrap(line, width)
+                                      ])
+                           for note in userinfo.notes]
+            wrapped = "\n\n".join(wrapped_lns)
             desc += f"\n\n{Field.USER_NOTES}:\n{wrapped}"
 
         return desc

@@ -8,12 +8,13 @@ from typing import Any, Optional
 import click
 import requests
 import tabulate
-from simple_term_menu import TerminalMenu
+from simple_term_menu import TerminalMenu  # type: ignore
 
 from . import swatbot
 from . import swatbuild
 from . import bugzilla
 from . import utils
+from . import userdata
 from . import webrequests
 
 logger = logging.getLogger(__name__)
@@ -46,11 +47,10 @@ def _prompt_bug_infos(build: swatbuild.Build,
             logger.warning("Invalid issue: %s", bugnum_str)
 
     print("Please set the comment content")
-    first_failure = min(build.failures)
-    if 'stdio' in build.failures[first_failure]['urls']:
+    logurl = build.get_first_failure().get_log_url()
+    if logurl:
         testmachine = " ".join([build.test, build.worker])
-        log = build.failures[first_failure]['urls']['stdio']
-        bcomment = click.edit("\n".join([testmachine, log]),
+        bcomment = click.edit("\n".join([testmachine, logurl]),
                               require_save=False)
     else:
         bcomment = click.edit(None, require_save=False)
@@ -122,7 +122,7 @@ valid_commands = [c for c in _commands if c != ""]
 
 
 def review_menu(builds: list[swatbuild.Build],
-                userinfos: dict[int, dict[swatbuild.Field, Any]],
+                userinfos: userdata.UserInfos,
                 entry: int,
                 statusbar: str) -> tuple[Optional[int], bool]:
     """Allow a user to interactively triage a failure."""
@@ -137,7 +137,7 @@ def review_menu(builds: list[swatbuild.Build],
                                raise_error_on_interrupt=True)
 
     build = builds[entry]
-    userinfo = userinfos.setdefault(build.id, {})
+    userinfo = userinfos[build.id]
     failures = build.failures
     newstatus: Optional[dict] = None
 
@@ -164,9 +164,8 @@ def review_menu(builds: list[swatbuild.Build],
         elif command == "l":  # List
             entry = _list_failures_menu(builds, userinfos, entry)
         elif command == "e":  # Edit notes
-            newnotes = click.edit(userinfo.get(swatbuild.Field.USER_NOTES),
-                                  require_save=False)
-            userinfo[swatbuild.Field.USER_NOTES] = newnotes
+            userinfo.set_notes(click.edit(userinfo.get_notes(),
+                                          require_save=False))
             changed = True
         elif command == "u":  # Open autobuilder URL
             click.launch(build.autobuilder_url)
@@ -193,15 +192,15 @@ def review_menu(builds: list[swatbuild.Build],
             # Set new status
             newstatus = _create_new_status(build, command)
         elif command == "r":  # Reset status
-            userinfo[swatbuild.Field.USER_STATUS] = []
+            userinfo.triages = []
             changed = True
         else:
             continue
         break
 
     if newstatus:
-        newstatus['failures'] = failures
-        userinfo[swatbuild.Field.USER_STATUS] = [newstatus]
+        newstatus['failures'] = list(failures.keys())
+        userinfo.triages = [newstatus]
         changed = True
 
     if entry >= len(builds):
@@ -211,7 +210,7 @@ def review_menu(builds: list[swatbuild.Build],
 
 
 def _list_failures_menu(builds: list[swatbuild.Build],
-                        userinfos: dict[int, dict[swatbuild.Field, Any]],
+                        userinfos: userdata.UserInfos,
                         entry: int) -> int:
     """Allow the user to select the failure to review in a menu."""
     def preview_failure(fstr):
@@ -240,17 +239,13 @@ def _list_failures_menu(builds: list[swatbuild.Build],
 
 def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
     """Get a list of new reviews waiting to be published on swatbot server."""
-    userinfos = swatbot.get_user_infos()
+    userinfos = userdata.UserInfos()
 
     logger.info("Loading pending reviews...")
     reviews: dict[tuple[swatbot.TriageStatus, Any], list[dict]] = {}
     with click.progressbar(userinfos.items()) as userinfos_progress:
         for buildid, userinfo in userinfos_progress:
-            if swatbuild.Field.USER_STATUS not in userinfo:
-                continue
-
-            userstatuses = userinfo.get(swatbuild.Field.USER_STATUS, [])
-            for userstatus in userstatuses:
+            for userstatus in userinfo.triages:
                 status = userstatus.get('status')
                 comment = userstatus.get('comment')
                 if not status:
@@ -268,16 +263,11 @@ def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any], list[dict]]:
                     return failure['attributes']['triage'] == 0
 
                 # Make sure failures are still pending
-                userstatus['failures'] = {k: v for k, v
-                                          in userstatus['failures'].items()
-                                          if is_pending(k)}
+                userstatus['failures'] = {f for f in userstatus['failures']
+                                          if is_pending(f)}
 
                 reviews.setdefault((status, comment), []).append(userstatus)
 
-            # Cleaning old reviews
-            if userstatuses and not any(s['failures'] for s in userstatuses):
-                del userinfo[swatbuild.Field.USER_STATUS]
-
-    swatbot.save_user_infos(userinfos)
+    userinfos.save()
 
     return reviews

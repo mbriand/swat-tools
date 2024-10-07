@@ -8,7 +8,7 @@ import pathlib
 import subprocess
 from typing import Optional
 
-import xdg
+import xdg  # type: ignore
 
 BINDIR = pathlib.Path(__file__).parent.parent.resolve()
 DATADIR = xdg.xdg_cache_home() / "swattool"
