@@ -168,6 +168,11 @@ class Build:
         """Get info on one given failure in a pretty way."""
         abints = bugzilla.get_abints()
 
+        def format_field(field):
+            if field == Field.STATUS:
+                return self.get(Field.STATUS).as_colored_str()
+            return self.get(field)
+
         simple_fields = [
             Field.BUILD,
             Field.STATUS,
@@ -178,7 +183,7 @@ class Build:
             Field.SWAT_URL,
             Field.AUTOBUILDER_URL,
         ]
-        table = [[k, self.get(k)] for k in simple_fields]
+        table = [[k, format_field(k)] for k in simple_fields]
 
         statuses = userinfo.get(Field.USER_STATUS, [])
         for i, (failureid, failure) in enumerate(self.failures.items()):

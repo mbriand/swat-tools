@@ -132,9 +132,17 @@ def show_pending_failures(refresh: str, open_url: str,
             click.launch(build.autobuilder_url)
 
     # Generate a list of formatted builds on failures.
+    def format_header(field):
+        if field == swatbuild.Field.STATUS:
+            return "Sts"
+        else:
+            return str(field)
+
     def format_field(build, userinfo, field):
         if field == swatbuild.Field.FAILURES:
             return "\n".join([f.stepname for f in build.get(field).values()])
+        if field == swatbuild.Field.STATUS:
+            return build.get(swatbuild.Field.STATUS).as_short_colored_str()
         if field == swatbuild.Field.USER_STATUS:
             status_strs = []
             statuses = userinfo.get(field, [])
@@ -166,7 +174,7 @@ def show_pending_failures(refresh: str, open_url: str,
         swatbuild.Field.USER_NOTES,
     ]
     shown_fields = [f for f in shown_fields if f]
-    headers = [str(f) for f in shown_fields]
+    headers = [format_header(f) for f in shown_fields]
     table = [[format_field(build, userinfos.get(build.id, {}), field)
               for field in shown_fields] for build in builds]
 

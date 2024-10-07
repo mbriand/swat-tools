@@ -45,6 +45,22 @@ class Status(enum.IntEnum):
     def __str__(self):
         return self.name.title()
 
+    def _colorize(self, text: str):
+        colors = {
+            Status.WARNING: "\x1b[1;33m",
+            Status.ERROR: "\x1b[1;31m",
+            Status.CANCELLED: "\x1b[1;35m",
+            Status.UNKNOWN: "\x1b[1;36m",
+        }
+        reset = "\x1b[0m"
+        return f"{colors[self]}{text}{reset}"
+
+    def as_colored_str(self):
+        return self._colorize(self.name.title())
+
+    def as_short_colored_str(self):
+        return self._colorize(self.name[:3].title())
+
 
 class TriageStatus(enum.IntEnum):
     """A status to set on a failure."""
