@@ -207,13 +207,13 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
     if not builds:
         return
 
+    click.clear()
+
     entry: Optional[int] = 0
     prev_entry = None
     kbinter = False
+    show_infos = True
     while entry is not None:
-        if not kbinter:
-            click.clear()
-
         try:
             build = builds[entry]
             userinfo = userinfos.get(build.id, {})
@@ -235,13 +235,18 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                     else:
                         logger.warning("Failed to find stdio log")
 
-            if not kbinter:
+            if show_infos:
                 print(build.format_description(userinfo))
                 print()
+                show_infos = False
 
             prev_entry = entry
             statusbar = f"Progress: {entry+1}/{len(builds)}"
-            entry = review.review_menu(builds, userinfos, entry, statusbar)
+            entry, changed = review.review_menu(builds, userinfos, entry,
+                                                statusbar)
+            if changed or entry != prev_entry:
+                click.clear()
+                show_infos = True
         except KeyboardInterrupt:
             if kbinter:
                 sys.exit(1)

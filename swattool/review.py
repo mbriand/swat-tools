@@ -124,8 +124,10 @@ valid_commands = [c for c in _commands if c != ""]
 def review_menu(builds: list[swatbuild.Build],
                 userinfos: dict[int, dict[swatbuild.Field, Any]],
                 entry: int,
-                statusbar: str) -> Optional[int]:
+                statusbar: str) -> tuple[Optional[int], bool]:
     """Allow a user to interactively triage a failure."""
+    changed = False
+
     default_action = "n"
     default_index = [c[1] if c and len(c) > 1 else None
                      for c in valid_commands].index(default_action)
@@ -143,13 +145,13 @@ def review_menu(builds: list[swatbuild.Build],
         try:
             command_index = action_menu.show()
             if command_index is None:
-                return None
+                return (None, False)
             command = valid_commands[command_index][1]
         except EOFError:
-            return None
+            return (None, False)
 
         if command == "q":  # Quit
-            return None
+            return (None, False)
 
         if command == "n":  # Next
             entry += 1
@@ -165,6 +167,7 @@ def review_menu(builds: list[swatbuild.Build],
             newnotes = click.edit(userinfo.get(swatbuild.Field.USER_NOTES),
                                   require_save=False)
             userinfo[swatbuild.Field.USER_NOTES] = newnotes
+            changed = True
         elif command == "u":  # Open autobuilder URL
             click.launch(build.autobuilder_url)
         elif command == "w":  # Open swatbot URL
@@ -191,6 +194,7 @@ def review_menu(builds: list[swatbuild.Build],
             newstatus = _create_new_status(build, command)
         elif command == "r":  # Reset status
             userinfo[swatbuild.Field.USER_STATUS] = []
+            changed = True
         else:
             continue
         break
@@ -198,11 +202,12 @@ def review_menu(builds: list[swatbuild.Build],
     if newstatus:
         newstatus['failures'] = failures
         userinfo[swatbuild.Field.USER_STATUS] = [newstatus]
+        changed = True
 
     if entry >= len(builds):
-        return None
+        return (None, changed)
 
-    return entry
+    return (entry, changed)
 
 
 def _list_failures_menu(builds: list[swatbuild.Build],
