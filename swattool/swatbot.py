@@ -7,7 +7,7 @@ import json
 import logging
 import pathlib
 import shutil
-from typing import Any, Collection
+from typing import Any, Collection, Optional
 
 import click
 import requests
@@ -102,15 +102,19 @@ def _get_json(path: str, max_cache_age: int = -1):
     return json_data
 
 
-def get_build(buildid: int):
+def get_build(buildid: int, refresh_override:
+              Optional[webrequests.RefreshPolicy] = None):
     """Get info on a given build."""
-    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S,
+                                                refresh_override)
     return _get_json(f"/build/{buildid}/", maxage)['data']
 
 
-def get_build_collection(collectionid: int):
+def get_build_collection(collectionid: int, refresh_override:
+                         Optional[webrequests.RefreshPolicy] = None):
     """Get info on a given build collection."""
-    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S,
+                                                refresh_override)
     return _get_json(f"/buildcollection/{collectionid}/", maxage)['data']
 
 
@@ -123,15 +127,20 @@ def invalidate_stepfailures_cache():
     webrequests.invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
 
 
-def get_stepfailures():
+def get_stepfailures(refresh_override:
+                     Optional[webrequests.RefreshPolicy] = None):
     """Get info on all failures."""
-    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
+                                                refresh_override)
     return _get_json("/stepfailure/", maxage)['data']
 
 
-def get_stepfailure(failureid: int):
+def get_stepfailure(failureid: int,
+                    refresh_override:
+                    Optional[webrequests.RefreshPolicy] = None):
     """Get info on a given failure."""
-    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S)
+    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
+                                                refresh_override)
     return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 

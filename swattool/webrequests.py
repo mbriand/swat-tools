@@ -7,7 +7,7 @@ import logging
 import pathlib
 import pickle
 import time
-from typing import Any
+from typing import Any, Optional
 
 import requests
 
@@ -31,11 +31,14 @@ class RefreshPolicy(enum.Enum):
 _REFRESH_POLICY = RefreshPolicy.AUTO
 
 
-def refresh_policy_max_age(auto: int) -> int:
+def refresh_policy_max_age(auto: int,
+                           refresh_override: Optional[RefreshPolicy] = None
+                           ) -> int:
     """Get the maximum age before refresh for a given policy."""
-    if _REFRESH_POLICY == RefreshPolicy.FORCE:
+    policy = refresh_override if refresh_override else _REFRESH_POLICY
+    if policy == RefreshPolicy.FORCE:
         return 0
-    if _REFRESH_POLICY == RefreshPolicy.NO:
+    if policy == RefreshPolicy.NO:
         return -1
     return auto
 
