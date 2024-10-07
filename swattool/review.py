@@ -6,6 +6,7 @@ import logging
 from typing import Any, Optional
 
 import click
+import requests
 import tabulate
 from simple_term_menu import TerminalMenu
 
@@ -108,6 +109,7 @@ _commands = [
     "[u] open autobuilder URL",
     "[w] open swatbot URL",
     "[g] open stdio log of first failed step URL",
+    "[x] open stdio log of first failed step in pager",
     None,
     "[n] next",
     "[p] previous",
@@ -173,6 +175,17 @@ def review_menu(builds: list[swatbuild.Build],
                 click.launch(logurl)
             else:
                 logger.warning("Failed to find stdio log")
+        elif command == "x":  # Open stdio log in pager  # TODO: rename ?
+            try:
+                logurl = build.get_first_failure().get_log_raw_url()
+                if logurl:
+                    logdata = webrequests.get(logurl)
+                    click.echo_via_pager(logdata)
+                else:
+                    logger.warning("Failed to find stdio log")
+            except requests.exceptions.ConnectionError:
+                logger.warning("Failed to download stdio log")
+
         elif command in ["a", "b", "c", "m", "i", "o", "f", "t"]:
             # Set new status
             newstatus = _create_new_status(build, command)

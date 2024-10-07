@@ -12,6 +12,7 @@ from typing import Any, Iterable, Optional
 import tabulate
 
 from . import bugzilla
+from . import logs
 from . import swatbot
 from . import utils
 
@@ -47,6 +48,9 @@ class Failure:
         if logname not in self.urls:
             return None
         return self.urls[logname]
+
+    def get_log_raw_url(self, logname: str = "stdio") -> Optional[str]:
+        return logs.get_log_raw_url(self.build.id, self.stepnumber, logname)
 
 
 class Build:
