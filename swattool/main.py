@@ -160,6 +160,13 @@ def show_pending_failures(refresh: str, open_url: str,
             return textwrap.shorten(notes, 80)
         return str(build.get(field))
 
+    has_user_status = any(userinfos.get(build.id,
+                                        {}).get(swatbuild.Field.USER_STATUS)
+                          for build in builds)
+    has_notes = any(userinfos.get(build.id,
+                                  {}).get(swatbuild.Field.USER_NOTES)
+                    for build in builds)
+
     shown_fields = [
         swatbuild.Field.BUILD,
         swatbuild.Field.STATUS if len(kwargs['status_filter']) != 1 else None,
@@ -170,8 +177,8 @@ def show_pending_failures(refresh: str, open_url: str,
         swatbuild.Field.COMPLETED,
         swatbuild.Field.SWAT_URL,
         swatbuild.Field.FAILURES,
-        swatbuild.Field.USER_STATUS,
-        swatbuild.Field.USER_NOTES,
+        swatbuild.Field.USER_STATUS if has_user_status else None,
+        swatbuild.Field.USER_NOTES if has_notes else None,
     ]
     shown_fields = [f for f in shown_fields if f]
     headers = [format_header(f) for f in shown_fields]
