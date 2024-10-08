@@ -1,0 +1,27 @@
+name: code style
+on: [push, pull_request]
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chartboost/ruff-action@v1
+  pylint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Fetch sources"
+        uses: actions/checkout@v4
+      - name: "Setup python"
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - name: "Setup pylint and project"
+        shell: bash
+        run: |
+          pip install --upgrade pip
+          pip install wheel pylint
+          pip install .
+      - name: "Run pylint"
+        shell: bash
+        run: |
+          pylint --disable R0401,W0511 --generated-member=requests.codes swattool
