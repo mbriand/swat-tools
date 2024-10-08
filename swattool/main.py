@@ -5,9 +5,8 @@
 
 import logging
 import re
-import sys
 import textwrap
-from typing import Any, Optional
+from typing import Any
 
 import click
 import tabulate
@@ -16,6 +15,7 @@ from .bugzilla import Bugzilla
 from . import review
 from . import swatbot
 from . import swatbuild
+from . import userdata
 from . import utils
 from .webrequests import RefreshPolicy, Session
 
@@ -113,24 +113,10 @@ failures_list_options = [
 ]
 
 
-@main.command()
-@_add_options(failures_list_options)
-@click.option('--open-url', '-u', is_flag=True,
-              help="Open the autobuilder url in web browser")
-def show_pending_failures(refresh: str, open_url: str,
-                          limit: int, sort: list[str],
-                          *args, **kwargs):
-    """Show all failures waiting for triage."""
-    Session().set_refresh_policy(RefreshPolicy[refresh.upper()])
-
-    filters = parse_filters(kwargs)
-    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
-                                                  filters=filters)
-
-    if open_url:
-        for build in builds:
-            click.launch(build.autobuilder_url)
-
+def _format_pending_failures(builds: list[swatbuild.Build],
+                             userinfos: userdata.UserInfos,
+                             shown_fields: list[swatbuild.Field]
+                             ) -> tuple[list[list[str]], list[str]]:
     # Generate a list of formatted builds on failures.
     def format_header(field):
         if field == swatbuild.Field.STATUS:
@@ -151,10 +137,35 @@ def show_pending_failures(refresh: str, open_url: str,
             return textwrap.shorten(notes, 80)
         return str(build.get(field))
 
+    headers = [format_header(f) for f in shown_fields]
+    table = [[format_field(build, userinfos.get(build.id, {}), field)
+              for field in shown_fields] for build in builds]
+
+    return (table, headers)
+
+
+@main.command()
+@_add_options(failures_list_options)
+@click.option('--open-url', '-u', is_flag=True,
+              help="Open the autobuilder url in web browser")
+def show_pending_failures(refresh: str, open_url: str,
+                          limit: int, sort: list[str],
+                          **kwargs):
+    """Show all failures waiting for triage."""
+    Session().set_refresh_policy(RefreshPolicy[refresh.upper()])
+
+    filters = parse_filters(kwargs)
+    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
+                                                  filters=filters)
+
+    if open_url:
+        for build in builds:
+            click.launch(build.autobuilder_url)
+
     has_user_status = any(userinfos[build.id].triages for build in builds)
     has_notes = any(userinfos[build.id].notes for build in builds)
 
-    shown_fields = [
+    shown_fields_all = [
         swatbuild.Field.BUILD,
         swatbuild.Field.STATUS if len(kwargs['status_filter']) != 1 else None,
         swatbuild.Field.TEST if len({build.test
@@ -167,11 +178,9 @@ def show_pending_failures(refresh: str, open_url: str,
         swatbuild.Field.USER_STATUS if has_user_status else None,
         swatbuild.Field.USER_NOTES if has_notes else None,
     ]
-    shown_fields = [f for f in shown_fields if f]
-    headers = [format_header(f) for f in shown_fields]
-    table = [[format_field(build, userinfos.get(build.id, {}), field)
-              for field in shown_fields] for build in builds]
+    shown_fields = [f for f in shown_fields_all if f]
 
+    table, headers = _format_pending_failures(builds, userinfos, shown_fields)
     print(tabulate.tabulate(table, headers=headers))
 
     logging.info("%s entries found (%s warnings, %s errors and %s cancelled)",
@@ -195,8 +204,11 @@ def show_pending_failures(refresh: str, open_url: str,
 def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                             open_swatbot_url: bool, open_stdio_url: bool,
                             limit: int, sort: list[str],
-                            *args, **kwargs):
+                            **kwargs):
     """Review failures waiting for triage."""
+
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+
     Session().set_refresh_policy(RefreshPolicy[refresh.upper()])
 
     filters = parse_filters(kwargs)
@@ -213,59 +225,9 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
             if logurl:
                 Session().get(logurl)
 
-    click.clear()
-
-    entry: Optional[int] = 0
-    prev_entry = None
-    kbinter = False
-    show_infos = True
-    while entry is not None:
-        try:
-            build = builds[entry]
-            userinfo = userinfos.get(build.id, {})
-
-            if prev_entry != entry:
-                if open_autobuilder_url:
-                    click.launch(build.autobuilder_url)
-                if open_swatbot_url:
-                    click.launch(build.swat_url)
-                if open_stdio_url:
-                    if build.test in ["a-full", "a-quick"]:
-                        # TODO: can we do anything better here ?
-                        logger.warning("Test is %s, "
-                                       "fail log might be the log of a child",
-                                       build.test)
-                    build.get_first_failure().open_log_url()
-            if logurl:
-                Session().get(logurl)
-
-            if show_infos:
-                print(build.format_description(userinfo))
-                print()
-                show_infos = False
-
-            prev_entry = entry
-            statusbar = f"Progress: {entry+1}/{len(builds)}"
-            entry, changed = review.review_menu(builds, userinfos, entry,
-                                                statusbar)
-            if changed or entry != prev_entry:
-                click.clear()
-                show_infos = True
-        except KeyboardInterrupt:
-            if kbinter:
-                sys.exit(1)
-            else:
-                logger.warning("^C pressed. "
-                               "Press again to quit without saving")
-                kbinter = True
-                continue
-        except Exception as error:
-            filename = userinfos.save(suffix="-crash")
-            logging.error("Got exception, saving userinfos in a crash file: "
-                          "You may want to retrieve data from there (%s)",
-                          filename)
-            raise error
-        kbinter = False
+    review.review_failures(builds, userinfos,
+                           open_autobuilder_url, open_swatbot_url,
+                           open_stdio_url)
 
     userinfos.save()
 
@@ -274,18 +236,18 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
 @click.option('--dry-run', '-n', is_flag=True,
               help="Only shows what would be done")
 def publish_new_reviews(dry_run: bool):
-    """Publish new triage status modified locally."""
+    """Publish new local triage status to swatbot Django interface."""
     reviews = review.get_new_reviews()
 
     logger.info("Publishing new reviews...")
-    for (status, comment), entries in reviews.items():
+    for (status, comment), triages in reviews.items():
         bugurl = None
 
         # Bug entry: need to also publish a new comment on bugzilla.
         if status == swatbot.TriageStatus.BUG:
             bugid = int(comment)
-            logs = [entry['bugzilla-comment'] for entry in entries
-                    if entry['failures']]
+            logs = [triage.extra['bugzilla-comment'] for triage in triages
+                    if triage.failures]
 
             if any(logs):
                 comment = bugurl = Bugzilla.get_bug_url(bugid)
@@ -294,8 +256,8 @@ def publish_new_reviews(dry_run: bool):
                 if not dry_run:
                     Bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
-        for entry in entries:
-            for failureid in entry['failures']:
+        for triage in triages:
+            for failureid in triage.failures:
                 logger.info('Need to update failure %s '
                             'to status %s (%s) with "%s"',
                             failureid, status, status.name.title(), comment)

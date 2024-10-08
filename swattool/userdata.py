@@ -6,12 +6,14 @@ import collections
 import logging
 import pathlib
 import shutil
+import textwrap
 from typing import Any, Optional
 
 import yaml
 
 from . import utils
 from . import swatbot
+from .bugzilla import Bugzilla
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,29 @@ class Triage:
     def __str__(self):
         return f"{self.status.name.title()}: {self.comment}"
 
+    def format_description(self) -> str:
+        """Get info on one given Triage in a pretty way."""
+        abints = Bugzilla.get_abints()
+        statusfrags = []
+
+        statusname = self.status.name.title()
+        statusfrags.append(f"{statusname}: {self.comment}")
+
+        if self.status == swatbot.TriageStatus.BUG:
+            bugid = int(self.comment)
+            if bugid in abints:
+                bugtitle = abints[bugid]
+                statusfrags.append(f", {bugtitle}")
+
+        bzcomment = self.extra.get('bugzilla-comment')
+        if bzcomment:
+            statusfrags.append("\n")
+            bcomlines = bzcomment.split('\n')
+            bcom = [textwrap.fill(line) for line in bcomlines]
+            statusfrags.append("\n".join(bcom))
+
+        return "".join(statusfrags)
+
 
 class UserInfo:
     """A failure user data."""
@@ -68,6 +93,15 @@ class UserInfo:
     def get_notes(self) -> str:
         """Get formatted user notes."""
         return "\n\n".join(self.notes)
+
+    def get_wrapped_notes(self, width: int, indent: str):
+        """Get formatted and wrapped user notes."""
+        wrapped_lns = ["\n".join([textwrap.indent(li, indent)
+                                  for line in note.split("\n")
+                                  for li in textwrap.wrap(line, width)
+                                  ])
+                       for note in self.notes]
+        return "\n\n".join(wrapped_lns)
 
     def set_notes(self, notes: Optional[str]):
         """Set user notes."""

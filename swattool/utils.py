@@ -19,7 +19,7 @@ def _get_git_username() -> Optional[str]:
     try:
         process = subprocess.run(["git", "config", "--global", "user.name"],
                                  capture_output=True, check=True)
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
     return process.stdout.decode().strip()

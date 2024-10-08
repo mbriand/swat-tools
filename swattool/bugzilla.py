@@ -5,7 +5,7 @@
 import logging
 import json
 
-from . import webrequests
+from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ REST_BASE_URL = f"{BASE_URL}/rest/"
 class Bugzilla:
     """Bugzilla server interaction class."""
 
-    known_abints = None
+    known_abints: dict[int, str] = {}
 
     @classmethod
     def get_abints(cls) -> dict[int, str]:
@@ -34,7 +34,7 @@ class Bugzilla:
 
             fparams = [f'{k}={v}' for k, v in params.items()]
             req = f"{REST_BASE_URL}bug?{'&'.join(fparams)}"
-            data = webrequests.get(req)
+            data = Session().get(req)
 
             cls.known_abints = {bug['id']: bug['summary']
                                 for bug in json.loads(data)['bugs']}

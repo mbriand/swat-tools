@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Optional
 
-from . import webrequests
+from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def get_log_raw_url(buildid: int, stepid: int, logname: str) -> Optional[str]:
     info_url = f"{TYPHOON_API_URL}/builds/{buildid}/steps/{stepid}" \
                f"/logs/{logname}"
 
-    info_data = webrequests.get(info_url)
+    info_data = Session().get(info_url)
     try:
         info_json_data = json.loads(info_data)
     except json.decoder.JSONDecodeError:
