@@ -30,6 +30,7 @@ class RefreshPolicy(enum.Enum):
 
 class Session:
     """A session with persistent cookies."""
+
     _instance = None
 
     def __new__(cls, *args, **kwargs):

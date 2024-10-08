@@ -8,6 +8,7 @@ import pathlib
 import subprocess
 from typing import Optional
 
+import click
 import xdg  # type: ignore
 
 BINDIR = pathlib.Path(__file__).parent.parent.resolve()
@@ -40,8 +41,7 @@ class _LogFormatter(logging.Formatter):
         logging.CRITICAL: "\x1b[1;31m",
     }
     reset = "\x1b[0m"
-    # logformat = "{color}%(asctime)s [%(levelname)s] %(name)s:{reset} " \
-    #     "%(message)s"
+    detail_logformat = "{color}[%(levelname)s] %(name)s: %(message)s{reset}"
     logformat = "{color}%(message)s{reset}"
 
     def _format(self, record, color):
@@ -50,7 +50,10 @@ class _LogFormatter(logging.Formatter):
         else:
             color = reset = ""
 
-        log_fmt = self.logformat.format(color=color, reset=reset)
+        if record.levelno == logging.DEBUG:
+            log_fmt = self.detail_logformat.format(color=color, reset=reset)
+        else:
+            log_fmt = self.logformat.format(color=color, reset=reset)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
 
@@ -80,3 +83,12 @@ def setup_logging(verbose: int):
     handlers: list[logging.StreamHandler] = [defhandler]
 
     logging.basicConfig(level=loglevel, handlers=handlers)
+
+
+def clear():
+    """Clear the screen."""
+    if logging.getLogger().level <= logging.DEBUG:
+        # Debug logging: never clear screen, to preserve traces
+        return
+
+    click.clear()

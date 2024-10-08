@@ -206,7 +206,6 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                             limit: int, sort: list[str],
                             **kwargs):
     """Review failures waiting for triage."""
-
     # pylint: disable=too-many-arguments,too-many-positional-arguments
 
     Session().set_refresh_policy(RefreshPolicy[refresh.upper()])

@@ -266,7 +266,7 @@ def review_failures(builds: list[swatbuild.Build],
                     open_swatbot_url: bool,
                     open_stdio_url: bool):
     """Allow a user to interactively triage a list of failures."""
-    click.clear()
+    utils.clear()
 
     entry: Optional[int] = 0
     prev_entry = None
@@ -299,7 +299,7 @@ def review_failures(builds: list[swatbuild.Build],
             statusbar = f"Progress: {entry+1}/{len(builds)}"
             entry, changed = review_menu(builds, userinfos, entry, statusbar)
             if changed or entry != prev_entry:
-                click.clear()
+                utils.clear()
                 show_infos = True
         except KeyboardInterrupt:
             if kbinter:
