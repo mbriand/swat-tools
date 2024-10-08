@@ -194,28 +194,28 @@ class Build:
         ]
         table = [[k, format_field(k)] for k in simple_fields]
 
-        statuses = userinfo.triages
         for i, (failureid, failure) in enumerate(self.failures.items()):
             status_str = ""
 
             # Create strings for all failures and the attributed new status (if
             # one was set).
-            for status in statuses:
-                if failureid in status['failures']:
+            for triage in userinfo.triages:
+                if failureid in triage.failures:
                     statusfrags = []
 
-                    statusname = status['status'].name.title()
-                    statusfrags.append(f"{statusname}: {status['comment']}")
+                    statusname = triage.status.name.title()
+                    statusfrags.append(f"{statusname}: {triage.comment}")
 
-                    if status['status'] == swatbot.TriageStatus.BUG:
-                        bugid = int(status['comment'])
+                    if triage.status == swatbot.TriageStatus.BUG:
+                        bugid = int(triage.comment)
                         if bugid in abints:
                             bugtitle = abints[bugid]
                             statusfrags.append(f", {bugtitle}")
 
-                    if status.get('bugzilla-comment'):
+                    bzcomment = triage.extra.get('bugzilla-comment')
+                    if bzcomment:
                         statusfrags.append("\n")
-                        bcomlines = status['bugzilla-comment'].split('\n')
+                        bcomlines = bzcomment.split('\n')
                         bcom = [textwrap.fill(line) for line in bcomlines]
                         statusfrags.append("\n".join(bcom))
 

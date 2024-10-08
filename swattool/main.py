@@ -139,22 +139,14 @@ def show_pending_failures(refresh: str, open_url: str,
             return str(field)
 
     def format_field(build, userinfo, field):
-        if field == swatbuild.Field.FAILURES:
-            return "\n".join([f.stepname for f in build.get(field).values()])
         if field == swatbuild.Field.STATUS:
             return build.get(swatbuild.Field.STATUS).as_short_colored_str()
+        if field == swatbuild.Field.FAILURES:
+            return "\n".join([f.stepname for f in build.get(field).values()])
         if field == swatbuild.Field.USER_STATUS:
-            status_strs = []
-            statuses = userinfo.triages
-            for failure in build.failures:
-                status_str = ""
-                for status in statuses:
-                    if failure in status['failures']:
-                        status_str = f"{status['status'].name.title()}: " \
-                            f"{status['comment']}"
-                        break
-                status_strs.append(status_str)
-            return "\n".join(status_strs)
+            statuses = [str(triage) for fail in build.failures
+                        if (triage := userinfo.get_failure_triage(fail.id))]
+            return "\n".join(statuses)
         if field == swatbuild.Field.USER_NOTES:
             notes = userinfo.get_notes()
             return textwrap.shorten(notes, 80)

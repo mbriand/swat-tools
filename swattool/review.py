@@ -55,41 +55,36 @@ def _prompt_bug_infos(build: swatbuild.Build,
     else:
         bcomment = click.edit(None, require_save=False)
 
-    newstatus = {'status': swatbot.TriageStatus.BUG,
-                 'comment': bugnum,
-                 'bugzilla-comment': bcomment,
-                 }
+    newstatus = userdata.Triage()
+    newstatus.status = swatbot.TriageStatus.BUG
+    newstatus.comment = bugnum
+    newstatus.extra['bugzilla-comment'] = bcomment
     return newstatus
 
 
-def _create_new_status(build: swatbuild.Build, command: str) -> dict:
+def _create_new_status(build: swatbuild.Build, command: str
+                       ) -> userdata.Triage:
     """Create new status for a given failure."""
+    newstatus = userdata.Triage()
     if command in ["a", "b"]:
         newstatus = _prompt_bug_infos(build, command == "a")
     elif command == "c":
-        newstatus = {'status': swatbot.TriageStatus.CANCELLED,
-                     'comment': input('Comment:').strip(),
-                     }
+        newstatus.status = swatbot.TriageStatus.CANCELLED
     elif command == "m":
-        newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                     'comment': input('Comment:').strip(),
-                     }
+        newstatus.status = swatbot.TriageStatus.MAIL_SENT
     elif command == "i" and utils.MAILNAME:
-        newstatus = {'status': swatbot.TriageStatus.MAIL_SENT,
-                     'comment': f"Mail sent by {utils.MAILNAME}",
-                     }
+        newstatus.status = swatbot.TriageStatus.MAIL_SENT
+        newstatus.comment = f"Mail sent by {utils.MAILNAME}"
     elif command == "o":
-        newstatus = {'status': swatbot.TriageStatus.OTHER,
-                     'comment': input('Comment:').strip(),
-                     }
+        newstatus.status = swatbot.TriageStatus.OTHER
     elif command == "f":
-        newstatus = {'status': swatbot.TriageStatus.OTHER,
-                     'comment': 'Fixed',
-                     }
+        newstatus.status = swatbot.TriageStatus.OTHER
+        newstatus.comment = 'Fixed'
     elif command == "t":
-        newstatus = {'status': swatbot.TriageStatus.NOT_FOR_SWAT,
-                     'comment': input('Comment:').strip(),
-                     }
+        newstatus.status = swatbot.TriageStatus.NOT_FOR_SWAT
+
+    if not newstatus.comment:
+        newstatus.comment = input('Comment:').strip()
 
     return newstatus
 
@@ -139,7 +134,7 @@ def review_menu(builds: list[swatbuild.Build],
     build = builds[entry]
     userinfo = userinfos[build.id]
     failures = build.failures
-    newstatus: Optional[dict] = None
+    newstatus: Optional[userdata.Triage] = None
 
     while True:
         try:
@@ -199,7 +194,7 @@ def review_menu(builds: list[swatbuild.Build],
         break
 
     if newstatus:
-        newstatus['failures'] = list(failures.keys())
+        newstatus.failures = list(failures.keys())
         userinfo.triages = [newstatus]
         changed = True
 

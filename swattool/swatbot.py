@@ -63,6 +63,11 @@ class Status(enum.IntEnum):
 class TriageStatus(enum.IntEnum):
     """A status to set on a failure."""
 
+    @staticmethod
+    def from_str(status: str) -> 'TriageStatus':
+        """Get TriageStatus instance from its name as a string."""
+        return TriageStatus[status.upper()]
+
     PENDING = 0
     MAIL_SENT = 1
     BUG = 2
