@@ -12,12 +12,12 @@ from typing import Any, Optional
 import click
 import tabulate
 
-from . import bugzilla
+from .bugzilla import Bugzilla
 from . import review
 from . import swatbot
 from . import swatbuild
 from . import utils
-from . import webrequests
+from .webrequests import RefreshPolicy, Session
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ failures_list_options = [
                                    case_sensitive=False),
                  help="Specify sort order"),
     click.option('--refresh', '-r',
-                 type=click.Choice([p.name for p in webrequests.RefreshPolicy],
+                 type=click.Choice([p.name for p in RefreshPolicy],
                                    case_sensitive=False),
                  default="auto",
                  help="Fetch data from server instead of using cache"),
@@ -121,7 +121,7 @@ def show_pending_failures(refresh: str, open_url: str,
                           limit: int, sort: list[str],
                           *args, **kwargs):
     """Show all failures waiting for triage."""
-    webrequests.set_refresh_policy(webrequests.RefreshPolicy[refresh.upper()])
+    Session().set_refresh_policy(RefreshPolicy[refresh.upper()])
 
     filters = parse_filters(kwargs)
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
@@ -135,8 +135,7 @@ def show_pending_failures(refresh: str, open_url: str,
     def format_header(field):
         if field == swatbuild.Field.STATUS:
             return "Sts"
-        else:
-            return str(field)
+        return str(field)
 
     def format_field(build, userinfo, field):
         if field == swatbuild.Field.STATUS:
@@ -144,7 +143,7 @@ def show_pending_failures(refresh: str, open_url: str,
         if field == swatbuild.Field.FAILURES:
             return "\n".join([f.stepname for f in build.get(field).values()])
         if field == swatbuild.Field.USER_STATUS:
-            statuses = [str(triage) for fail in build.failures
+            statuses = [str(triage) for fail in build.failures.values()
                         if (triage := userinfo.get_failure_triage(fail.id))]
             return "\n".join(statuses)
         if field == swatbuild.Field.USER_NOTES:
@@ -198,7 +197,7 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                             limit: int, sort: list[str],
                             *args, **kwargs):
     """Review failures waiting for triage."""
-    webrequests.set_refresh_policy(webrequests.RefreshPolicy[refresh.upper()])
+    Session().set_refresh_policy(RefreshPolicy[refresh.upper()])
 
     filters = parse_filters(kwargs)
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
@@ -212,7 +211,7 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
         for build in builds_progress:
             logurl = build.get_first_failure().get_log_raw_url()
             if logurl:
-                webrequests.get(logurl)
+                Session().get(logurl)
 
     click.clear()
 
@@ -236,11 +235,9 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
                         logger.warning("Test is %s, "
                                        "fail log might be the log of a child",
                                        build.test)
-                    logurl = build.get_first_failure().get_log_url()
-                    if logurl:
-                        click.launch(logurl)
-                    else:
-                        logger.warning("Failed to find stdio log")
+                    build.get_first_failure().open_log_url()
+            if logurl:
+                Session().get(logurl)
 
             if show_infos:
                 print(build.format_description(userinfo))
@@ -291,11 +288,11 @@ def publish_new_reviews(dry_run: bool):
                     if entry['failures']]
 
             if any(logs):
-                comment = bugurl = bugzilla.get_bug_url(bugid)
+                comment = bugurl = Bugzilla.get_bug_url(bugid)
                 logger.info('Need to update %s with %s', bugurl,
                             ", ".join(logs).replace('\n', ' '))
                 if not dry_run:
-                    bugzilla.add_bug_comment(bugid, '\n'.join(logs))
+                    Bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
         for entry in entries:
             for failureid in entry['failures']:

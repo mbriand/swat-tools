@@ -28,90 +28,90 @@ class RefreshPolicy(enum.Enum):
     AUTO = enum.auto()
 
 
-_REFRESH_POLICY = RefreshPolicy.AUTO
+class Session:
+    """A session with persistent cookies."""
+    _instance = None
 
+    def __new__(cls, *args, **kwargs):
+        if not isinstance(cls._instance, cls):
+            cls._instance = super().__new__(cls, *args, **kwargs)
+            cls._instance.initialized = False
+        return cls._instance
 
-def refresh_policy_max_age(auto: int,
-                           refresh_override: Optional[RefreshPolicy] = None
-                           ) -> int:
-    """Get the maximum age before refresh for a given policy."""
-    policy = refresh_override if refresh_override else _REFRESH_POLICY
-    if policy == RefreshPolicy.FORCE:
-        return 0
-    if policy == RefreshPolicy.NO:
-        return -1
-    return auto
+    def __init__(self):
+        if self._instance.initialized:
+            return
 
-
-def set_refresh_policy(policy: RefreshPolicy):
-    """Set the global refresh policy."""
-    global _REFRESH_POLICY
-    _REFRESH_POLICY = policy
-
-
-def get_session() -> requests.Session:
-    """Get the underlying requests object."""
-    global _SESSION
-    if not _SESSION:
-        _SESSION = requests.Session()
+        self.session = requests.Session()
+        self.refresh_policy = RefreshPolicy.AUTO
 
         if COOKIESFILE.exists():
             with COOKIESFILE.open('rb') as file:
-                _SESSION.cookies.update(pickle.load(file))
+                self.session.cookies.update(pickle.load(file))
 
-    return _SESSION
+        self._instance.initialized = True
 
+    def set_refresh_policy(self, policy: RefreshPolicy):
+        """Set the global refresh policy."""
+        self.refresh_policy = policy
 
-def save_cookies():
-    """Save cookies so they can be used for later sessions."""
-    COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
-    if _SESSION:
-        with COOKIESFILE.open('wb') as file:
-            pickle.dump(_SESSION.cookies, file)
+    def refresh_policy_max_age(self, auto: int,
+                               refresh_override: Optional[RefreshPolicy] = None
+                               ) -> int:
+        """Get the maximum age before refresh for a given policy."""
+        policy = refresh_override if refresh_override else self.refresh_policy
+        if policy == RefreshPolicy.FORCE:
+            return 0
+        if policy == RefreshPolicy.NO:
+            return -1
+        return auto
 
+    def save_cookies(self):
+        """Save cookies so they can be used for later sessions."""
+        COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
+        if _SESSION:
+            with COOKIESFILE.open('wb') as file:
+                pickle.dump(_SESSION.cookies, file)
 
-def invalidate_cache(url: str):
-    """Invalidate cache for a given URL."""
-    _get_cache_file(url).unlink(missing_ok=True)
+    def invalidate_cache(self, url: str):
+        """Invalidate cache for a given URL."""
+        self._get_cache_file(url).unlink(missing_ok=True)
 
+    def _get_cache_file(self, url: str) -> pathlib.Path:
+        filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
+        cachefile = utils.CACHEDIR / f"{filestem}.json"
 
-def _get_cache_file(url: str) -> pathlib.Path:
-    filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
-    cachefile = utils.CACHEDIR / f"{filestem}.json"
+        return cachefile
 
-    return cachefile
+    def get(self, url: str, max_cache_age: int = -1) -> str:
+        """Do a GET request."""
+        cachefile = self._get_cache_file(url)
+        cachefile.parent.mkdir(parents=True, exist_ok=True)
 
+        if cachefile.exists():
+            if max_cache_age < 0:
+                use_cache = True
+            else:
+                age = time.time() - cachefile.stat().st_mtime
+                use_cache = age < max_cache_age
 
-def get(url: str, max_cache_age: int = -1) -> str:
-    """Do a GET request."""
-    cachefile = _get_cache_file(url)
-    cachefile.parent.mkdir(parents=True, exist_ok=True)
+            if use_cache:
+                logger.debug("Loading cache file for %s", url)
+                with cachefile.open('r') as file:
+                    return file.read(-1)
 
-    if cachefile.exists():
-        if max_cache_age < 0:
-            use_cache = True
-        else:
-            age = time.time() - cachefile.stat().st_mtime
-            use_cache = age < max_cache_age
+        logger.debug("Fetching %s, cache file will be %s", url, cachefile)
+        req = self.session.get(url)
+        req.raise_for_status()
+        with cachefile.open('w') as file:
+            file.write(req.text)
 
-        if use_cache:
-            logger.debug("Loading cache file for %s", url)
-            with cachefile.open('r') as file:
-                return file.read(-1)
+        return req.text
 
-    logger.debug("Fetching %s", url)
-    req = get_session().get(url)
-    req.raise_for_status()
-    with cachefile.open('w') as file:
-        file.write(req.text)
+    def post(self, url: str, data: dict[str, Any]) -> str:
+        """Do a POST request."""
+        logger.debug("Sending POST request to %s with %s", url, data)
+        req = self.session.post(url, data=data)
 
-    return req.text
-
-
-def post(url: str, data: dict[str, Any]) -> str:
-    """Do a POST request."""
-    logger.debug("Sending POST request to %s with %s", url, data)
-    req = get_session().post(url, data=data)
-
-    req.raise_for_status()
-    return req.text
+        req.raise_for_status()
+        return req.text

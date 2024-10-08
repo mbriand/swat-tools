@@ -13,7 +13,7 @@ import requests
 from . import swatbuild
 from . import userdata
 from . import utils
-from . import webrequests
+from .webrequests import RefreshPolicy, Session
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +81,15 @@ AUTO_REFRESH_S = 60 * 60 * 24 * 30
 
 
 def _get_csrftoken() -> str:
-    session = webrequests.get_session()
-    return session.cookies['csrftoken']
+    return Session().session.cookies['csrftoken']
 
 
 def login(user: str, password: str):
     """Login to the swatbot Django interface."""
+    session = Session()
+
     logger.info("Sending logging request...")
-    webrequests.get(LOGIN_URL, 0)
+    session.get(LOGIN_URL, 0)
 
     data = {
         "csrfmiddlewaretoken": _get_csrftoken(),
@@ -97,7 +98,7 @@ def login(user: str, password: str):
     }
 
     try:
-        webrequests.post(LOGIN_URL, data=data)
+        session.post(LOGIN_URL, data=data)
     except requests.exceptions.HTTPError as error:
         if error.response.status_code != requests.codes.NOT_FOUND:
             raise error
@@ -105,35 +106,33 @@ def login(user: str, password: str):
         logger.warning("Unexpected reply, login probably failed")
         return
 
-    webrequests.save_cookies()
+    session.save_cookies()
     logger.info("Logging success")
 
 
 def _get_json(path: str, max_cache_age: int = -1):
-    data = webrequests.get(f"{REST_BASE_URL}{path}", max_cache_age)
+    data = Session().get(f"{REST_BASE_URL}{path}", max_cache_age)
     try:
         json_data = json.loads(data)
-    except json.decoder.JSONDecodeError:
-        webrequests.invalidate_cache(f"{REST_BASE_URL}{path}")
+    except json.decoder.JSONDecodeError as err:
+        Session().invalidate_cache(f"{REST_BASE_URL}{path}")
         if "Please login to see this page." in data:
-            raise utils.SwattoolException("Not logged in swatbot")
-        raise utils.SwattoolException("Failed to parse server reply")
+            raise utils.SwattoolException("Not logged in swatbot") from err
+        raise utils.SwattoolException("Failed to parse server reply") from err
     return json_data
 
 
-def get_build(buildid: int, refresh_override:
-              Optional[webrequests.RefreshPolicy] = None):
+def get_build(buildid: int, refresh_override: Optional[RefreshPolicy] = None):
     """Get info on a given build."""
-    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S,
-                                                refresh_override)
+    maxage = Session().refresh_policy_max_age(AUTO_REFRESH_S, refresh_override)
     return _get_json(f"/build/{buildid}/", maxage)['data']
 
 
 def get_build_collection(collectionid: int, refresh_override:
-                         Optional[webrequests.RefreshPolicy] = None):
+                         Optional[RefreshPolicy] = None):
     """Get info on a given build collection."""
-    maxage = webrequests.refresh_policy_max_age(AUTO_REFRESH_S,
-                                                refresh_override)
+    maxage = Session().refresh_policy_max_age(AUTO_REFRESH_S,
+                                              refresh_override)
     return _get_json(f"/buildcollection/{collectionid}/", maxage)['data']
 
 
@@ -143,23 +142,21 @@ def invalidate_stepfailures_cache():
     This can be used to force fetching failures on next build, when we suspect
     it might have changed remotely.
     """
-    webrequests.invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
+    Session().invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
 
 
-def get_stepfailures(refresh_override:
-                     Optional[webrequests.RefreshPolicy] = None):
+def get_stepfailures(refresh_override: Optional[RefreshPolicy] = None):
     """Get info on all failures."""
-    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
-                                                refresh_override)
+    maxage = Session().refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
+                                              refresh_override)
     return _get_json("/stepfailure/", maxage)['data']
 
 
 def get_stepfailure(failureid: int,
-                    refresh_override:
-                    Optional[webrequests.RefreshPolicy] = None):
+                    refresh_override: Optional[RefreshPolicy] = None):
     """Get info on a given failure."""
-    maxage = webrequests.refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
-                                                refresh_override)
+    maxage = Session().refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
+                                              refresh_override)
     return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 
@@ -216,4 +213,4 @@ def publish_status(failureid: int,
             "status": status.value,
             "notes": comment
             }
-    webrequests.post(swat_url, data)
+    Session().post(swat_url, data)

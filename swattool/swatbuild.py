@@ -9,9 +9,10 @@ import textwrap
 from datetime import datetime
 from typing import Any, Iterable, Optional
 
+import click
 import tabulate
 
-from . import bugzilla
+from .bugzilla import Bugzilla
 from . import logs
 from . import swatbot
 from . import userdata
@@ -52,6 +53,14 @@ class Failure:
         if logname not in self.urls:
             return None
         return self.urls[logname]
+
+    def open_log_url(self, logname: str = "stdio"):
+        """Open log URL in default browser."""
+        logurl = self.get_log_url()
+        if logurl:
+            click.launch(logurl)
+        else:
+            logger.error("Failed to find %s log", logname)
 
     def get_log_raw_url(self, logname: str = "stdio") -> Optional[str]:
         """Get the URL of a raw log file."""
@@ -175,7 +184,7 @@ class Build:
 
     def format_description(self, userinfo: userdata.UserInfo) -> str:
         """Get info on one given failure in a pretty way."""
-        abints = bugzilla.get_abints()
+        abints = Bugzilla.get_abints()
 
         def format_field(field):
             if field == Field.STATUS:

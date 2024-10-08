@@ -12,7 +12,7 @@ from simple_term_menu import TerminalMenu  # type: ignore
 
 from . import swatbot
 from . import swatbuild
-from . import bugzilla
+from .bugzilla import Bugzilla
 from . import utils
 from . import userdata
 from . import webrequests
@@ -24,7 +24,7 @@ def _prompt_bug_infos(build: swatbuild.Build,
                       is_abint: bool):
     """Create new status of type BUG for a given failure."""
     if is_abint:
-        abints = bugzilla.get_abints()
+        abints = Bugzilla.get_abints()
         abint_list = [f"{k} {v}" for (k, v) in abints.items()]
 
         abint_menu = TerminalMenu(abint_list, title="Bug", search_key=None,
@@ -83,7 +83,7 @@ def _create_new_status(build: swatbuild.Build, command: str
     elif command == "t":
         newstatus.status = swatbot.TriageStatus.NOT_FOR_SWAT
 
-    if not newstatus.comment:
+    if newstatus and not newstatus.comment:
         newstatus.comment = input('Comment:').strip()
 
     return newstatus
@@ -167,11 +167,7 @@ def review_menu(builds: list[swatbuild.Build],
         elif command == "w":  # Open swatbot URL
             click.launch(build.swat_url)
         elif command == "g":  # Open stdio log
-            logurl = build.get_first_failure().get_log_url()
-            if logurl:
-                click.launch(logurl)
-            else:
-                logger.warning("Failed to find stdio log")
+            build.get_first_failure().open_log_url()
         elif command == "x":  # Open stdio log in pager  # TODO: rename ?
             try:
                 logurl = build.get_first_failure().get_log_raw_url()
