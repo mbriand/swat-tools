@@ -7,16 +7,15 @@ import sys
 from typing import Any, Optional
 
 import click
-import requests
-import tabulate
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from . import swatbot
+from . import logsview
+from . import swatbotrest
 from . import swatbuild
 from .bugzilla import Bugzilla
 from . import utils
 from . import userdata
-from .webrequests import RefreshPolicy, Session
+from .webrequests import RefreshPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ def _prompt_bug_infos(build: swatbuild.Build,
         bcomment = click.edit(None, require_save=False)
 
     newstatus = userdata.Triage()
-    newstatus.status = swatbot.TriageStatus.BUG
+    newstatus.status = swatbotrest.TriageStatus.BUG
     newstatus.comment = bugnum
     newstatus.extra['bugzilla-comment'] = bcomment
     return newstatus
@@ -70,19 +69,19 @@ def _create_new_status(build: swatbuild.Build, command: str
     if command in ["a", "b"]:
         newstatus = _prompt_bug_infos(build, command == "a")
     elif command == "c":
-        newstatus.status = swatbot.TriageStatus.CANCELLED
+        newstatus.status = swatbotrest.TriageStatus.CANCELLED
     elif command == "m":
-        newstatus.status = swatbot.TriageStatus.MAIL_SENT
+        newstatus.status = swatbotrest.TriageStatus.MAIL_SENT
     elif command == "i" and utils.MAILNAME:
-        newstatus.status = swatbot.TriageStatus.MAIL_SENT
+        newstatus.status = swatbotrest.TriageStatus.MAIL_SENT
         newstatus.comment = f"Mail sent by {utils.MAILNAME}"
     elif command == "o":
-        newstatus.status = swatbot.TriageStatus.OTHER
+        newstatus.status = swatbotrest.TriageStatus.OTHER
     elif command == "f":
-        newstatus.status = swatbot.TriageStatus.OTHER
+        newstatus.status = swatbotrest.TriageStatus.OTHER
         newstatus.comment = 'Fixed'
     elif command == "t":
-        newstatus.status = swatbot.TriageStatus.NOT_FOR_SWAT
+        newstatus.status = swatbotrest.TriageStatus.NOT_FOR_SWAT
 
     if newstatus and not newstatus.comment:
         newstatus.comment = input('Comment:').strip()
@@ -105,12 +104,9 @@ def _list_failures_menu(builds: list[swatbuild.Build],
         swatbuild.Field.OWNER,
     ]
     entries = [[build.get(f) for f in shown_fields] for build in builds]
-    tabulated_entries = tabulate.tabulate(entries, tablefmt="plain")
-    failures_menu = TerminalMenu(tabulated_entries.splitlines(),
-                                 title="Failures",
-                                 cursor_index=entry,
-                                 preview_command=preview_failure,
-                                 raise_error_on_interrupt=True)
+    failures_menu = utils.tabulated_menu(entries, title="Failures",
+                                         cursor_index=entry,
+                                         preview_command=preview_failure)
     newentry = failures_menu.show()
     if newentry is not None:
         entry = newentry
@@ -132,7 +128,7 @@ def _handle_navigation_command(builds: list[swatbuild.Build],
             entry -= 1
         else:
             logger.warning("This is the first entry")
-    elif command == "l":  # List
+    elif command == "s":  # List
         entry = _list_failures_menu(builds, userinfos, entry)
     else:
         return (False, entry)
@@ -153,16 +149,12 @@ def _handle_view_command(build: swatbuild.Build, command: str) -> bool:
     if command == "g":  # Open stdio log
         build.get_first_failure().open_log_url()
         return True
-    if command == "x":  # Open stdio log in pager  # TODO: rename ?
-        try:
-            logurl = build.get_first_failure().get_log_raw_url()
-            if logurl:
-                logdata = Session().get(logurl)
-                click.echo_via_pager(logdata)
-            else:
-                logger.warning("Failed to find stdio log")
-        except requests.exceptions.ConnectionError:
-            logger.warning("Failed to download stdio log")
+    if command == "l":  # View stdio log
+        failure = build.get_first_failure()
+        logsview.show_log_menu(build.id, failure.stepnumber, 'stdio')
+        return True
+    if command == "x":  # Explore logs
+        logsview.show_logs_menu(build)
         return True
 
     return False
@@ -204,11 +196,12 @@ _commands = [
     "[u] open autobuilder URL",
     "[w] open swatbot URL",
     "[g] open stdio log of first failed step URL",
-    "[x] open stdio log of first failed step in pager",
+    "[l] show stdio log of first failed step",
+    "[x] explore all logs",
     None,
     "[n] next",
     "[p] previous",
-    "[l] list all failures",
+    "[s] select in failures list",
     "[q] quit",
 ]
 
@@ -318,13 +311,14 @@ def review_failures(builds: list[swatbuild.Build],
         kbinter = False
 
 
-def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any],
+def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                               list[userdata.Triage]]:
     """Get a list of new reviews waiting to be published on swatbot server."""
     userinfos = userdata.UserInfos()
 
     logger.info("Loading pending reviews...")
-    reviews: dict[tuple[swatbot.TriageStatus, Any], list[userdata.Triage]] = {}
+    reviews: dict[tuple[swatbotrest.TriageStatus, Any],
+                  list[userdata.Triage]] = {}
     with click.progressbar(userinfos.items()) as userinfos_progress:
         for buildid, userinfo in userinfos_progress:
             for triage in userinfo.triages:
@@ -339,9 +333,9 @@ def get_new_reviews() -> dict[tuple[swatbot.TriageStatus, Any],
                     continue
 
                 def is_pending(failure_id):
-                    refresh = RefreshPolicy.FORCE
-                    failure = swatbot.get_stepfailure(failure_id,
-                                                      refresh_override=refresh)
+                    r = RefreshPolicy.FORCE
+                    failure = swatbotrest.get_stepfailure(failure_id,
+                                                          refresh_override=r)
                     return failure['attributes']['triage'] == 0
 
                 # Make sure failures are still pending

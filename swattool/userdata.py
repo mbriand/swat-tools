@@ -12,7 +12,7 @@ from typing import Any, Optional
 import yaml
 
 from . import utils
-from . import swatbot
+from . import swatbotrest
 from .bugzilla import Bugzilla
 
 logger = logging.getLogger(__name__)
@@ -25,14 +25,14 @@ class Triage:
 
     def __init__(self, values: Optional[dict] = None):
         self.failures: list[int] = []
-        self.status = swatbot.TriageStatus.PENDING
+        self.status = swatbotrest.TriageStatus.PENDING
         self.comment = ""
         self.extra: dict[str, Any] = {}
 
         if values:
             try:
                 failures = values['failures']
-                status = swatbot.TriageStatus.from_str(values['status'])
+                status = swatbotrest.TriageStatus.from_str(values['status'])
                 comment = values['comment']
                 extra = {k: v for k, v in values.items()
                          if k not in self.__dict__}
@@ -63,7 +63,7 @@ class Triage:
         statusname = self.status.name.title()
         statusfrags.append(f"{statusname}: {self.comment}")
 
-        if self.status == swatbot.TriageStatus.BUG:
+        if self.status == swatbotrest.TriageStatus.BUG:
             bugid = int(self.comment)
             if bugid in abints:
                 bugtitle = abints[bugid]

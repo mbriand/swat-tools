@@ -3,17 +3,24 @@
 """Various helpers with no better place to."""
 
 import logging
-import sys
+import os
 import pathlib
 import subprocess
-from typing import Optional
+import sys
+import tempfile
+from typing import Any, Iterable, Optional
+
+from simple_term_menu import TerminalMenu  # type: ignore
 
 import click
+import tabulate
 import xdg  # type: ignore
 
 BINDIR = pathlib.Path(__file__).parent.parent.resolve()
 DATADIR = xdg.xdg_cache_home() / "swattool"
 CACHEDIR = DATADIR / "cache"
+
+logger = logging.getLogger(__name__)
 
 
 def _get_git_username() -> Optional[str]:
@@ -92,3 +99,34 @@ def clear():
         return
 
     click.clear()
+
+
+def tabulated_menu(entries: Iterable[Iterable[Any]], **kwargs) -> TerminalMenu:
+    """Generate a TerminalMenu with tabulated lines."""
+    tabulated_entries = tabulate.tabulate(entries, tablefmt="plain")
+    return TerminalMenu(tabulated_entries.splitlines(),
+                        raise_error_on_interrupt=True, **kwargs)
+
+
+def show_in_less(text: str, startline: Optional[int] = 0):
+    """Show a text buffer in less program."""
+    less_cmd = ["less", "-N"]
+    if startline:
+        less_cmd.append(f"+G{startline}")
+
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        f.write(text)
+        f.close()
+        try:
+            subprocess.run([*less_cmd, f.name], check=True)
+        except subprocess.CalledProcessError:
+            logger.error("Failed to start less")
+        os.unlink(f.name)
+
+
+def launch_in_system_defaultshow_in_less(text: str):
+    """Show a text buffer in system default program."""
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        f.write(text)
+        f.close()
+        click.launch(f.name)

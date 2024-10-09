@@ -12,7 +12,7 @@ import click
 import tabulate
 
 from . import logs
-from . import swatbot
+from . import swatbotrest
 from . import userdata
 from . import utils
 
@@ -72,16 +72,16 @@ class Build:
 
     def __init__(self, buildid: int,
                  pending_failures: dict[int, dict]):
-        build = swatbot.get_build(buildid)
+        build = swatbotrest.get_build(buildid)
         attributes = build['attributes']
         relationships = build['relationships']
         collectionid = relationships['buildcollection']['data']['id']
-        collection = swatbot.get_build_collection(collectionid)
+        collection = swatbotrest.get_build_collection(collectionid)
 
-        swat_url = f"{swatbot.BASE_URL}/collection/{collection['id']}/"
+        swat_url = f"{swatbotrest.BASE_URL}/collection/{collection['id']}/"
 
         self.id = attributes['buildid']
-        self.status = swatbot.Status.from_int(attributes['status'])
+        self.status = swatbotrest.Status.from_int(attributes['status'])
         self.test = attributes['targetname']
         self.worker = attributes['workername']
         self.completed = attributes['completed']
@@ -184,7 +184,7 @@ class Build:
                 triage = userinfos[self.id].triages
                 if triage:
                     return triage[0]['status']
-                return swatbot.TriageStatus.PENDING
+                return swatbotrest.TriageStatus.PENDING
             if field == Field.USER_NOTES:
                 return "\n".join(userinfos[self.id].notes)
             return self.get(field)

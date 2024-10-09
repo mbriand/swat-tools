@@ -24,4 +24,4 @@ jobs:
       - name: "Run pylint"
         shell: bash
         run: |
-          pylint --disable R0401,W0511 --generated-member=requests.codes swattool
+          pylint --disable W0511 --generated-member=requests.codes swattool

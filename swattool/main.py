@@ -14,6 +14,7 @@ import tabulate
 from .bugzilla import Bugzilla
 from . import review
 from . import swatbot
+from . import swatbotrest
 from . import swatbuild
 from . import userdata
 from . import utils
@@ -36,7 +37,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
     Parse filter values givean as program argument and generate a dictionary to
     be used with get_failure_infos().
     """
-    statuses = [swatbot.Status[s.upper()] for s in kwargs['status_filter']]
+    statuses = [swatbotrest.Status[s.upper()] for s in kwargs['status_filter']]
     tests = [re.compile(f"^{f}$") for f in kwargs['test_filter']]
     ignoretests = [re.compile(f"^{f}$") for f in kwargs['ignore_test_filter']]
     owners = [None if str(f).lower() == "none" else f
@@ -73,7 +74,7 @@ def main(verbose: int):
 @click.option('--password', '-p', prompt=True, hide_input=True)
 def login(user: str, password: str):
     """Login to the swatbot Django interface."""
-    swatbot.login(user, password)
+    swatbotrest.login(user, password)
 
 
 failures_list_options = [
@@ -97,7 +98,7 @@ failures_list_options = [
     click.option('--ignore-test-filter', '-T', multiple=True,
                  help="Ignore some tests"),
     click.option('--status-filter', '-S', multiple=True,
-                 type=click.Choice([str(s) for s in swatbot.Status],
+                 type=click.Choice([str(s) for s in swatbotrest.Status],
                                    case_sensitive=False),
                  help="Only show some statuses"),
     click.option('--completed-after', '-A',
@@ -186,11 +187,11 @@ def show_pending_failures(refresh: str, open_url: str,
     logging.info("%s entries found (%s warnings, %s errors and %s cancelled)",
                  len(builds),
                  len([b for b in builds
-                      if b.status == swatbot.Status.WARNING]),
+                      if b.status == swatbotrest.Status.WARNING]),
                  len([b for b in builds
-                      if b.status == swatbot.Status.ERROR]),
+                      if b.status == swatbotrest.Status.ERROR]),
                  len([b for b in builds
-                      if b.status == swatbot.Status.CANCELLED]))
+                      if b.status == swatbotrest.Status.CANCELLED]))
 
 
 @main.command()
@@ -243,7 +244,7 @@ def publish_new_reviews(dry_run: bool):
         bugurl = None
 
         # Bug entry: need to also publish a new comment on bugzilla.
-        if status == swatbot.TriageStatus.BUG:
+        if status == swatbotrest.TriageStatus.BUG:
             bugid = int(comment)
             logs = [triage.extra['bugzilla-comment'] for triage in triages
                     if triage.failures]
@@ -261,7 +262,7 @@ def publish_new_reviews(dry_run: bool):
                             'to status %s (%s) with "%s"',
                             failureid, status, status.name.title(), comment)
                 if not dry_run:
-                    swatbot.publish_status(failureid, status, comment)
+                    swatbotrest.publish_status(failureid, status, comment)
 
     if not dry_run:
-        swatbot.invalidate_stepfailures_cache()
+        swatbotrest.invalidate_stepfailures_cache()
