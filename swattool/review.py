@@ -151,7 +151,7 @@ def _handle_view_command(build: swatbuild.Build, command: str) -> bool:
         return True
     if command == "l":  # View stdio log
         failure = build.get_first_failure()
-        logsview.show_log_menu(build.id, failure.stepnumber, 'stdio')
+        logsview.show_log_menu(failure, 'stdio')
         return True
     if command == "x":  # Explore logs
         logsview.show_logs_menu(build)

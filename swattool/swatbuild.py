@@ -3,18 +3,20 @@
 """Interraction with the swatbot Django server."""
 
 import enum
+import json
 import logging
 import shutil
 from datetime import datetime
 from typing import Any, Iterable, Optional
 
 import click
+import requests
 import tabulate
 
-from . import logs
 from . import swatbotrest
 from . import userdata
 from . import utils
+from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +62,26 @@ class Failure:
         else:
             logger.error("Failed to find %s log", logname)
 
-    def get_log_raw_url(self, logname: str = "stdio") -> Optional[str]:
+    def get_log_raw_url(self, logname: str = "stdio"
+                        ) -> Optional[str]:
         """Get the URL of a raw log file."""
-        return logs.get_log_raw_url(self.build.id, self.stepnumber, logname)
+        rest_url = self.build.rest_api_url()
+        info_url = f"{rest_url}/builds/{self.build.id}/steps/" \
+                   f"{self.stepnumber}/logs/{logname}"
+        logging.debug("Log info URL: %s", info_url)
+
+        try:
+            info_data = Session().get(info_url)
+        except requests.exceptions.HTTPError:
+            return None
+
+        try:
+            info_json_data = json.loads(info_data)
+        except json.decoder.JSONDecodeError:
+            return None
+
+        logid = info_json_data['logs'][0]['logid']
+        return f"{rest_url}/logs/{logid}/raw"
 
 
 class Build:
@@ -231,3 +250,8 @@ class Build:
             desc += f"\n\n{Field.USER_NOTES}:\n{wrapped}"
 
         return desc
+
+    def rest_api_url(self) -> str:
+        """Get the REST API URL prefix for this build."""
+        url, _, _ = self.autobuilder_url.partition('/#/builders')
+        return f"{url}/api/v2"

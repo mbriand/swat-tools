@@ -10,7 +10,6 @@ from typing import Optional
 import requests
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from . import logs
 from . import swatbuild
 from . import utils
 from .webrequests import Session
@@ -32,9 +31,10 @@ def show_logs_menu(build: swatbuild.Build):
     """Show a menu allowing to select log file to analyze."""
     def get_failure_line(failure, logname):
         return (failure.id, failure.stepnumber, failure.stepname, logname)
-    entries = [get_failure_line(failure, url)
-               for failure in build.failures.values()
-               for url in failure.urls]
+    logs = [(failure, logname)
+            for failure in build.failures.values()
+            for logname in failure.urls]
+    entries = [get_failure_line(failure, logname) for failure, logname in logs]
     default_line = get_failure_line(build.get_first_failure(), 'stdio')
     entry = entries.index(default_line)
     logs_menu = utils.tabulated_menu(entries, title="Log files",
@@ -45,7 +45,7 @@ def show_logs_menu(build: swatbuild.Build):
         if newentry is None:
             break
 
-        show_log_menu(build.id, entries[newentry][1], entries[newentry][3])
+        show_log_menu(*logs[newentry])
 
 
 def _format_log_line(linenum: int, text: str, colorized_line: Optional[int],
@@ -124,9 +124,9 @@ def _show_log(loglines: list[str], selected_line: Optional[int],
     utils.show_in_less("\n".join(colorlines), startline)
 
 
-def _load_log(buildid: int, stepnumber: int, logname: str
+def _load_log(failure: swatbuild.Failure, logname: str
               ) -> Optional[str]:
-    logurl = logs.get_log_raw_url(buildid, stepnumber, logname)
+    logurl = failure.get_log_raw_url(logname)
     if not logurl:
         logging.error("Failed to find log")
         return None
@@ -140,9 +140,9 @@ def _load_log(buildid: int, stepnumber: int, logname: str
     return logdata
 
 
-def show_log_menu(buildid: int, stepnumber: int, logname: str):
+def show_log_menu(failure: swatbuild.Failure, logname: str):
     """Analyze a failure log file."""
-    logdata = _load_log(buildid, stepnumber, logname)
+    logdata = _load_log(failure, logname)
     if not logdata:
         return
 
@@ -163,7 +163,8 @@ def show_log_menu(buildid: int, stepnumber: int, logname: str):
         return _format_log_preview(int(line), loglines, highlight_lines,
                                    preview_height)
 
-    title = f"Log file: {logname} of build {buildid}, step {stepnumber}"
+    title = f"Log file: {logname} of build {failure.build.id}, " \
+            f"step {failure.stepnumber}"
     entry = 2
     while True:
         menu = TerminalMenu(entries, title=title, cursor_index=entry,
