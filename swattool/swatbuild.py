@@ -21,6 +21,44 @@ from .webrequests import Session
 logger = logging.getLogger(__name__)
 
 
+class Status(enum.IntEnum):
+    """The status of a failure."""
+
+    WARNING = 1
+    ERROR = 2
+    CANCELLED = 6
+    UNKNOWN = -1
+
+    @staticmethod
+    def from_int(status: int) -> 'Status':
+        """Get Status instance from an integer status value."""
+        try:
+            return Status(status)
+        except ValueError:
+            return Status.UNKNOWN
+
+    def __str__(self):
+        return self.name.title()
+
+    def _colorize(self, text: str):
+        colors = {
+            Status.WARNING: "\x1b[1;33m",
+            Status.ERROR: "\x1b[1;31m",
+            Status.CANCELLED: "\x1b[1;35m",
+            Status.UNKNOWN: "\x1b[1;36m",
+        }
+        reset = "\x1b[0m"
+        return f"{colors[self]}{text}{reset}"
+
+    def as_colored_str(self):
+        """Return status in a pretty colorized string."""
+        return self._colorize(self.name.title())
+
+    def as_short_colored_str(self):
+        """Return status in a short pretty colorized string."""
+        return self._colorize(self.name[:3].title())
+
+
 class Field(enum.StrEnum):
     """A filed in failure info."""
 
@@ -100,7 +138,7 @@ class Build:
         swat_url = f"{swatbotrest.BASE_URL}/collection/{collection['id']}/"
 
         self.id = attributes['buildid']
-        self.status = swatbotrest.Status.from_int(attributes['status'])
+        self.status = Status.from_int(attributes['status'])
         self.test = attributes['targetname']
         self.worker = attributes['workername']
         self.completed = attributes['completed']

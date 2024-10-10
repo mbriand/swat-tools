@@ -10,7 +10,6 @@ from typing import Optional
 import requests
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from . import swatbotrest
 from . import swatbuild
 from . import utils
 from .webrequests import Session
@@ -140,18 +139,18 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
                 test == "toaster", None, False),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
                            flags=re.I),
-                test == "toaster", RED, status == swatbotrest.Status.ERROR),
+                test == "toaster", RED, status == swatbuild.Status.ERROR),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
-                test == "toaster", RED, status == swatbotrest.Status.ERROR),
+                test == "toaster", RED, status == swatbuild.Status.ERROR),
 
         # Generic rules:
         #  - Match on "error:", show in menu if build status is error.
         #  - Match on "warning:", show in menu if build status is warning.
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
-                True, RED, status == swatbotrest.Status.ERROR),
+                True, RED, status == swatbuild.Status.ERROR),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
                            flags=re.I),
-                True, YELLOW, status == swatbotrest.Status.WARNING),
+                True, YELLOW, status == swatbuild.Status.WARNING),
     ]
 
     highlight_lines = {}

@@ -37,7 +37,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
     Parse filter values givean as program argument and generate a dictionary to
     be used with get_failure_infos().
     """
-    statuses = [swatbotrest.Status[s.upper()] for s in kwargs['status_filter']]
+    statuses = [swatbuild.Status[s.upper()] for s in kwargs['status_filter']]
     tests = [re.compile(f"^{f}$") for f in kwargs['test_filter']]
     ignoretests = [re.compile(f"^{f}$") for f in kwargs['ignore_test_filter']]
     owners = [None if str(f).lower() == "none" else f
@@ -98,7 +98,7 @@ failures_list_options = [
     click.option('--ignore-test-filter', '-T', multiple=True,
                  help="Ignore some tests"),
     click.option('--status-filter', '-S', multiple=True,
-                 type=click.Choice([str(s) for s in swatbotrest.Status],
+                 type=click.Choice([str(s) for s in swatbuild.Status],
                                    case_sensitive=False),
                  help="Only show some statuses"),
     click.option('--completed-after', '-A',
@@ -187,11 +187,11 @@ def show_pending_failures(refresh: str, open_url: str,
     logging.info("%s entries found (%s warnings, %s errors and %s cancelled)",
                  len(builds),
                  len([b for b in builds
-                      if b.status == swatbotrest.Status.WARNING]),
+                      if b.status == swatbuild.Status.WARNING]),
                  len([b for b in builds
-                      if b.status == swatbotrest.Status.ERROR]),
+                      if b.status == swatbuild.Status.ERROR]),
                  len([b for b in builds
-                      if b.status == swatbotrest.Status.CANCELLED]))
+                      if b.status == swatbuild.Status.CANCELLED]))
 
 
 @main.command()
