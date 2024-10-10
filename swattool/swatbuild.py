@@ -70,6 +70,7 @@ class Field(enum.StrEnum):
     SWAT_URL = 'SWAT URL'
     AUTOBUILDER_URL = 'Autobuilder URL'
     FAILURES = 'Failures'
+    BRANCH = 'Branch'
     USER_NOTES = 'Notes'
     USER_STATUS = 'Triage'
 
@@ -144,6 +145,7 @@ class Build:
         self.swat_url = swat_url
         self.autobuilder_url = attributes['url']
         self.owner = collection['attributes']['owner']
+        self.branch = collection['attributes']['branch']
 
         self.failures = {fid: Failure(fid, fdata, self)
                          for fid, fdata in pending_failures.items()}
@@ -252,6 +254,11 @@ class Build:
         def format_field(field):
             if field == Field.STATUS:
                 return self.get(Field.STATUS).as_colored_str()
+            if field == Field.BRANCH:
+                if self.branch not in ["master", "master-next"]:
+                    return utils.Color.colorize(self.branch,
+                                                utils.Color.YELLOW)
+                return self.branch
             return self.get(field)
 
         simple_fields = [
@@ -259,6 +266,7 @@ class Build:
             Field.STATUS,
             Field.TEST,
             Field.OWNER,
+            Field.BRANCH,
             Field.WORKER,
             Field.COMPLETED,
             Field.SWAT_URL,
