@@ -117,26 +117,32 @@ def _list_failures_menu(builds: list[swatbuild.Build],
 def _handle_navigation_command(builds: list[swatbuild.Build],
                                userinfos: userdata.UserInfos,
                                command: str, entry: int
-                               ) -> tuple[bool, Optional[int]]:
+                               ) -> tuple[bool, bool, Optional[int]]:
+    need_refresh = False
+
     if command == "q":  # Quit
-        return (True, None)
+        return (True, need_refresh, None)
 
     if command == "n":  # Next
         entry += 1
+        need_refresh = True
     elif command == "p":  # Previous
         if entry >= 1:
             entry -= 1
+            need_refresh = True
         else:
             logger.warning("This is the first entry")
     elif command == "s":  # List
+        utils.clear()
+        need_refresh = True
         entry = _list_failures_menu(builds, userinfos, entry)
     else:
-        return (False, entry)
+        return (False, need_refresh, entry)
 
     if entry >= len(builds):
-        return (True, None)
+        return (True, need_refresh, None)
 
-    return (True, entry)
+    return (True, need_refresh, entry)
 
 
 def _handle_view_command(build: swatbuild.Build, command: str
@@ -237,13 +243,10 @@ def review_menu(builds: list[swatbuild.Build],
         except EOFError:
             return (None, False)
 
-        (handled, new_entry) = _handle_navigation_command(builds, userinfos,
-                                                          command, entry)
+        (handled, need_refresh, new_entry) = \
+            _handle_navigation_command(builds, userinfos, command, entry)
         if handled:
             break
-        if new_entry != entry:
-            new_entry = entry
-            need_refresh = True
 
         handled, need_refresh = _handle_view_command(build, command)
         if handled:
