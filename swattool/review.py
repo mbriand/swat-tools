@@ -139,25 +139,26 @@ def _handle_navigation_command(builds: list[swatbuild.Build],
     return (True, entry)
 
 
-def _handle_view_command(build: swatbuild.Build, command: str) -> bool:
+def _handle_view_command(build: swatbuild.Build, command: str
+                         ) -> tuple[bool, bool]:
     if command == "u":  # Open autobuilder URL
         click.launch(build.autobuilder_url)
-        return True
+        return (True, False)
     if command == "w":  # Open swatbot URL
         click.launch(build.swat_url)
-        return True
+        return (True, False)
     if command == "g":  # Open stdio log
         build.get_first_failure().open_log_url()
-        return True
+        return (True, False)
     if command == "l":  # View stdio log
         failure = build.get_first_failure()
-        logsview.show_log_menu(failure, 'stdio')
-        return True
+        need_refresh = logsview.show_log_menu(failure, 'stdio')
+        return (True, need_refresh)
     if command == "x":  # Explore logs
-        logsview.show_logs_menu(build)
-        return True
+        need_refresh = logsview.show_logs_menu(build)
+        return (True, need_refresh)
 
-    return False
+    return (False, False)
 
 
 def _handle_edit_command(build: swatbuild.Build, userinfo: userdata.UserInfo,
@@ -214,7 +215,7 @@ def review_menu(builds: list[swatbuild.Build],
                 entry: int,
                 statusbar: str) -> tuple[Optional[int], bool]:
     """Allow a user to interactively triage a failure."""
-    changed = False
+    need_refresh = False
 
     default_action = "n"
     default_index = [c[1] if c and len(c) > 1 else None
@@ -240,17 +241,19 @@ def review_menu(builds: list[swatbuild.Build],
                                                           command, entry)
         if handled:
             break
-        new_entry = entry
+        if new_entry != entry:
+            new_entry = entry
+            need_refresh = True
 
-        handled = _handle_view_command(build, command)
+        handled, need_refresh = _handle_view_command(build, command)
         if handled:
             break
 
-        handled, changed = _handle_edit_command(build, userinfo, command)
+        handled, need_refresh = _handle_edit_command(build, userinfo, command)
         if handled:
             break
 
-    return (new_entry, changed)
+    return (new_entry, need_refresh)
 
 
 def review_failures(builds: list[swatbuild.Build],
@@ -290,8 +293,9 @@ def review_failures(builds: list[swatbuild.Build],
 
             prev_entry = entry
             statusbar = f"Progress: {entry+1}/{len(builds)}"
-            entry, changed = review_menu(builds, userinfos, entry, statusbar)
-            if changed or entry != prev_entry:
+            entry, need_refresh = review_menu(builds, userinfos, entry,
+                                              statusbar)
+            if need_refresh or entry != prev_entry:
                 utils.clear()
                 show_infos = True
         except KeyboardInterrupt:

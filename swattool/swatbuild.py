@@ -251,6 +251,11 @@ class Build:
 
         return desc
 
+    def format_short_description(self) -> str:
+        """Get condensed info on one given failure in a pretty way."""
+        return f"Build {self.id}: {self.test} on {self.worker}, " \
+               f"{str(self.status).lower()} at {self.completed}"
+
     def rest_api_url(self) -> str:
         """Get the REST API URL prefix for this build."""
         url, _, _ = self.autobuilder_url.partition('/#/builders')

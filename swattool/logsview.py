@@ -27,7 +27,7 @@ CYAN = "\x1b[1;36m"
 WHITE = "\x1b[1;37m"
 
 
-def show_logs_menu(build: swatbuild.Build):
+def show_logs_menu(build: swatbuild.Build) -> bool:
     """Show a menu allowing to select log file to analyze."""
     def get_failure_line(failure, logname):
         return (failure.id, failure.stepnumber, failure.stepname, logname)
@@ -46,6 +46,8 @@ def show_logs_menu(build: swatbuild.Build):
             break
 
         show_log_menu(*logs[newentry])
+
+    return True
 
 
 def _format_log_line(linenum: int, text: str, colorized_line: Optional[int],
@@ -140,12 +142,13 @@ def _load_log(failure: swatbuild.Failure, logname: str
     return logdata
 
 
-def show_log_menu(failure: swatbuild.Failure, logname: str):
+def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
     """Analyze a failure log file."""
     logdata = _load_log(failure, logname)
     if not logdata:
-        return
+        return False
 
+    utils.clear()
     loglines = logdata.splitlines()
     highlight_lines = _get_log_highlights(loglines)
 
@@ -163,8 +166,8 @@ def show_log_menu(failure: swatbuild.Failure, logname: str):
         return _format_log_preview(int(line), loglines, highlight_lines,
                                    preview_height)
 
-    title = f"Log file: {logname} of build {failure.build.id}, " \
-            f"step {failure.stepnumber}"
+    title = f"{failure.build.format_short_description()}: " \
+            f"{logname} of step {failure.stepnumber}"
     entry = 2
     while True:
         menu = TerminalMenu(entries, title=title, cursor_index=entry,
@@ -172,7 +175,7 @@ def show_log_menu(failure: swatbuild.Failure, logname: str):
                             raise_error_on_interrupt=True)
         entry = menu.show()
         if entry is None:
-            return
+            return True
 
         if entry == 0:
             _show_log(loglines, None, highlight_lines, None)
