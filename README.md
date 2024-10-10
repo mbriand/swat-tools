@@ -40,7 +40,12 @@ $ swattool show-pending-failures --owner-filter none --sort test
 
 ## review-pending-failures
 
-Review failures waiting for triage. E.g.:
+Review failures waiting for triage.
+
+All modifications are done locally, nothing is pushed to swatbot or bugzilla,
+until you use the `publish-new-reviews` commane.
+
+E.g.:
 
 ```
 Build            565962
