@@ -124,14 +124,10 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
         # Toaster specific rules:
         #  - Do nothing on "except xxxError:" (likely python code output).
         #  - Match on "selenium .*exception:".
-        #  - Match on generic errors, but do not show in menu.
         _Filter(re.compile(r".*except\s*\S*error:", flags=re.I),
                 test == "toaster", None, False),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
                            flags=re.I),
-                test == "toaster", utils.Color.RED,
-                status == swatbuild.Status.ERROR),
-        _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
                 test == "toaster", utils.Color.RED,
                 status == swatbuild.Status.ERROR),
 
