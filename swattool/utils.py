@@ -36,24 +36,43 @@ def _get_git_username() -> Optional[str]:
 MAILNAME = _get_git_username()
 
 
+class Color:
+    """Text color handling."""
+
+    # pylint: disable=too-few-public-methods
+
+    RESET = "\x1b[0m"
+    RED = "\x1b[1;31m"
+    GREEN = "\x1b[1;32m"
+    YELLOW = "\x1b[1;33m"
+    BLUE = "\x1b[1;34m"
+    PURPLE = "\x1b[1;35m"
+    CYAN = "\x1b[1;36m"
+    WHITE = "\x1b[1;37m"
+
+    @classmethod
+    def colorize(cls, text: str, color: str) -> str:
+        """Colorize a string."""
+        return f"{color}{text}{cls.RESET}"
+
+
 class SwattoolException(Exception):
     """A generic swattool error."""
 
 
 class _LogFormatter(logging.Formatter):
     colors = {
-        logging.DEBUG: "\x1b[1;38m",
-        logging.WARNING: "\x1b[1;33m",
-        logging.ERROR: "\x1b[1;31m",
-        logging.CRITICAL: "\x1b[1;31m",
+        logging.DEBUG: Color.WHITE,
+        logging.WARNING: Color.YELLOW,
+        logging.ERROR: Color.RED,
+        logging.CRITICAL: Color.RED,
     }
-    reset = "\x1b[0m"
     detail_logformat = "{color}[%(levelname)s] %(name)s: %(message)s{reset}"
     logformat = "{color}%(message)s{reset}"
 
     def _format(self, record, color):
         if color:
-            reset = self.reset
+            reset = Color.RESET
         else:
             color = reset = ""
 

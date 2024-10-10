@@ -42,13 +42,12 @@ class Status(enum.IntEnum):
 
     def _colorize(self, text: str):
         colors = {
-            Status.WARNING: "\x1b[1;33m",
-            Status.ERROR: "\x1b[1;31m",
-            Status.CANCELLED: "\x1b[1;35m",
-            Status.UNKNOWN: "\x1b[1;36m",
+            Status.WARNING: utils.Color.YELLOW,
+            Status.ERROR: utils.Color.RED,
+            Status.CANCELLED: utils.Color.PURPLE,
+            Status.UNKNOWN: utils.Color.CYAN,
         }
-        reset = "\x1b[0m"
-        return f"{colors[self]}{text}{reset}"
+        return utils.Color.colorize(text, colors[self])
 
     def as_colored_str(self):
         """Return status in a pretty colorized string."""

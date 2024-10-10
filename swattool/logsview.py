@@ -17,16 +17,6 @@ from .webrequests import Session
 logger = logging.getLogger(__name__)
 
 
-RESET = "\x1b[0m"
-RED = "\x1b[1;31m"
-GREEN = "\x1b[1;32m"
-YELLOW = "\x1b[1;33m"
-BLUE = "\x1b[1;34m"
-PURPLE = "\x1b[1;35m"
-CYAN = "\x1b[1;36m"
-WHITE = "\x1b[1;37m"
-
-
 class _Highlight:
     # pylint: disable=too-few-public-methods
     def __init__(self, keyword: str, color: str, in_menu: bool):
@@ -89,12 +79,12 @@ def _format_log_line(linenum: int, text: str, colorized_line: Optional[int],
         if linenum in highlight_lines:
             linecolor = highlight_lines[linenum].color
         else:
-            linecolor = CYAN
-        text = f"{linecolor}{text}{RESET}"
+            linecolor = utils.Color.CYAN
+        text = utils.Color.colorize(text, linecolor)
     elif linenum in highlight_lines:
         pat = highlight_lines[linenum].keyword
         color = highlight_lines[linenum].color
-        text = re.sub(pat, f"{color}{pat}{RESET}", text)
+        text = re.sub(pat, utils.Color.colorize(pat, color), text)
     return text
 
 
@@ -139,18 +129,20 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
                 test == "toaster", None, False),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
                            flags=re.I),
-                test == "toaster", RED, status == swatbuild.Status.ERROR),
+                test == "toaster", utils.Color.RED,
+                status == swatbuild.Status.ERROR),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
-                test == "toaster", RED, status == swatbuild.Status.ERROR),
+                test == "toaster", utils.Color.RED,
+                status == swatbuild.Status.ERROR),
 
         # Generic rules:
         #  - Match on "error:", show in menu if build status is error.
         #  - Match on "warning:", show in menu if build status is warning.
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
-                True, RED, status == swatbuild.Status.ERROR),
+                True, utils.Color.RED, status == swatbuild.Status.ERROR),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
                            flags=re.I),
-                True, YELLOW, status == swatbuild.Status.WARNING),
+                True, utils.Color.YELLOW, status == swatbuild.Status.WARNING),
     ]
 
     highlight_lines = {}
