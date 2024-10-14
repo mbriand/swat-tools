@@ -143,8 +143,10 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
                 status == swatbuild.Status.ERROR),
 
         # Generic rules:
+        #  - Do nothing on "libgpg-error:"
         #  - Match on "error:", show in menu if build status is error.
         #  - Match on "warning:", show in menu if build status is warning.
+        _Filter(re.compile(r".*libgpg-error:"), True, None, False),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
                 True, utils.Color.RED, status == swatbuild.Status.ERROR),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
