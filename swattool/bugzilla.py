@@ -2,6 +2,7 @@
 
 """Bugzilla related functions."""
 
+import urllib
 import logging
 import json
 
@@ -26,14 +27,26 @@ class Bugzilla:
             params = {
                 'order': 'order=bug_id%20DESC',
                 'query_format': 'advanced',
-                'resolution': '---',
-                'short_desc': 'AB-INT.*',
-                'short_desc_type': 'regexp',
-                'include_fields': 'id,summary',
+                'resolution': ["---",
+                               "FIXED",
+                               "INVALID",
+                               "OBSOLETE",
+                               "NOTABUG",
+                               "ReportedUpstream",
+                               "WONTFIX",
+                               "DUPLICATE",
+                               "WORKSFORME",
+                               "MOVED",
+                               ],
+                # 'short_desc': 'AB-INT.*',
+                # 'short_desc_type': 'regexp',
+                'status_whiteboard': 'AB-INT',
+                'status_whiteboard_type': 'allwordssubstr',
+                'include_fields': ['id', 'summary'],
             }
 
-            fparams = [f'{k}={v}' for k, v in params.items()]
-            req = f"{REST_BASE_URL}bug?{'&'.join(fparams)}"
+            fparams = urllib.parse.urlencode(params, doseq=True)
+            req = f"{REST_BASE_URL}bug?{fparams}"
             data = Session().get(req)
 
             cls.known_abints = {bug['id']: bug['summary']
