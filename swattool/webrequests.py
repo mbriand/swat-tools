@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 
 COOKIESFILE = utils.DATADIR / 'cookies'
 
-_SESSION = None
-
 
 class RefreshPolicy(enum.Enum):
     """A cache refresh policy."""
@@ -71,9 +69,9 @@ class Session:
     def save_cookies(self):
         """Save cookies so they can be used for later sessions."""
         COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
-        if _SESSION:
+        if self.session:
             with COOKIESFILE.open('wb') as file:
-                pickle.dump(_SESSION.cookies, file)
+                pickle.dump(self.session.cookies, file)
 
     def invalidate_cache(self, url: str):
         """Invalidate cache for a given URL."""
