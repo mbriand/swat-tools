@@ -89,11 +89,18 @@ def _format_log_line(linenum: int, text: str, colorized_line: Optional[int],
 
 
 def _format_log_preview_line(linenum: int, text: str, colorized_line: int,
-                             highlight_lines: dict[int, _Highlight]):
-    preview_text = text.replace('\t', '    ')
-    formatted_text = _format_log_line(linenum, preview_text, colorized_line,
-                                      highlight_lines)
-    return f"{linenum: 6d} {formatted_text}"
+                             highlight_lines: dict[int, _Highlight],
+                             preview_width: int):
+    preview_text = text.expandtabs(4)
+    preview_width -= 1 + 6 + 1  # space + line number + space
+    for offset in range(0, len(preview_text), preview_width):
+        wrappedtext = preview_text[offset:offset + preview_width]
+        formatted_text = _format_log_line(linenum, wrappedtext, colorized_line,
+                                          highlight_lines)
+        if offset == 0:
+            yield f"{linenum: 6d} {formatted_text}"
+        else:
+            yield f"{' ' * 6} {formatted_text}"
 
 
 def _get_preview_window(linenum: int, lines: list[str], preview_height: int
@@ -109,10 +116,14 @@ def _get_preview_window(linenum: int, lines: list[str], preview_height: int
 
 def _format_log_preview(linenum: int, lines: list[str],
                         highlight_lines: dict[int, _Highlight],
-                        preview_height: int) -> str:
+                        preview_height: int, preview_width: int) -> str:
     start, end = _get_preview_window(linenum, lines, preview_height)
-    lines = [_format_log_preview_line(i, t, linenum, highlight_lines)
-             for i, t in enumerate(lines[start: end], start=start + 1)]
+    lines = [previewline
+             for i, t in enumerate(lines[start: end], start=start + 1)
+             for previewline in _format_log_preview_line(i, t, linenum,
+                                                         highlight_lines,
+                                                         preview_width)
+             ]
     return "\n".join(lines)
 
 
@@ -185,6 +196,14 @@ def _load_log(failure: swatbuild.Failure, logname: str
     return logdata
 
 
+def _get_preview_sizes(preview_size: float) -> tuple[int, int]:
+    termsize = shutil.get_terminal_size((80, 20))
+    preview_height = int(preview_size * termsize.lines)
+    preview_width = termsize.columns - 2  # Borders
+
+    return (preview_height, preview_width)
+
+
 def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
     """Analyze a failure log file."""
     logdata = _load_log(failure, logname)
@@ -203,12 +222,11 @@ def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
                ]
 
     preview_size = 0.6
-    termheight = shutil.get_terminal_size((80, 20)).lines
-    preview_height = int(preview_size * termheight)
+    preview_height, preview_width = _get_preview_sizes(preview_size)
 
     def preview(line):
         return _format_log_preview(int(line), loglines, highlights,
-                                   preview_height)
+                                   preview_height, preview_width)
 
     title = f"{failure.build.format_short_description()}: " \
             f"{logname} of step {failure.stepnumber}"
