@@ -3,6 +3,7 @@
 """Wrapper for requests module with cookies persistence and basic cache."""
 
 import enum
+import hashlib
 import logging
 import pathlib
 import pickle
@@ -80,9 +81,12 @@ class Session:
 
     def _get_cache_file(self, url: str) -> pathlib.Path:
         filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
-        cachefile = utils.CACHEDIR / f"{filestem}.json"
 
-        return cachefile
+        if len(filestem) > 100:
+            hashname = hashlib.sha256(filestem.encode(), usedforsecurity=False)
+            filestem = hashname.hexdigest()
+
+        return utils.CACHEDIR / f"{filestem}.json"
 
     def get(self, url: str, max_cache_age: int = -1) -> str:
         """Do a GET request."""
