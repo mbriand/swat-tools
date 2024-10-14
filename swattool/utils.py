@@ -129,7 +129,7 @@ def tabulated_menu(entries: Iterable[Iterable[Any]], **kwargs) -> TerminalMenu:
 
 def show_in_less(text: str, startline: Optional[int] = 0):
     """Show a text buffer in less program."""
-    less_cmd = ["less", "-N"]
+    less_cmd = ["less", "-N", "-i"]
     if startline:
         less_cmd.append(f"+G{startline}")
 

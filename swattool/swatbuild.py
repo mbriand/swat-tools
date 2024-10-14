@@ -253,7 +253,9 @@ class Build:
         """Get info on one given failure in a pretty way."""
         def format_field(field):
             if field == Field.STATUS:
-                return self.get(Field.STATUS).as_colored_str()
+                if self.status == Status.ERROR:
+                    return str(self.status)
+                return self.status.as_colored_str()
             if field == Field.BRANCH:
                 if self.branch not in ["master", "master-next"]:
                     return utils.Color.colorize(self.branch,
@@ -298,7 +300,8 @@ class Build:
 
     def format_short_description(self) -> str:
         """Get condensed info on one given failure in a pretty way."""
-        return f"Build {self.id}: {self.test} on {self.worker}, " \
+        return f"Build {self.id} ({self.branch}): " \
+               f"{self.test} on {self.worker}, " \
                f"{str(self.status).lower()} at {self.completed}"
 
     def rest_api_url(self) -> str:

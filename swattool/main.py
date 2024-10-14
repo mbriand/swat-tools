@@ -225,6 +225,9 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
             if logurl:
                 Session().get(logurl)
 
+    # Make sure abints are up-to-date.
+    Bugzilla.get_abints()
+
     review.review_failures(builds, userinfos,
                            open_autobuilder_url, open_swatbot_url,
                            open_stdio_url)
