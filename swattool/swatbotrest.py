@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Interraction with the swatbot Django server."""
+"""Interaction with the swatbot Django server."""
 
 import enum
 import json
@@ -10,13 +10,74 @@ from typing import Optional
 import requests
 
 from . import utils
-from .webrequests import RefreshPolicy, Session
+from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://swatbot.yoctoproject.org"
 LOGIN_URL = f"{BASE_URL}/accounts/login/"
 REST_BASE_URL = f"{BASE_URL}/rest"
+
+
+class RefreshPolicy(enum.Enum):
+    """A swatbot cache refresh policy."""
+
+    NO = enum.auto()
+    FORCE = enum.auto()
+    FORCE_FAILURES = enum.auto()
+    AUTO = enum.auto()
+
+
+class RefreshManager:
+    """A refresh manager for the swatbot REST API."""
+
+    _instance = None
+
+    FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
+    AUTO_REFRESH_S = 60 * 60 * 24 * 30
+
+    # pylint: disable=duplicate-code
+    # pylint complains because of duplicate code in singleton init. We might do
+    # better, but keep it that way for now.
+    def __new__(cls, *args, **kwargs):
+        if not isinstance(cls._instance, cls):
+            cls._instance = super().__new__(cls, *args, **kwargs)
+            cls._instance.initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._instance.initialized:
+            return
+
+        self.refresh_policy = RefreshPolicy.AUTO
+
+        self._instance.initialized = True
+
+    def set_policy(self, policy: RefreshPolicy):
+        """Set the global refresh policy."""
+        self.refresh_policy = policy
+
+    def set_policy_by_name(self, policy_name: str):
+        """Set the global refresh policy from policy name."""
+        self.set_policy(RefreshPolicy[policy_name.upper()])
+
+    def get_refresh_max_age(self,
+                            refresh_override: Optional[RefreshPolicy] = None,
+                            failures: bool = False
+                            ) -> int:
+        """Get the maximum age before refresh for a given policy."""
+        policy = refresh_override if refresh_override else self.refresh_policy
+        if policy == RefreshPolicy.FORCE_FAILURES:
+            policy = RefreshPolicy.FORCE if failures else RefreshPolicy.AUTO
+
+        if policy == RefreshPolicy.FORCE:
+            return 0
+        if policy == RefreshPolicy.NO:
+            return -1
+
+        if failures:
+            return self.FAILURES_AUTO_REFRESH_S
+        return self.AUTO_REFRESH_S
 
 
 class TriageStatus(enum.IntEnum):
@@ -33,10 +94,6 @@ class TriageStatus(enum.IntEnum):
     OTHER = 3
     NOT_FOR_SWAT = 4
     CANCELLED = 5
-
-
-FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
-AUTO_REFRESH_S = 60 * 60 * 24 * 30
 
 
 def _get_csrftoken() -> str:
@@ -83,15 +140,14 @@ def _get_json(path: str, max_cache_age: int = -1):
 
 def get_build(buildid: int, refresh_override: Optional[RefreshPolicy] = None):
     """Get info on a given build."""
-    maxage = Session().refresh_policy_max_age(AUTO_REFRESH_S, refresh_override)
+    maxage = RefreshManager().get_refresh_max_age(refresh_override)
     return _get_json(f"/build/{buildid}/", maxage)['data']
 
 
 def get_build_collection(collectionid: int, refresh_override:
                          Optional[RefreshPolicy] = None):
     """Get info on a given build collection."""
-    maxage = Session().refresh_policy_max_age(AUTO_REFRESH_S,
-                                              refresh_override)
+    maxage = RefreshManager().get_refresh_max_age(refresh_override)
     return _get_json(f"/buildcollection/{collectionid}/", maxage)['data']
 
 
@@ -106,16 +162,15 @@ def invalidate_stepfailures_cache():
 
 def get_stepfailures(refresh_override: Optional[RefreshPolicy] = None):
     """Get info on all failures."""
-    maxage = Session().refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
-                                              refresh_override)
+    maxage = RefreshManager().get_refresh_max_age(refresh_override,
+                                                     failures=True)
     return _get_json("/stepfailure/", maxage)['data']
 
 
 def get_stepfailure(failureid: int,
                     refresh_override: Optional[RefreshPolicy] = None):
     """Get info on a given failure."""
-    maxage = Session().refresh_policy_max_age(FAILURES_AUTO_REFRESH_S,
-                                              refresh_override)
+    maxage = RefreshManager().get_refresh_max_age(refresh_override)
     return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 

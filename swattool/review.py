@@ -15,7 +15,6 @@ from . import swatbuild
 from .bugzilla import Bugzilla
 from . import utils
 from . import userdata
-from .webrequests import RefreshPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +339,7 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                     continue
 
                 def is_pending(failure_id):
-                    r = RefreshPolicy.FORCE
+                    r = swatbotrest.RefreshPolicy.FORCE
                     failure = swatbotrest.get_stepfailure(failure_id,
                                                           refresh_override=r)
                     return failure['attributes']['triage'] == 0

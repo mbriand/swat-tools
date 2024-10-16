@@ -18,7 +18,7 @@ from . import swatbotrest
 from . import swatbuild
 from . import userdata
 from . import utils
-from .webrequests import RefreshPolicy, Session
+from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ failures_list_options = [
                                    case_sensitive=False),
                  help="Specify sort order"),
     click.option('--refresh', '-r',
-                 type=click.Choice([p.name for p in RefreshPolicy],
+                 type=click.Choice([p.name for p in swatbotrest.RefreshPolicy],
                                    case_sensitive=False),
                  default="auto",
                  help="Fetch data from server instead of using cache"),
@@ -153,7 +153,7 @@ def show_pending_failures(refresh: str, open_url: str,
                           limit: int, sort: list[str],
                           **kwargs):
     """Show all failures waiting for triage."""
-    Session().set_refresh_policy(RefreshPolicy[refresh.upper()])
+    swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
     filters = parse_filters(kwargs)
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
@@ -209,7 +209,7 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
     """Review failures waiting for triage."""
     # pylint: disable=too-many-arguments,too-many-positional-arguments
 
-    Session().set_refresh_policy(RefreshPolicy[refresh.upper()])
+    swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
     filters = parse_filters(kwargs)
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,

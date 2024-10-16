@@ -2,13 +2,12 @@
 
 """Wrapper for requests module with cookies persistence and basic cache."""
 
-import enum
 import hashlib
 import logging
 import pathlib
 import pickle
 import time
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -17,14 +16,6 @@ from . import utils
 logger = logging.getLogger(__name__)
 
 COOKIESFILE = utils.DATADIR / 'cookies'
-
-
-class RefreshPolicy(enum.Enum):
-    """A cache refresh policy."""
-
-    NO = enum.auto()
-    FORCE = enum.auto()
-    AUTO = enum.auto()
 
 
 class Session:
@@ -43,28 +34,12 @@ class Session:
             return
 
         self.session = requests.Session()
-        self.refresh_policy = RefreshPolicy.AUTO
 
         if COOKIESFILE.exists():
             with COOKIESFILE.open('rb') as file:
                 self.session.cookies.update(pickle.load(file))
 
         self._instance.initialized = True
-
-    def set_refresh_policy(self, policy: RefreshPolicy):
-        """Set the global refresh policy."""
-        self.refresh_policy = policy
-
-    def refresh_policy_max_age(self, auto: int,
-                               refresh_override: Optional[RefreshPolicy] = None
-                               ) -> int:
-        """Get the maximum age before refresh for a given policy."""
-        policy = refresh_override if refresh_override else self.refresh_policy
-        if policy == RefreshPolicy.FORCE:
-            return 0
-        if policy == RefreshPolicy.NO:
-            return -1
-        return auto
 
     def save_cookies(self):
         """Save cookies so they can be used for later sessions."""
