@@ -47,7 +47,7 @@ class Bugzilla:
 
             fparams = urllib.parse.urlencode(params, doseq=True)
             req = f"{REST_BASE_URL}bug?{fparams}"
-            data = Session().get(req)
+            data = Session().get(req, 600)
 
             cls.known_abints = {bug['id']: bug['summary']
                                 for bug in json.loads(data)['bugs']}
