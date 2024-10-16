@@ -84,32 +84,65 @@ def _format_log_line(linenum: int, text: str, colorized_line: Optional[int],
     elif linenum in highlight_lines:
         pat = highlight_lines[linenum].keyword
         color = highlight_lines[linenum].color
-        text = re.sub(pat, utils.Color.colorize(pat, color), text)
+        text = text.replace(pat, utils.Color.colorize(pat, color))
     return text
+
+
+def _split_preview_line(text: str, preview_width: int):
+    preview_text = text.expandtabs(4)
+    preview_width -= 1 + 6 + 1  # space + line number + space
+    return [preview_text[offset:offset + preview_width]
+            for offset in range(0, max(1, len(preview_text)), preview_width)]
 
 
 def _format_log_preview_line(linenum: int, text: str, colorized_line: int,
                              highlight_lines: dict[int, _Highlight],
                              preview_width: int):
-    preview_text = text.expandtabs(4)
-    preview_width -= 1 + 6 + 1  # space + line number + space
-    for offset in range(0, len(preview_text), preview_width):
-        wrappedtext = preview_text[offset:offset + preview_width]
+    for i, wrappedtext in enumerate(_split_preview_line(text, preview_width)):
         formatted_text = _format_log_line(linenum, wrappedtext, colorized_line,
                                           highlight_lines)
-        if offset == 0:
+        if i == 0:
             yield f"{linenum: 6d} {formatted_text}"
         else:
             yield f"{' ' * 6} {formatted_text}"
 
 
-def _get_preview_window(linenum: int, lines: list[str], preview_height: int
-                        ) -> tuple[int, int]:
-    start = max(0, linenum - int(preview_height / 4))
-    end = start + preview_height
-    if end >= len(lines):
-        end = len(lines)
-        start = max(0, end - preview_height)
+def _get_preview_window(linenum: int, lines: list[str], preview_height: int,
+                        preview_width: int) -> tuple[int, int]:
+    # All values below are in line index in the lines list, not line numbers.
+    lineidx = linenum - 1
+
+    # Place the start on given line and rewind until we have desired height
+    # before our line.
+    start = lineidx
+    before_len = 0
+    target_before_len = int(preview_height / 3)
+    while start > 0 and before_len < target_before_len:
+        nextline = start - 1
+        linecount = len(_split_preview_line(lines[nextline], preview_width))
+        if before_len + linecount > target_before_len:
+            break
+
+        start = nextline
+        before_len += linecount
+
+    # Place the end on given line and add lines until we reach full height.
+    end = lineidx
+    total_len = before_len
+    total_len += len(_split_preview_line(lines[end], preview_width))
+    while end < len(lines) - 1 and total_len < preview_height:
+        end += 1
+        total_len += len(_split_preview_line(lines[end], preview_width))
+
+    # Special case on end of buffer: add some lines before.
+    while start > 0 and total_len < preview_height:
+        nextline = start - 1
+        linecount = len(_split_preview_line(lines[nextline], preview_width))
+        if total_len + linecount > preview_height:
+            break
+
+        start = nextline
+        total_len += linecount
 
     return (start, end)
 
@@ -117,14 +150,15 @@ def _get_preview_window(linenum: int, lines: list[str], preview_height: int
 def _format_log_preview(linenum: int, lines: list[str],
                         highlight_lines: dict[int, _Highlight],
                         preview_height: int, preview_width: int) -> str:
-    start, end = _get_preview_window(linenum, lines, preview_height)
+    start, end = _get_preview_window(linenum, lines, preview_height,
+                                     preview_width)
     lines = [previewline
-             for i, t in enumerate(lines[start: end], start=start + 1)
+             for i, t in enumerate(lines[start: end + 1], start=start + 1)
              for previewline in _format_log_preview_line(i, t, linenum,
                                                          highlight_lines,
                                                          preview_width)
              ]
-    return "\n".join(lines)
+    return "\n".join(lines[:preview_height])
 
 
 def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
@@ -168,14 +202,14 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
 
 def _show_log(loglines: list[str], selected_line: Optional[int],
               highlight_lines: dict[int, _Highlight],
-              preview_height: Optional[int]):
+              preview_height: Optional[int], preview_width: Optional[int]):
     colorlines = [_format_log_line(i, t, selected_line, highlight_lines)
                   for i, t in enumerate(loglines, start=1)]
 
     startline: Optional[int]
-    if selected_line and preview_height:
+    if selected_line and preview_height and preview_width:
         startline, _ = _get_preview_window(selected_line, loglines,
-                                           preview_height)
+                                           preview_height, preview_width)
         startline += 1  # Use line number, not line index
     else:
         startline = selected_line
@@ -242,9 +276,10 @@ def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
             return True
 
         if entry == 0:
-            _show_log(loglines, None, highlights, None)
+            _show_log(loglines, None, highlights, None, None)
         elif entry == 1:
             utils.launch_in_system_defaultshow_in_less(logdata)
         else:
             _, _, num = entries[entry].partition('|')
-            _show_log(loglines, int(num), highlights, preview_height)
+            _show_log(loglines, int(num), highlights, preview_height,
+                      preview_width)
