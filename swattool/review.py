@@ -62,13 +62,17 @@ def _prompt_bug_infos(build: swatbuild.Build,
 
 
 def _create_new_status(build: swatbuild.Build, command: str
-                       ) -> userdata.Triage:
+                       ) -> Optional[userdata.Triage]:
     """Create new status for a given failure."""
     newstatus = userdata.Triage()
     if command in ["a", "b"]:
         newstatus = _prompt_bug_infos(build, command == "a")
     elif command == "c":
+        if build.status != swatbuild.Status.CANCELLED:
+            logging.error("Only cancelled builds can be triaged as cancelled")
+            return None
         newstatus.status = swatbotrest.TriageStatus.CANCELLED
+        newstatus.comment = "Cancelled"
     elif command == "m":
         newstatus.status = swatbotrest.TriageStatus.MAIL_SENT
     elif command == "i" and utils.MAILNAME:
