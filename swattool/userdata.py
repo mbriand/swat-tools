@@ -57,7 +57,6 @@ class Triage:
 
     def format_description(self) -> str:
         """Get info on one given Triage in a pretty way."""
-        abints = Bugzilla.get_abints()
         statusfrags = []
 
         statusname = self.status.name.title()
@@ -65,8 +64,8 @@ class Triage:
 
         if self.status == swatbotrest.TriageStatus.BUG:
             bugid = int(self.comment)
-            if bugid in abints:
-                bugtitle = abints[bugid]
+            bugtitle = Bugzilla.get_bug_title(bugid)
+            if bugtitle:
                 statusfrags.append(f", {bugtitle}")
 
         bzcomment = self.extra.get('bugzilla-comment')
