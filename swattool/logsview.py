@@ -200,6 +200,37 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
     return highlight_lines
 
 
+_cached_log_highlights: dict[tuple[swatbuild.Failure, str],
+                             dict[int, _Highlight]] = {}
+
+
+def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
+                               loglines: list[str]
+                               ) -> dict[int, _Highlight]:
+    highlights = _cached_log_highlights.get((failure, logname), None)
+    if highlights:
+        return highlights
+
+    highlights = _get_log_highlights(loglines, failure)
+    _cached_log_highlights[(failure, logname)] = highlights
+    return highlights
+
+
+def get_log_highlights(failure: swatbuild.Failure, logname: str
+                       ) -> list[str]:
+    """Get log highlights for a given log file."""
+    logdata = _load_log(failure, logname)
+    if not logdata:
+        return []
+
+    loglines = logdata.splitlines()
+
+    highlights = _get_cached_log_highlights(failure, logname, loglines)
+
+    return [loglines[line - 1] for line in highlights
+            if highlights[line].in_menu]
+
+
 def _show_log(loglines: list[str], selected_line: Optional[int],
               highlight_lines: dict[int, _Highlight],
               preview_height: Optional[int], preview_width: Optional[int]):
@@ -248,7 +279,7 @@ def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
 
     utils.clear()
     loglines = logdata.splitlines()
-    highlights = _get_log_highlights(loglines, failure)
+    highlights = _get_cached_log_highlights(failure, logname, loglines)
 
     entries = ["View entire log file|",
                "View entire log file in default editor|",

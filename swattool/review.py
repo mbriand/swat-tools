@@ -3,7 +3,9 @@
 """Swatbot review functions."""
 
 import logging
+import shutil
 import sys
+import textwrap
 from typing import Any, Optional
 
 import click
@@ -262,6 +264,27 @@ def review_menu(builds: list[swatbuild.Build],
     return (new_entry, need_refresh)
 
 
+def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo):
+    # Reserve chars for spacing.
+    reserved = 8
+    termwidth = shutil.get_terminal_size((80, 20)).columns
+    width = termwidth - reserved
+    maxhighlights = 5
+
+    print(build.format_description(userinfo, width))
+    print()
+
+    failure = build.get_first_failure()
+    highlights = logsview.get_log_highlights(failure, "stdio")
+    wrapped_highlights = [textwrap.indent(line, " " * 4)
+                          for highlight in highlights[:maxhighlights]
+                          for line in textwrap.wrap(highlight, width)
+                          ]
+    print("Key log infos:")
+    print("\n".join(wrapped_highlights))
+    print()
+
+
 def review_failures(builds: list[swatbuild.Build],
                     userinfos: userdata.UserInfos,
                     open_autobuilder_url: bool,
@@ -285,16 +308,10 @@ def review_failures(builds: list[swatbuild.Build],
                 if open_swatbot_url:
                     click.launch(build.swat_url)
                 if open_stdio_url:
-                    if build.test in ["a-full", "a-quick"]:
-                        # TODO: can we do anything better here ?
-                        logger.warning("Test is %s, "
-                                       "fail log might be the log of a child",
-                                       build.test)
                     build.get_first_failure().open_log_url()
 
             if show_infos:
-                print(build.format_description(userinfo))
-                print()
+                _show_infos(build, userinfo)
                 show_infos = False
 
             prev_entry = entry

@@ -5,7 +5,6 @@
 import enum
 import json
 import logging
-import shutil
 from datetime import datetime
 from typing import Any, Iterable, Optional
 
@@ -250,7 +249,8 @@ class Build:
 
         return tuple(get_field(k) for k in keys)
 
-    def format_description(self, userinfo: userdata.UserInfo) -> str:
+    def format_description(self, userinfo: userdata.UserInfo,
+                           maxwidth: int) -> str:
         """Get info on one given failure in a pretty way."""
         def format_field(field):
             if field == Field.STATUS:
@@ -289,12 +289,7 @@ class Build:
         desc = tabulate.tabulate(table, tablefmt="plain")
 
         if userinfo.notes:
-            # Reserve chars for spacing.
-            reserved = 8
-            termwidth = shutil.get_terminal_size((80, 20)).columns
-            width = termwidth - reserved
-
-            wrapped = userinfo.get_wrapped_notes(width, " " * 4)
+            wrapped = userinfo.get_wrapped_notes(maxwidth, " " * 4)
             desc += f"\n\n{Field.USER_NOTES}:\n{wrapped}"
 
         return desc
