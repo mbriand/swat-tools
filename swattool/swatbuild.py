@@ -234,17 +234,18 @@ class Build:
         if not userinfos:
             userinfos = {}
 
+        userinfo = userinfos.get(self.id)
+
         def get_field(field):
             if field == Field.FAILURES:
                 return sorted(fail['stepname']
                               for fail in self.failures.values())
             if field == Field.USER_STATUS:
-                triage = userinfos[self.id].triages
-                if triage:
-                    return triage[0]['status']
+                if userinfo and userinfo.triages:
+                    return userinfo.triages[0]['status']
                 return swatbotrest.TriageStatus.PENDING
             if field == Field.USER_NOTES:
-                return "\n".join(userinfos[self.id].notes)
+                return "\n".join(userinfo.notes) if userinfo else ""
             return self.get(field)
 
         return tuple(get_field(k) for k in keys)
