@@ -98,10 +98,13 @@ def _list_failures_menu(builds: list[swatbuild.Build],
                         userinfos: userdata.UserInfos,
                         entry: int) -> int:
     """Allow the user to select the failure to review in a menu."""
+    termsize = shutil.get_terminal_size((80, 20))
+    width = termsize.columns - 2  # Borders
+
     def preview_failure(fstr):
         fnum = int(fstr.split()[0])
         build = [b for (i, b) in enumerate(builds) if b.id == fnum][0]
-        return build.format_description(userinfos[fnum])
+        return build.format_description(userinfos[fnum], width)
 
     shown_fields = [
         swatbuild.Field.BUILD,
