@@ -37,7 +37,6 @@ class Bugzilla:
                                "NOTABUG",
                                "ReportedUpstream",
                                "WONTFIX",
-                               "DUPLICATE",
                                "WORKSFORME",
                                "MOVED",
                                ],
