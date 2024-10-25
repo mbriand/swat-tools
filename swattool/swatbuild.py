@@ -239,6 +239,8 @@ class Build:
             if field == Field.FAILURES:
                 return sorted(fail['stepname']
                               for fail in self.failures.values())
+            if field == Field.OWNER:
+                return str(self.owner)
             if field == Field.USER_STATUS:
                 if userinfo and userinfo.triages:
                     return userinfo.triages[0]['status']
