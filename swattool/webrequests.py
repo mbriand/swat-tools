@@ -50,23 +50,33 @@ class Session:
 
     def invalidate_cache(self, url: str):
         """Invalidate cache for a given URL."""
-        self._get_cache_file(url).unlink(missing_ok=True)
+        for file in self._get_cache_file_candidates(url):
+            file.unlink(missing_ok=True)
 
-    def _get_cache_file(self, url: str) -> pathlib.Path:
+    def _get_cache_file_candidates(self, url: str) -> list[pathlib.Path]:
         filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
 
         if len(filestem) > 100:
             hashname = hashlib.sha256(filestem.encode(), usedforsecurity=False)
             filestem = hashname.hexdigest()
 
-        return utils.CACHEDIR / f"{filestem}.json"
+        candidates = [
+            utils.CACHEDIR / filestem,
+
+            # For compatibility with old cache files
+            utils.CACHEDIR / f"{filestem}.json",
+        ]
+
+        return candidates
 
     def get(self, url: str, max_cache_age: int = -1) -> str:
         """Do a GET request."""
-        cachefile = self._get_cache_file(url)
-        cachefile.parent.mkdir(parents=True, exist_ok=True)
+        cache_candidates = self._get_cache_file_candidates(url)
+        cache_new_file = cache_candidates[0]
+        cache_new_file.parent.mkdir(parents=True, exist_ok=True)
 
-        if cachefile.exists():
+        cache_olds = [file for file in cache_candidates if file.exists()]
+        for cachefile in cache_olds:
             if max_cache_age < 0:
                 use_cache = True
             else:
@@ -74,14 +84,16 @@ class Session:
                 use_cache = age < max_cache_age
 
             if use_cache:
-                logger.debug("Loading cache file for %s", url)
+                logger.debug("Loading cache file for %s: %s", url, cachefile)
                 with cachefile.open('r') as file:
                     return file.read(-1)
+            else:
+                cachefile.unlink()
 
-        logger.debug("Fetching %s, cache file will be %s", url, cachefile)
+        logger.debug("Fetching %s, cache file will be %s", url, cache_new_file)
         req = self.session.get(url)
         req.raise_for_status()
-        with cachefile.open('w') as file:
+        with cache_new_file.open('w') as file:
             file.write(req.text)
 
         return req.text
