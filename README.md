@@ -3,7 +3,7 @@ https://swatbot.yoctoproject.org .
 
 # Install
 
-`pip install git+https://github.com/mbriand/swat-tools.git/`
+`pip install git+https://git.yoctoproject.org/git/swat-tools`
 
 # Usage
 
@@ -43,7 +43,7 @@ $ swattool show-pending-failures --owner-filter none --sort test
 Review failures waiting for triage.
 
 All modifications are done locally, nothing is pushed to swatbot or bugzilla,
-until you use the `publish-new-reviews` commane.
+until you use the `publish-new-reviews` command.
 
 E.g.:
 
