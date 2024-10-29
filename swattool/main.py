@@ -64,12 +64,28 @@ def parse_filters(kwargs) -> dict[str, Any]:
 
 @click.group()
 @click.option('-v', '--verbose', count=True, help="Increase verbosity")
-def main(verbose: int):
+def maingroup(verbose: int):
     """Handle triage of Yocto autobuilder failures."""
     utils.setup_logging(verbose)
 
 
-@main.command()
+def main():
+    """Handle triage of Yocto autobuilder failures."""
+    try:
+        maingroup()  # pylint: disable=no-value-for-parameter
+    except utils.LoginRequiredException as e:
+        if e.service == "swatbot":
+            logger.warning("Login required to swatbot server")
+            user = click.prompt('swatbot user')
+            password = click.prompt('swatbot password', hide_input=True)
+            success = swatbotrest.login(user, password)
+            if success:
+                maingroup()  # pylint: disable=no-value-for-parameter
+        else:
+            raise
+
+
+@maingroup.command()
 @click.option('--user', '-u', prompt=True)
 @click.option('--password', '-p', prompt=True, hide_input=True)
 def login(user: str, password: str):
@@ -145,7 +161,7 @@ def _format_pending_failures(builds: list[swatbuild.Build],
     return (table, headers)
 
 
-@main.command()
+@maingroup.command()
 @_add_options(failures_list_options)
 @click.option('--open-url', '-u', is_flag=True,
               help="Open the autobuilder url in web browser")
@@ -194,7 +210,7 @@ def show_pending_failures(refresh: str, open_url: str,
                       if b.status == swatbuild.Status.CANCELLED]))
 
 
-@main.command()
+@maingroup.command()
 @_add_options(failures_list_options)
 @click.option('--open-autobuilder-url', '-u', is_flag=True,
               help="Open the autobuilder url in web browser")
@@ -235,7 +251,7 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
     userinfos.save()
 
 
-@main.command()
+@maingroup.command()
 @click.option('--dry-run', '-n', is_flag=True,
               help="Only shows what would be done")
 def publish_new_reviews(dry_run: bool):

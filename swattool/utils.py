@@ -60,6 +60,15 @@ class SwattoolException(Exception):
     """A generic swattool error."""
 
 
+class LoginRequiredException(SwattoolException):
+    """An exception for operations requiring login."""
+
+    def __init__(self, message, service):
+        super().__init__(message)
+
+        self.service = service
+
+
 class _LogFormatter(logging.Formatter):
     colors = {
         logging.DEBUG: Color.WHITE,

@@ -100,7 +100,7 @@ def _get_csrftoken() -> str:
     return Session().session.cookies['csrftoken']
 
 
-def login(user: str, password: str):
+def login(user: str, password: str) -> bool:
     """Login to the swatbot Django interface."""
     session = Session()
 
@@ -120,10 +120,12 @@ def login(user: str, password: str):
             raise error
     else:
         logger.warning("Unexpected reply, login probably failed")
-        return
+        return False
 
     session.save_cookies()
     logger.info("Logging success")
+
+    return True
 
 
 def _get_json(path: str, max_cache_age: int = -1):
@@ -133,7 +135,8 @@ def _get_json(path: str, max_cache_age: int = -1):
     except json.decoder.JSONDecodeError as err:
         Session().invalidate_cache(f"{REST_BASE_URL}{path}")
         if "Please login to see this page." in data:
-            raise utils.SwattoolException("Not logged in swatbot") from err
+            raise utils.LoginRequiredException("Not logged in swatbot",
+                                               "swatbot") from err
         raise utils.SwattoolException("Failed to parse server reply") from err
     return json_data
 
