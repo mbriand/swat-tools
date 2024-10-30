@@ -11,10 +11,11 @@ from typing import Any, Optional
 import click
 from simple_term_menu import TerminalMenu  # type: ignore
 
+from .bugzilla import Bugzilla
 from . import logsview
 from . import swatbotrest
 from . import swatbuild
-from .bugzilla import Bugzilla
+from . import triagehistory
 from . import utils
 from . import userdata
 
@@ -283,7 +284,70 @@ def review_menu(builds: list[swatbuild.Build],
     return (new_entry, need_refresh)
 
 
-def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo):
+def _show_similar_debug(build: swatbuild.Build,
+                        similars: list[triagehistory.SimilarTriage]):
+    failure = build.get_first_failure()
+    fingerprint = logsview.get_log_fingerprint(failure, 'stdio')
+    fingerprintstr = "\n".join(fingerprint)
+    print(f"Fingerprint:\n{fingerprintstr}")
+    for similar in similars:
+        print()
+        print(f"Similar to {similar.buildid}, "
+              f"triaged as {similar.triage}: {similar.triagenotes} "
+              f"(score: {similar.score})")
+        print("\n".join(similar.log_fingerprint[:10]))
+
+
+def _show_suggested_triage(build: swatbuild.Build,
+                           history: triagehistory.TriageHistory,
+                           width: int) -> None:
+    similars = history.get_similar_triages(build, timeout_s=1)
+    if not similars:
+        return
+    # _show_similar_debug(build, similars)
+
+    # Filter out entries with low score or with score way lower than the best
+    # match.
+    low_score = 0.7
+    minscore = max(low_score, similars[0].score ** 2)
+    similars = [s for s in similars if s.score >= minscore]
+
+    simtriage: dict[tuple[Optional[swatbotrest.TriageStatus], Optional[str]],
+                    float
+                    ] = {}
+    for similar in similars:
+        key = (similar.triage, similar.triagenotes)
+        # Magic sort: favor repeated entries, but also favor highest scores.
+        simtriage[key] = simtriage.get(key, 0) \
+            + similar.score ** 2 / len(similars)
+
+    def format_suggestion(triage, triagenotes, score):
+        if triage == swatbotrest.TriageStatus.BUG:
+            bugid = Bugzilla.get_bug_id_from_url(triagenotes)
+            if bugid:
+                bugtitle = Bugzilla.get_bug_title(bugid)
+                if bugtitle:
+                    triagenotes = f"{bugid} {bugtitle}"
+                else:
+                    triagenotes = str(bugid)
+        return f"{triage}: {triagenotes} (score: {score:.2f})"
+
+    sorted_similars = sorted(simtriage.items(), key=lambda e: e[1],
+                             reverse=True)
+    if simtriage:
+        sugtriage = [format_suggestion(triage, triagenotes, score)
+                     for (triage, triagenotes), score in sorted_similars]
+        wrapped_sugtriage = [textwrap.indent(line, " " * 4)
+                             for triage in sugtriage
+                             for line in textwrap.wrap(triage, width)
+                             ]
+        print("Suggested triage:")
+        print("\n".join(wrapped_sugtriage))
+        print()
+
+
+def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
+                history: triagehistory.TriageHistory):
     # Reserve chars for spacing.
     reserved = 8
     termwidth = shutil.get_terminal_size((80, 20)).columns
@@ -303,9 +367,12 @@ def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo):
     print("\n".join(wrapped_highlights))
     print()
 
+    _show_suggested_triage(build, history, width)
+
 
 def review_failures(builds: list[swatbuild.Build],
                     userinfos: userdata.UserInfos,
+                    history: triagehistory.TriageHistory,
                     urlopens: set[str]):
     """Allow a user to interactively triage a list of failures."""
     utils.clear()
@@ -323,7 +390,7 @@ def review_failures(builds: list[swatbuild.Build],
                 build.open_urls(urlopens)
 
             if show_infos:
-                _show_infos(build, userinfo)
+                _show_infos(build, userinfo, history)
                 show_infos = False
 
             prev_entry = entry

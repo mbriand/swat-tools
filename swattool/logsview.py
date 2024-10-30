@@ -231,6 +231,33 @@ def get_log_highlights(failure: swatbuild.Failure, logname: str
             if highlights[line].in_menu]
 
 
+def get_log_fingerprint(failure: swatbuild.Failure, logname: str) -> list[str]:
+    """Get a finger print of the log, allowing to compare it with others."""
+    # Today we use log highlights with some context lines, we might to things
+    # different later.
+    logdata = _load_log(failure, logname)
+    if not logdata:
+        return []
+
+    loglines = logdata.splitlines()
+
+    highlights = _get_cached_log_highlights(failure, logname, loglines)
+    highlight_lines = [line - 1 for line in highlights
+                       if highlights[line].in_menu]
+    context = 0
+
+    def get_line_with_context(lineno):
+        lines = [loglines[line]
+                 for line in range(lineno - context, lineno + context + 1)
+                 if 0 < line < len(loglines)]
+        return "\n".join(lines)
+
+    # Limit finger print to the 100 first highlights. This is way above the
+    # number of hilights for most log files but allow to handle rare cases with
+    # thousands of matches.
+    return [get_line_with_context(line) for line in highlight_lines[:100]]
+
+
 def _show_log(loglines: list[str], selected_line: Optional[int],
               highlight_lines: dict[int, _Highlight],
               preview_height: Optional[int], preview_width: Optional[int]):

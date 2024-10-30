@@ -166,6 +166,7 @@ class Build:
 
         self.failures = {fid: Failure(fid, fdata, self)
                          for fid, fdata in failures.items()}
+        self.similar_triages_cache = None
 
     def _test_match_filters(self, filters: dict[str, Any]) -> bool:
         matches = [True for r in filters['test'] if r.match(self.test)]

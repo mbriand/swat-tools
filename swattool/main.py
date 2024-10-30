@@ -3,8 +3,10 @@
 
 """A tool helping triage of Yocto autobuilder failures."""
 
+import concurrent.futures
 import logging
 import re
+import sys
 import textwrap
 from typing import Any, Collection
 
@@ -16,6 +18,7 @@ from . import review
 from . import swatbot
 from . import swatbotrest
 from . import swatbuild
+from . import triagehistory
 from . import userdata
 from . import utils
 from .webrequests import Session
@@ -256,6 +259,18 @@ def show_pending_failures(refresh: str, limit: int, sort: list[str],
     _show_failures(refresh, urlopens, limit, sort, filters)
 
 
+def _show_history_info(ctx: click.Context,
+                       history: triagehistory.TriageHistory):
+    logging.info("Found %s entries in triage history", len(history))
+    if len(history) < 100:
+        cmd = ctx.parent.command_path if ctx.parent else sys.argv[0]
+        histcmd = f'{cmd} generate-triage-history ' \
+            '-A $(date -I -d "last month")'
+        logging.warning("Very few entries found in triage history\n"
+                        'You can create a triage history file with "%s"',
+                        histcmd)
+
+
 @maingroup.command()
 @_add_options(failures_list_options)
 @_add_options(url_open_options)
@@ -263,7 +278,8 @@ def show_pending_failures(refresh: str, limit: int, sort: list[str],
               type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
                                 case_sensitive=False),
               help="Only show some triage statuses")
-def review_pending_failures(refresh: str,
+@click.pass_context
+def review_pending_failures(ctx: click.Context, refresh: str,
                             limit: int, sort: list[str],
                             **kwargs):
     """Review failures waiting for triage."""
@@ -280,17 +296,31 @@ def review_pending_failures(refresh: str,
     if not builds:
         return
 
-    logger.info("Downloading logs...")
-    with click.progressbar(builds) as builds_progress:
-        for build in builds_progress:
-            logurl = build.get_first_failure().get_log_raw_url()
-            if logurl:
-                Session().get(logurl)
+    history = triagehistory.TriageHistory()
+    history.load()
+    _show_history_info(ctx, history)
 
-    # Make sure abints are up-to-date.
-    Bugzilla.get_abints()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        logger.info("Starting log download and "
+                    "triage suggestions computation...")
+        firstbuild_fut = None
+        for build in builds:
+            fut = executor.submit(history.compute_similar_triages, build,
+                                  timeout_s=10)
+            if not firstbuild_fut:
+                firstbuild_fut = fut
 
-    review.review_failures(builds, userinfos, urlopens)
+        # Make sure abints are up-to-date.
+        Bugzilla.get_abints()
+
+        # Wait until the triage suggestion for first build is computed, as it
+        # will be shown when starting review
+        logger.info("Waiting until first entry is ready for review...")
+        if firstbuild_fut:
+            concurrent.futures.wait([firstbuild_fut])
+
+        review.review_failures(builds, userinfos, history, urlopens)
+        executor.shutdown(cancel_futures=True)
 
     userinfos.save()
 
@@ -329,3 +359,37 @@ def publish_new_reviews(dry_run: bool):
 
     if not dry_run:
         swatbotrest.invalidate_stepfailures_cache()
+
+
+@maingroup.command()
+@_add_options(failures_list_options)
+@click.option('--triage-filter', multiple=True,
+              type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
+                                case_sensitive=False),
+              help="Only show some triage statuses")
+def generate_triage_history(refresh: str, limit: int, sort: list[str],
+                            **kwargs):
+    """Generate triage history from old triages."""
+    filters = parse_filters(kwargs)
+    filters['triage'] = [s for s in swatbotrest.TriageStatus
+                         if s != swatbotrest.TriageStatus.PENDING]
+
+    swatbotrest.RefreshManager().set_policy_by_name(refresh)
+
+    builds, _ = swatbot.get_failure_infos(limit=limit, sort=sort,
+                                          filters=filters)
+
+    logger.info("Downloading logs...")
+    with click.progressbar(builds) as builds_progress:
+        for build in builds_progress:
+            logurl = build.get_first_failure().get_log_raw_url()
+            if logurl:
+                Session().get(logurl)
+
+    logger.info("Generating triage history...")
+    history = triagehistory.TriageHistory()
+    with click.progressbar(builds) as builds_progress:
+        for build in builds_progress:
+            history.add_build(build)
+
+    history.save()
