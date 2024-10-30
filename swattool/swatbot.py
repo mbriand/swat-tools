@@ -21,16 +21,25 @@ def get_failure_infos(limit: int, sort: Collection[str],
     userinfos = userdata.UserInfos()
 
     logger.info("Loading build failures...")
-    pending_failures = swatbotrest.get_pending_failures()
+    failures = swatbotrest.get_failures()
 
     # Generate a list of all pending failures, fetching details from the remote
     # server as needed.
     logger.info("Loading build failures details...")
     infos = []
-    limited_pending_ids = sorted(pending_failures.keys(), reverse=True)[:limit]
+    limited_pending_ids = sorted(failures.keys(), reverse=True)[:limit]
     with click.progressbar(limited_pending_ids) as pending_ids_progress:
         for buildid in pending_ids_progress:
-            build = swatbuild.Build(buildid, pending_failures[buildid])
+            # Filter on status now, limiting the size of data we will have to
+            # download from the server.
+            if filters['triage']:
+                triages = {f['attributes']['triage']
+                           for f in failures[buildid].values()}
+
+                if triages.isdisjoint(filters['triage']):
+                    continue
+
+            build = swatbuild.Build(buildid, failures[buildid])
 
             if build.match_filters(filters, userinfos[build.id]):
                 infos.append(build)

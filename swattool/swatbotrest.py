@@ -88,6 +88,9 @@ class TriageStatus(enum.IntEnum):
         """Get TriageStatus instance from its name as a string."""
         return TriageStatus[status.upper()]
 
+    def __str__(self):
+        return self.name.title()
+
     PENDING = 0
     MAIL_SENT = 1
     BUG = 2
@@ -166,7 +169,7 @@ def invalidate_stepfailures_cache():
 def get_stepfailures(refresh_override: Optional[RefreshPolicy] = None):
     """Get info on all failures."""
     maxage = RefreshManager().get_refresh_max_age(refresh_override,
-                                                     failures=True)
+                                                  failures=True)
     return _get_json("/stepfailure/", maxage)['data']
 
 
@@ -177,17 +180,16 @@ def get_stepfailure(failureid: int,
     return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 
-def get_pending_failures() -> dict[int, dict[int, dict]]:
-    """Get all pending failures on swatbot server."""
+def get_failures() -> dict[int, dict[int, dict]]:
+    """Get all failures on swatbot server."""
     failures = get_stepfailures()
-    pending_ids: dict[int, dict[int, dict]] = {}
+    ids: dict[int, dict[int, dict]] = {}
     for failure_data in failures:
-        if failure_data['attributes']['triage'] == 0:
-            buildid = int(failure_data['relationships']['build']['data']['id'])
-            failureid = int(failure_data['id'])
-            pending_ids.setdefault(buildid, {})[failureid] = failure_data
+        buildid = int(failure_data['relationships']['build']['data']['id'])
+        failureid = int(failure_data['id'])
+        ids.setdefault(buildid, {})[failureid] = failure_data
 
-    return pending_ids
+    return ids
 
 
 def publish_status(failureid: int,

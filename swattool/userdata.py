@@ -53,7 +53,7 @@ class Triage:
                 }
 
     def __str__(self):
-        return f"{self.status.name.title()}: {self.comment}"
+        return f"{str(self.status)}: {self.comment}"
 
     def format_description(self) -> str:
         """Get info on one given Triage in a pretty way."""

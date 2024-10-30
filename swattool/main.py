@@ -6,7 +6,7 @@
 import logging
 import re
 import textwrap
-from typing import Any
+from typing import Any, Collection
 
 import click
 import tabulate
@@ -42,6 +42,8 @@ def parse_filters(kwargs) -> dict[str, Any]:
     ignoretests = [re.compile(f"^{f}$") for f in kwargs['ignore_test_filter']]
     owners = [None if str(f).lower() == "none" else f
               for f in kwargs['owner_filter']]
+    triages = [swatbotrest.TriageStatus.from_str(s)
+               for s in kwargs.get('triage_filter', [])]
 
     completed_after = completed_before = None
     if kwargs['completed_after']:
@@ -58,6 +60,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
                'completed-before': completed_before,
                'with-notes': kwargs['with_notes'],
                'with-new-status': kwargs['with_new_status'],
+               'triage': triages,
                }
     return filters
 
@@ -95,7 +98,7 @@ def login(user: str, password: str):
 
 failures_list_options = [
     click.option('--limit', '-l', type=click.INT, default=None,
-                 help="Only parse the n last failures waiting for triage"),
+                 help="Only parse the n last failures"),
     click.option('--sort', '-s', multiple=True, default=["Build"],
                  type=click.Choice([str(f) for f in swatbuild.Field],
                                    case_sensitive=False),
@@ -145,6 +148,8 @@ def _format_pending_failures(builds: list[swatbuild.Build],
             return build.get(swatbuild.Field.STATUS).as_short_colored_str()
         if field == swatbuild.Field.FAILURES:
             return "\n".join([f.stepname for f in build.get(field).values()])
+        if field == swatbuild.Field.TRIAGE:
+            return "\n".join([str(f.triage) for f in build.failures.values()])
         if field == swatbuild.Field.USER_STATUS:
             statuses = [str(triage) for fail in build.failures.values()
                         if (triage := userinfo.get_failure_triage(fail.id))]
@@ -161,17 +166,11 @@ def _format_pending_failures(builds: list[swatbuild.Build],
     return (table, headers)
 
 
-@maingroup.command()
-@_add_options(failures_list_options)
-@click.option('--open-url', '-u', is_flag=True,
-              help="Open the autobuilder url in web browser")
-def show_pending_failures(refresh: str, open_url: str,
-                          limit: int, sort: list[str],
-                          **kwargs):
+def _show_failures(refresh: str, open_url: str, limit: int,
+                   sort: Collection[str], filters: dict[str, Any]):
     """Show all failures waiting for triage."""
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
-    filters = parse_filters(kwargs)
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
                                                   filters=filters)
 
@@ -184,14 +183,15 @@ def show_pending_failures(refresh: str, open_url: str,
 
     shown_fields_all = [
         swatbuild.Field.BUILD,
-        swatbuild.Field.STATUS if len(kwargs['status_filter']) != 1 else None,
+        swatbuild.Field.STATUS if len(filters['status']) != 1 else None,
         swatbuild.Field.TEST if len({build.test
                                      for build in builds}) != 1 else None,
-        swatbuild.Field.OWNER if len(kwargs['owner_filter']) != 1 else None,
+        swatbuild.Field.OWNER if len(filters['owner']) != 1 else None,
         swatbuild.Field.WORKER,
         swatbuild.Field.COMPLETED,
         swatbuild.Field.SWAT_URL,
         swatbuild.Field.FAILURES,
+        swatbuild.Field.TRIAGE if len(filters['triage']) != 1 else None,
         swatbuild.Field.USER_STATUS if has_user_status else None,
         swatbuild.Field.USER_NOTES if has_notes else None,
     ]
@@ -212,6 +212,34 @@ def show_pending_failures(refresh: str, open_url: str,
 
 @maingroup.command()
 @_add_options(failures_list_options)
+@click.option('--open-url', '-u', is_flag=True,
+              help="Open the autobuilder url in web browser")
+@click.option('--triage-filter', multiple=True,
+              type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
+                                case_sensitive=False),
+              help="Only show some triage statuses")
+def show_failures(refresh: str, open_url: str, limit: int, sort: list[str],
+                  **kwargs):
+    """Show all failures, including the old ones."""
+    filters = parse_filters(kwargs)
+    _show_failures(refresh, open_url, limit, sort, filters)
+
+
+@maingroup.command()
+@_add_options(failures_list_options)
+@click.option('--open-url', '-u', is_flag=True,
+              help="Open the autobuilder url in web browser")
+def show_pending_failures(refresh: str, open_url: str,
+                          limit: int, sort: list[str],
+                          **kwargs):
+    """Show all failures waiting for triage."""
+    filters = parse_filters(kwargs)
+    filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    _show_failures(refresh, open_url, limit, sort, filters)
+
+
+@maingroup.command()
+@_add_options(failures_list_options)
 @click.option('--open-autobuilder-url', '-u', is_flag=True,
               help="Open the autobuilder url in web browser")
 @click.option('--open-swatbot-url', '-w', is_flag=True,
@@ -228,6 +256,7 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
     filters = parse_filters(kwargs)
+    filters['triage'] = [swatbotrest.TriageStatus.PENDING]
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
                                                   filters=filters)
 

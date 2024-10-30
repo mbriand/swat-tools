@@ -71,7 +71,8 @@ class Field(enum.StrEnum):
     FAILURES = 'Failures'
     BRANCH = 'Branch'
     USER_NOTES = 'Notes'
-    USER_STATUS = 'Triage'
+    USER_STATUS = 'New Triage'
+    TRIAGE = 'Triage'
 
 
 class Failure:
@@ -84,6 +85,8 @@ class Failure:
         self.stepname = failure_data['attributes']['stepname']
         self.urls = {u.split()[0].rsplit('/')[-1]: u
                      for u in failure_data['attributes']['urls'].split()}
+        triage = failure_data['attributes']['triage']
+        self.triage = swatbotrest.TriageStatus(triage)
 
     def get_log_url(self, logname: str = "stdio") -> Optional[str]:
         """Get the URL of a given log webpage."""
@@ -127,7 +130,7 @@ class Build:
     # pylint: disable=too-many-instance-attributes
 
     def __init__(self, buildid: int,
-                 pending_failures: dict[int, dict]):
+                 failures: dict[int, dict]):
         build = swatbotrest.get_build(buildid)
         attributes = build['attributes']
         relationships = build['relationships']
@@ -147,7 +150,7 @@ class Build:
         self.branch = collection['attributes']['branch']
 
         self.failures = {fid: Failure(fid, fdata, self)
-                         for fid, fdata in pending_failures.items()}
+                         for fid, fdata in failures.items()}
 
     def _test_match_filters(self, filters: dict[str, Any]) -> bool:
         matches = [True for r in filters['test'] if r.match(self.test)]
@@ -188,6 +191,14 @@ class Build:
 
         return True
 
+    def _triage_match_filters(self, filters: dict[str, Any]) -> bool:
+        if filters['triage']:
+            triages = {f.triage for f in self.failures.values()}
+            if triages.isdisjoint(filters['triage']):
+                return False
+
+        return True
+
     def match_filters(self, filters: dict[str, Any],
                       userinfo: userdata.UserInfo
                       ) -> bool:
@@ -208,6 +219,9 @@ class Build:
             return False
 
         if not self._userinfo_match_filters(filters, userinfo):
+            return False
+
+        if not self._triage_match_filters(filters):
             return False
 
         return True
@@ -236,11 +250,14 @@ class Build:
         userinfo = userinfos.get(self.id)
 
         def get_field(field):
+            # pylint: disable=too-many-return-statements
             if field == Field.FAILURES:
                 return sorted(fail['stepname']
                               for fail in self.failures.values())
             if field == Field.OWNER:
                 return str(self.owner)
+            if field == Field.TRIAGE:
+                return str(self.get_first_failure().triage)
             if field == Field.USER_STATUS:
                 if userinfo and userinfo.triages:
                     return userinfo.triages[0]['status']
