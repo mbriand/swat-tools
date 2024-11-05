@@ -26,14 +26,25 @@ def _prompt_bug_infos(build: swatbuild.Build,
     """Create new status of type BUG for a given failure."""
     if is_abint:
         abints = Bugzilla.get_abints()
-        abint_list = [f"{k} {v}" for (k, v) in abints.items()]
+        abrefresh = "Refresh AB-INT list from server"
 
-        abint_menu = TerminalMenu(abint_list, title="Bug", search_key=None,
-                                  raise_error_on_interrupt=True)
-        abint_index = abint_menu.show()
+        while True:
+            abint_list = [
+                abrefresh,
+                *[f"{k} {v}" for (k, v) in abints.items()],
+            ]
 
-        if not abint_index:
-            return None
+            abint_menu = TerminalMenu(abint_list, title="Bug", search_key=None,
+                                      raise_error_on_interrupt=True)
+            abint_index = abint_menu.show()
+
+            if abint_index is None:
+                return None
+
+            if abint_list[abint_index] == abrefresh:
+                abints = Bugzilla.get_abints(force_refresh=True)
+            else:
+                break
         bugnum, _, _ = abint_list[abint_index].partition(' ')
     else:
         while True:

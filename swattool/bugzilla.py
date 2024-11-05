@@ -18,14 +18,14 @@ REST_BASE_URL = f"{BASE_URL}/rest/"
 class Bugzilla:
     """Bugzilla server interaction class."""
 
-    CACHE_TIMEOUT_S = 60 * 10
+    CACHE_TIMEOUT_S = 60 * 60 * 24
 
     known_abints: dict[int, str] = {}
 
     @classmethod
-    def get_abints(cls) -> dict[int, str]:
+    def get_abints(cls, force_refresh: bool = False) -> dict[int, str]:
         """Get a dictionarry of all AB-INT issues currently open."""
-        if not cls.known_abints:
+        if not cls.known_abints or force_refresh:
             logger.info("Loading AB-INT list...")
             params = {
                 'order': 'order=bug_id%20DESC',
@@ -49,7 +49,8 @@ class Bugzilla:
 
             fparams = urllib.parse.urlencode(params, doseq=True)
             req = f"{REST_BASE_URL}bug?{fparams}"
-            data = Session().get(req, cls.CACHE_TIMEOUT_S)
+            cache_timeout = 0 if force_refresh else cls.CACHE_TIMEOUT_S
+            data = Session().get(req, cache_timeout)
 
             cls.known_abints = {bug['id']: bug['summary']
                                 for bug in json.loads(data)['bugs']}
