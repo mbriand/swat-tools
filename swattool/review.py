@@ -85,6 +85,9 @@ def _create_new_status(build: swatbuild.Build, command: str
     elif command == "f":
         newstatus.status = swatbotrest.TriageStatus.OTHER
         newstatus.comment = 'Fixed'
+    elif command == "d":
+        newstatus.status = swatbotrest.TriageStatus.OTHER
+        newstatus.comment = 'Patch dropped'
     elif command == "t":
         newstatus.status = swatbotrest.TriageStatus.NOT_FOR_SWAT
 
@@ -181,7 +184,7 @@ def _handle_edit_command(build: swatbuild.Build, userinfo: userdata.UserInfo,
         userinfo.set_notes(click.edit(userinfo.get_notes(),
                                       require_save=False))
         return (True, True)
-    if command in ["a", "b", "c", "m", "i", "o", "f", "t"]:
+    if command in ["a", "b", "c", "m", "i", "o", "f", "d", "t"]:
         # Set new status
         newstatus = _create_new_status(build, command)
         if newstatus:
@@ -204,6 +207,7 @@ _commands = [
     f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
     "[o] other",
     "[f] other: Fixed",
+    "[d] other: Patch dropped",
     "[t] not for swat",
     "[r] reset status",
     None,
