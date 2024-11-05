@@ -260,7 +260,8 @@ class Build:
                     return str(self.status)
                 return self.status.as_colored_str()
             if field == Field.BRANCH:
-                if self.branch not in ["master", "master-next"]:
+                _, _, branchname = self.branch.rpartition('/')
+                if branchname not in ["master", "master-next"]:
                     return utils.Color.colorize(self.branch,
                                                 utils.Color.YELLOW)
                 return self.branch
