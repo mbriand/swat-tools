@@ -149,7 +149,8 @@ def _format_pending_failures(builds: list[swatbuild.Build],
         if field == swatbuild.Field.FAILURES:
             return "\n".join([f.stepname for f in build.get(field).values()])
         if field == swatbuild.Field.TRIAGE:
-            return "\n".join([str(f.triage) for f in build.failures.values()])
+            return "\n".join([str(f.get_triage_with_notes())
+                              for f in build.failures.values()])
         if field == swatbuild.Field.USER_STATUS:
             statuses = [str(triage) for fail in build.failures.values()
                         if (triage := userinfo.get_failure_triage(fail.id))]

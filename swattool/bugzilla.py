@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://bugzilla.yoctoproject.org"
 REST_BASE_URL = f"{BASE_URL}/rest/"
+ISSUE_URL = f"{BASE_URL}/show_bug.cgi?id="
 
 
 class Bugzilla:
@@ -60,7 +61,17 @@ class Bugzilla:
     @classmethod
     def get_bug_url(cls, bugid: int) -> str:
         """Get the bugzilla URL corresponding to a given issue ID."""
-        return f"{BASE_URL}/show_bug.cgi?id={bugid}"
+        return f"{ISSUE_URL}{bugid}"
+
+    @classmethod
+    def get_bug_id_from_url(cls, bugurl: str) -> Optional[int]:
+        """Get the bugzilla issue ID corresponding to a given URL."""
+        if bugurl.startswith(ISSUE_URL):
+            try:
+                return int(bugurl[len(ISSUE_URL):])
+            except ValueError:
+                pass
+        return None
 
     @classmethod
     def get_bug_title(cls, bugid: int) -> Optional[str]:

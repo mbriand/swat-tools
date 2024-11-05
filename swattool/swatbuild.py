@@ -12,6 +12,7 @@ import click
 import requests
 import tabulate
 
+from . import bugzilla
 from . import swatbotrest
 from . import userdata
 from . import utils
@@ -87,6 +88,7 @@ class Failure:
                      for u in failure_data['attributes']['urls'].split()}
         triage = failure_data['attributes']['triage']
         self.triage = swatbotrest.TriageStatus(triage)
+        self.triagenotes = failure_data['attributes']['triagenotes']
 
     def get_log_url(self, logname: str = "stdio") -> Optional[str]:
         """Get the URL of a given log webpage."""
@@ -122,6 +124,19 @@ class Failure:
 
         logid = info_json_data['logs'][0]['logid']
         return f"{rest_url}/logs/{logid}/raw"
+
+    def get_triage_with_notes(self) -> str:
+        """Get triage desctiption string, including notes."""
+        notes = self.triagenotes
+        if self.triage == swatbotrest.TriageStatus.BUG:
+            bugid = bugzilla.Bugzilla.get_bug_id_from_url(notes)
+            if bugid:
+                notes = str(bugid)
+
+        if notes:
+            return f"{self.triage}: {notes}"
+
+        return str(self.triage)
 
 
 class Build:
@@ -257,7 +272,7 @@ class Build:
             if field == Field.OWNER:
                 return str(self.owner)
             if field == Field.TRIAGE:
-                return str(self.get_first_failure().triage)
+                return self.get_first_failure().get_triage_with_notes()
             if field == Field.USER_STATUS:
                 if userinfo and userinfo.triages:
                     return userinfo.triages[0]['status']
