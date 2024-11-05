@@ -259,6 +259,10 @@ def show_pending_failures(refresh: str, limit: int, sort: list[str],
 @maingroup.command()
 @_add_options(failures_list_options)
 @_add_options(url_open_options)
+@click.option('--triage-filter', multiple=True,
+              type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
+                                case_sensitive=False),
+              help="Only show some triage statuses")
 def review_pending_failures(refresh: str,
                             limit: int, sort: list[str],
                             **kwargs):
@@ -269,7 +273,7 @@ def review_pending_failures(refresh: str,
 
     urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
-    filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    # filters['triage'] = [swatbotrest.TriageStatus.PENDING]
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
                                                   filters=filters)
 
