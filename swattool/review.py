@@ -61,7 +61,8 @@ def _prompt_bug_infos(build: swatbuild.Build,
     print("Please set the comment content")
     logurl = build.get_first_failure().get_log_url()
     if logurl:
-        testinfos = " ".join([build.test, build.worker, build.branch])
+        testinfos = " ".join([build.test, build.worker, build.branch,
+                              f'completed at {build.completed}'])
         bcomment = click.edit("\n".join([testinfos, logurl]),
                               require_save=False)
     else:
