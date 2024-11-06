@@ -306,9 +306,7 @@ def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo):
 
 def review_failures(builds: list[swatbuild.Build],
                     userinfos: userdata.UserInfos,
-                    open_autobuilder_url: bool,
-                    open_swatbot_url: bool,
-                    open_stdio_url: bool):
+                    urlopens: set[str]):
     """Allow a user to interactively triage a list of failures."""
     utils.clear()
 
@@ -322,12 +320,7 @@ def review_failures(builds: list[swatbuild.Build],
             userinfo = userinfos.get(build.id, {})
 
             if prev_entry != entry:
-                if open_autobuilder_url:
-                    click.launch(build.autobuilder_url)
-                if open_swatbot_url:
-                    click.launch(build.swat_url)
-                if open_stdio_url:
-                    build.get_first_failure().open_log_url()
+                build.open_urls(urlopens)
 
             if show_infos:
                 _show_infos(build, userinfo)

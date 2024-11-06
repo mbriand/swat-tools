@@ -65,6 +65,16 @@ def parse_filters(kwargs) -> dict[str, Any]:
     return filters
 
 
+def parse_urlopens(kwargs) -> set[str]:
+    """Parse url open arguments."""
+    opens = set()
+    for urltype in ['autobuilder', 'swatbot', 'stdio']:
+        if kwargs.get(f'open_{urltype}_url'):
+            opens.add(urltype)
+
+    return opens
+
+
 @click.group()
 @click.option('-v', '--verbose', count=True, help="Increase verbosity")
 def maingroup(verbose: int):
@@ -132,6 +142,15 @@ failures_list_options = [
                  help="Only show failures with or without new (local) status"),
 ]
 
+url_open_options = [
+    click.option('--open-autobuilder-url', '-u', is_flag=True,
+                 help="Open the autobuilder url in web browser"),
+    click.option('--open-swatbot-url', '-w', is_flag=True,
+                 help="Open the swatbot url in web browser"),
+    click.option('--open-stdio-url', '-g', is_flag=True,
+                 help="Open the first stdio url in web browser"),
+]
+
 
 def _format_pending_failures(builds: list[swatbuild.Build],
                              userinfos: userdata.UserInfos,
@@ -167,7 +186,7 @@ def _format_pending_failures(builds: list[swatbuild.Build],
     return (table, headers)
 
 
-def _show_failures(refresh: str, open_url: str, limit: int,
+def _show_failures(refresh: str, urlopens: set[str], limit: int,
                    sort: Collection[str], filters: dict[str, Any]):
     """Show all failures waiting for triage."""
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
@@ -175,9 +194,8 @@ def _show_failures(refresh: str, open_url: str, limit: int,
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
                                                   filters=filters)
 
-    if open_url:
-        for build in builds:
-            click.launch(build.autobuilder_url)
+    for build in builds:
+        build.open_urls(urlopens)
 
     has_user_status = any(userinfos[build.id].triages for build in builds)
     has_notes = any(userinfos[build.id].notes for build in builds)
@@ -213,42 +231,35 @@ def _show_failures(refresh: str, open_url: str, limit: int,
 
 @maingroup.command()
 @_add_options(failures_list_options)
-@click.option('--open-url', '-u', is_flag=True,
-              help="Open the autobuilder url in web browser")
+@_add_options(url_open_options)
 @click.option('--triage-filter', multiple=True,
               type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
                                 case_sensitive=False),
               help="Only show some triage statuses")
-def show_failures(refresh: str, open_url: str, limit: int, sort: list[str],
+def show_failures(refresh: str, limit: int, sort: list[str],
                   **kwargs):
     """Show all failures, including the old ones."""
+    urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
-    _show_failures(refresh, open_url, limit, sort, filters)
+    _show_failures(refresh, urlopens, limit, sort, filters)
 
 
 @maingroup.command()
 @_add_options(failures_list_options)
-@click.option('--open-url', '-u', is_flag=True,
-              help="Open the autobuilder url in web browser")
-def show_pending_failures(refresh: str, open_url: str,
-                          limit: int, sort: list[str],
+@_add_options(url_open_options)
+def show_pending_failures(refresh: str, limit: int, sort: list[str],
                           **kwargs):
     """Show all failures waiting for triage."""
+    urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
-    _show_failures(refresh, open_url, limit, sort, filters)
+    _show_failures(refresh, urlopens, limit, sort, filters)
 
 
 @maingroup.command()
 @_add_options(failures_list_options)
-@click.option('--open-autobuilder-url', '-u', is_flag=True,
-              help="Open the autobuilder url in web browser")
-@click.option('--open-swatbot-url', '-w', is_flag=True,
-              help="Open the swatbot url in web browser")
-@click.option('--open-stdio-url', '-g', is_flag=True,
-              help="Open the first stdio url in web browser")
-def review_pending_failures(refresh: str, open_autobuilder_url: bool,
-                            open_swatbot_url: bool, open_stdio_url: bool,
+@_add_options(url_open_options)
+def review_pending_failures(refresh: str,
                             limit: int, sort: list[str],
                             **kwargs):
     """Review failures waiting for triage."""
@@ -256,6 +267,7 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
 
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
+    urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
@@ -274,9 +286,7 @@ def review_pending_failures(refresh: str, open_autobuilder_url: bool,
     # Make sure abints are up-to-date.
     Bugzilla.get_abints()
 
-    review.review_failures(builds, userinfos,
-                           open_autobuilder_url, open_swatbot_url,
-                           open_stdio_url)
+    review.review_failures(builds, userinfos, urlopens)
 
     userinfos.save()
 

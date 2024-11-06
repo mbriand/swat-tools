@@ -339,3 +339,12 @@ class Build:
         """Get the REST API URL prefix for this build."""
         url, _, _ = self.autobuilder_url.partition('/#/builders')
         return f"{url}/api/v2"
+
+    def open_urls(self, urlopens: set[str]) -> None:
+        """Open requested URLs in default browser."""
+        if 'autobuilder' in urlopens:
+            click.launch(self.autobuilder_url)
+        if 'swatbot' in urlopens:
+            click.launch(self.swat_url)
+        if 'stdio' in urlopens:
+            self.get_first_failure().open_log_url()
