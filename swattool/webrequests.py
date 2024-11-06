@@ -8,6 +8,8 @@ import logging
 import pathlib
 import pickle
 import time
+import threading
+import zlib
 from typing import Any, Optional
 
 import requests
@@ -17,6 +19,8 @@ from . import utils
 logger = logging.getLogger(__name__)
 
 COOKIESFILE = utils.DATADIR / 'cookies'
+
+cache_lock = threading.Lock()
 
 
 class Session:
@@ -51,8 +55,9 @@ class Session:
 
     def invalidate_cache(self, url: str):
         """Invalidate cache for a given URL."""
-        for file in self._get_cache_file_candidates(url):
-            file.unlink(missing_ok=True)
+        with cache_lock:
+            for file in self._get_cache_file_candidates(url):
+                file.unlink(missing_ok=True)
 
     def _get_cache_file_candidates(self, url: str) -> list[pathlib.Path]:
         filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
@@ -81,8 +86,12 @@ class Session:
 
         if use_cache:
             if cachefile.suffix == ".gz":
-                with gzip.open(cachefile, mode='r') as gzfile:
-                    return gzfile.read(-1).decode()
+                try:
+                    with gzip.open(cachefile, mode='r') as gzfile:
+                        return gzfile.read(-1).decode()
+                except zlib.error:
+                    logging.warning("Failed to read %s cache file, ignoring",
+                                    cachefile)
             else:
                 with cachefile.open('r') as file:
                     return file.read(-1)
@@ -103,20 +112,23 @@ class Session:
         cache_new_file = cache_candidates[0]
         cache_new_file.parent.mkdir(parents=True, exist_ok=True)
 
-        cache_olds = [file for file in cache_candidates if file.exists()]
-        for cachefile in cache_olds:
-            data = self._try_load_cache(cachefile, max_cache_age)
-            if data:
-                logger.debug("Loaded cache file for %s: %s", url, cachefile)
-                return data
+        with cache_lock:
+            cache_olds = [file for file in cache_candidates if file.exists()]
+            for cachefile in cache_olds:
+                data = self._try_load_cache(cachefile, max_cache_age)
+                if data:
+                    logger.debug("Loaded cache file for %s: %s", url,
+                                 cachefile)
+                    return data
 
-            cachefile.unlink()
+                cachefile.unlink()
 
         logger.debug("Fetching %s, cache file will be %s", url, cache_new_file)
         req = self.session.get(url)
         req.raise_for_status()
 
-        self._create_cache_file(cache_new_file, req.text)
+        with cache_lock:
+            self._create_cache_file(cache_new_file, req.text)
 
         return req.text
 
