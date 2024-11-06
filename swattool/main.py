@@ -21,7 +21,6 @@ from . import swatbuild
 from . import triagehistory
 from . import userdata
 from . import utils
-from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -378,18 +377,22 @@ def generate_triage_history(refresh: str, limit: int, sort: list[str],
 
     builds, _ = swatbot.get_failure_infos(limit=limit, sort=sort,
                                           filters=filters)
-
-    logger.info("Downloading logs...")
-    with click.progressbar(builds) as builds_progress:
-        for build in builds_progress:
-            logurl = build.get_first_failure().get_log_raw_url()
-            if logurl:
-                Session().get(logurl)
+    if not builds:
+        return
 
     logger.info("Generating triage history...")
     history = triagehistory.TriageHistory()
-    with click.progressbar(builds) as builds_progress:
-        for build in builds_progress:
-            history.add_build(build)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        jobs = [executor.submit(history.add_build, build) for build in builds]
+
+        try:
+            complete_iterator = concurrent.futures.as_completed(jobs)
+            with click.progressbar(complete_iterator,
+                                   length=len(jobs)) as jobsprogress:
+                for future in jobsprogress:
+                    future.result()
+        except Exception:
+            executor.shutdown(cancel_futures=True)
+            raise
 
     history.save()
