@@ -244,7 +244,7 @@ def get_log_fingerprint(failure: swatbuild.Failure, logname: str) -> list[str]:
     highlights = _get_cached_log_highlights(failure, logname, loglines)
     highlight_lines = [line - 1 for line in highlights
                        if highlights[line].in_menu]
-    context = 0
+    context = 2
 
     def get_line_with_context(lineno):
         lines = [loglines[line]
