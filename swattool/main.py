@@ -8,6 +8,7 @@ import logging
 import re
 import sys
 import textwrap
+import multiprocessing
 from typing import Any, Collection
 
 import click
@@ -299,15 +300,14 @@ def review_pending_failures(ctx: click.Context, refresh: str,
     history.load()
     _show_history_info(ctx, history)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+    with multiprocessing.Pool(processes=8) as pool:
         logger.info("Starting log download and "
                     "triage suggestions computation...")
-        firstbuild_fut = None
+        jobs = []
         for build in builds:
-            fut = executor.submit(history.compute_similar_triages, build,
-                                  timeout_s=10)
-            if not firstbuild_fut:
-                firstbuild_fut = fut
+            job = history.compute_similar_triages_in_mppool(pool, build,
+                                                            timeout_s=30)
+            jobs.append(job)
 
         # Make sure abints are up-to-date.
         Bugzilla.get_abints()
@@ -315,11 +315,9 @@ def review_pending_failures(ctx: click.Context, refresh: str,
         # Wait until the triage suggestion for first build is computed, as it
         # will be shown when starting review
         logger.info("Waiting until first entry is ready for review...")
-        if firstbuild_fut:
-            concurrent.futures.wait([firstbuild_fut])
+        jobs[0].wait()
 
         review.review_failures(builds, userinfos, history, urlopens)
-        executor.shutdown(cancel_futures=True)
 
     userinfos.save()
 

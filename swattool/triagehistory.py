@@ -3,6 +3,7 @@
 """Swatbot review functions."""
 
 import logging
+import multiprocessing.pool as mppool
 import re
 import time
 from typing import Collection, Optional
@@ -122,10 +123,9 @@ class TriageHistory:
                               for k, entry in self.entries.items()}
             yaml.dump(pretty_entries, file)
 
-    def compute_similar_triages(self, build: swatbuild.Build,
-                                timeout_s: Optional[float] = None
-                                ):
-        """Compute a list of triage entries for builds similar to this one."""
+    def _compute_similar_triages(self, build: swatbuild.Build,
+                                 timeout_s: Optional[float] = None
+                                 ):
         # TODO: save this in some cache file ? Validated by a hash of the
         # history ?
         logging.debug("Starting compute_similar_triages() for %s", build.id)
@@ -146,7 +146,26 @@ class TriageHistory:
 
         sims = sorted(similarity.items(), key=lambda e: e[1],
                       reverse=True)[:count]
-        self.cache[build.id] = sims
+        return sims
+
+    def compute_similar_triages(self, build: swatbuild.Build,
+                                timeout_s: Optional[float] = None
+                                ):
+        """Compute a list of triage entries for builds similar to this one."""
+        self.cache[build.id] = self._compute_similar_triages(build, timeout_s)
+
+    def compute_similar_triages_in_mppool(self,
+                                          pool: mppool.Pool,
+                                          build: swatbuild.Build,
+                                          timeout_s: Optional[float] = None
+                                          ) -> mppool.AsyncResult:
+        """Compute a list of triage entries for builds similar to this one."""
+        def callback(sims):
+            self.cache[build.id] = sims
+
+        job = pool.apply_async(self._compute_similar_triages,
+                               [build], {'timeout_s': timeout_s}, callback)
+        return job
 
     def get_similar_triages(self, build: swatbuild.Build,
                             timeout_s: Optional[float] = None
