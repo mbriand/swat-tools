@@ -121,13 +121,14 @@ class Session:
                                  cachefile)
                     return data
 
-                cachefile.unlink()
-
         logger.debug("Fetching %s, cache file will be %s", url, cache_new_file)
         req = self.session.get(url)
         req.raise_for_status()
 
         with cache_lock:
+            cache_olds = [file for file in cache_candidates if file.exists()]
+            for cachefile in cache_olds:
+                cachefile.unlink()
             self._create_cache_file(cache_new_file, req.text)
 
         return req.text
