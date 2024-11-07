@@ -22,7 +22,11 @@ def get_failure_infos(limit: int, sort: Collection[str],
     userinfos = userdata.UserInfos()
 
     logger.info("Loading build failures...")
-    failures = swatbotrest.get_failures()
+
+    statusfilter = None
+    if len(filters.get('triage', [])) == 1:
+        statusfilter = filters['triage'][0]
+    failures = swatbotrest.get_failures(statusfilter)
 
     # Generate a list of all pending failures, fetching details from the remote
     # server as needed.

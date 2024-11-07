@@ -5,7 +5,8 @@
 import enum
 import json
 import logging
-from typing import Optional
+import urllib
+from typing import Any, Optional
 
 import requests
 
@@ -166,11 +167,18 @@ def invalidate_stepfailures_cache():
     Session().invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
 
 
-def get_stepfailures(refresh_override: Optional[RefreshPolicy] = None):
+def get_stepfailures(status: Optional[TriageStatus] = None,
+                     refresh_override: Optional[RefreshPolicy] = None):
     """Get info on all failures."""
     maxage = RefreshManager().get_refresh_max_age(refresh_override,
                                                   failures=True)
-    return _get_json("/stepfailure/", maxage)['data']
+    params: dict[str, Any] = {}
+    if status is not None:
+        params['triage'] = status.value
+
+    request = f"/stepfailure/?{urllib.parse.urlencode(params)}"
+
+    return _get_json(request, maxage)['data']
 
 
 def get_stepfailure(failureid: int,
@@ -180,9 +188,10 @@ def get_stepfailure(failureid: int,
     return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 
-def get_failures() -> dict[int, dict[int, dict]]:
+def get_failures(status: Optional[TriageStatus] = None
+                 ) -> dict[int, dict[int, dict]]:
     """Get all failures on swatbot server."""
-    failures = get_stepfailures()
+    failures = get_stepfailures(status)
     ids: dict[int, dict[int, dict]] = {}
     for failure_data in failures:
         buildid = int(failure_data['relationships']['build']['data']['id'])
