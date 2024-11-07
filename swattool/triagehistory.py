@@ -62,20 +62,33 @@ class TriageHistoryEntry:
         specific_error_re = re.compile(r"^\S+error:",
                                        flags=re.IGNORECASE | re.MULTILINE)
 
-        num = 0
-        denom = 0
-        for fragment in self.log_fingerprint:
-            # Lines with a specific error, such as "AssertionError" and not
-            # just "ERROR:" are more likely to be decisive: reflect this in the
-            # similarity score.
-            factor = 5 if any(specific_error_re.finditer(fragment)) else 1
+        # Compute scores for all fingerprint fragment combinations
+        scores = [[jellyfish.jaro_similarity(f1, f2) for f2 in log_fingerprint]
+                  for f1 in self.log_fingerprint]
 
-            bestsim = max(jellyfish.jaro_similarity(otherfrag, fragment)
-                          for otherfrag in log_fingerprint)
-            num += factor * bestsim
-            denom += factor
+        # Compute the final score as 2 half-scores: fingerprint A to B, then B
+        # to A, so the similarity score is commutative.
+        def half_score(fingerprint, hafnum):
+            num = 0
+            denom = 0
+            for i, fragment in enumerate(fingerprint):
+                # Lines with a specific error, such as "AssertionError" and not
+                # just "ERROR:" are more likely to be decisive: reflect this in
+                # the similarity score.
+                factor = 5 if any(specific_error_re.finditer(fragment)) else 1
 
-        return num / denom
+                if hafnum == 0:
+                    bestsim = max(scores[i])
+                else:
+                    bestsim = max(s[i] for s in scores)
+                num += factor * bestsim
+                denom += factor
+
+            return num / denom
+
+        score = half_score(self.log_fingerprint, 0)
+        score *= half_score(log_fingerprint, 1)
+        return score
 
 
 class SimilarTriage:
