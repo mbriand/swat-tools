@@ -2,6 +2,7 @@
 
 """Swatbot review functions."""
 
+import io
 import logging
 import shutil
 import sys
@@ -169,7 +170,8 @@ def _handle_navigation_command(builds: list[swatbuild.Build],
     return (True, need_refresh, entry)
 
 
-def _handle_view_command(build: swatbuild.Build, command: str
+def _handle_view_command(build: swatbuild.Build, command: str,
+                         history: triagehistory.TriageHistory
                          ) -> tuple[bool, bool]:
     if command == "u":  # Open autobuilder URL
         click.launch(build.autobuilder_url)
@@ -187,6 +189,11 @@ def _handle_view_command(build: swatbuild.Build, command: str
     if command == "x":  # Explore logs
         need_refresh = logsview.show_logs_menu(build)
         return (True, need_refresh)
+    if command == "show similarity debug infos":
+        similars = history.get_similar_triages(build, timeout_s=1)
+        if similars:
+            _show_similar_debug(build, similars)
+        return (True, False)
 
     return (False, False)
 
@@ -230,6 +237,7 @@ _commands = [
     "[g] open stdio log of first failed step URL",
     "[l] show stdio log of first failed step",
     "[x] explore all logs",
+    "show similarity debug infos",
     None,
     "[n] next",
     "[p] previous",
@@ -243,6 +251,7 @@ valid_commands = [c for c in _commands if c != ""]
 
 def review_menu(builds: list[swatbuild.Build],
                 userinfos: userdata.UserInfos,
+                history: triagehistory.TriageHistory,
                 entry: int,
                 statusbar: str) -> tuple[Optional[int], bool]:
     """Allow a user to interactively triage a failure."""
@@ -264,7 +273,9 @@ def review_menu(builds: list[swatbuild.Build],
             command_index = action_menu.show()
             if command_index is None:
                 return (None, False)
-            command = valid_commands[command_index][1]
+            command = valid_commands[command_index]
+            if command[0] == '[' and command[2] == ']':
+                command = valid_commands[command_index][1]
         except EOFError:
             return (None, False)
 
@@ -273,7 +284,7 @@ def review_menu(builds: list[swatbuild.Build],
         if handled:
             break
 
-        handled, need_refresh = _handle_view_command(build, command)
+        handled, need_refresh = _handle_view_command(build, command, history)
         if handled:
             break
 
@@ -286,16 +297,19 @@ def review_menu(builds: list[swatbuild.Build],
 
 def _show_similar_debug(build: swatbuild.Build,
                         similars: list[triagehistory.SimilarTriage]):
+    buf = io.StringIO()
     failure = build.get_first_failure()
     fingerprint = logsview.get_log_fingerprint(failure, 'stdio')
     fingerprintstr = "\n".join(fingerprint)
-    print(f"Fingerprint:\n{fingerprintstr}")
+    print(f"Fingerprint:\n{fingerprintstr}", file=buf)
     for similar in similars:
-        print()
+        print(file=buf)
         print(f"Similar to {similar.buildid}, "
               f"triaged as {similar.triage}: {similar.triagenotes} "
-              f"(score: {similar.score})")
-        print("\n".join(similar.log_fingerprint[:10]))
+              f"(score: {similar.score})",
+              file=buf)
+        print("\n".join(similar.log_fingerprint), file=buf)
+    click.echo_via_pager(buf.getvalue())
 
 
 def _show_suggested_triage(build: swatbuild.Build,
@@ -395,8 +409,8 @@ def review_failures(builds: list[swatbuild.Build],
 
             prev_entry = entry
             statusbar = f"Progress: {entry+1}/{len(builds)}"
-            entry, need_refresh = review_menu(builds, userinfos, entry,
-                                              statusbar)
+            entry, need_refresh = review_menu(builds, userinfos, history,
+                                              entry, statusbar)
             if need_refresh or entry != prev_entry:
                 utils.clear()
                 show_infos = True
