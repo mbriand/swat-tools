@@ -63,8 +63,18 @@ class TriageHistoryEntry:
                                        flags=re.IGNORECASE | re.MULTILINE)
 
         # Compute scores for all fingerprint fragment combinations
-        scores = [[jellyfish.jaro_similarity(f1, f2) for f2 in log_fingerprint]
-                  for f1 in self.log_fingerprint]
+        # Only consider combinations with similar positions in the files:
+        # reduce both false positives and computation time.
+        scores = [[0 for f2 in log_fingerprint] for f1 in self.log_fingerprint]
+        lendiff = len(self.log_fingerprint) - len(log_fingerprint)
+        for i, f1 in enumerate(self.log_fingerprint):
+            for j, f2 in enumerate(log_fingerprint):
+                maxdist = 2
+                startdist = i - j
+                enddist = lendiff - startdist
+                if min(abs(startdist), abs(enddist)) > maxdist:
+                    continue
+                scores[i][j] = jellyfish.jaro_similarity(f1, f2)
 
         # Compute the final score as 2 half-scores: fingerprint A to B, then B
         # to A, so the similarity score is commutative.
