@@ -184,6 +184,8 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
                            flags=re.I),
                 True, utils.Color.YELLOW, status == swatbuild.Status.WARNING),
+        _Filter(re.compile(r"(.*\s|^)(?P<keyword>make\[\d\]):.* Error"),
+                True, utils.Color.RED, status == swatbuild.Status.ERROR),
     ]
 
     highlight_lines = {}
