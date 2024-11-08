@@ -7,13 +7,18 @@ import logging
 import json
 from typing import Optional
 
+import requests
+
 from .webrequests import Session
+from . import utils
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://bugzilla.yoctoproject.org"
 REST_BASE_URL = f"{BASE_URL}/rest/"
 ISSUE_URL = f"{BASE_URL}/show_bug.cgi?id="
+
+TOKENFILE = utils.DATADIR / 'bugzilla_token'
 
 
 class Bugzilla:
@@ -98,12 +103,47 @@ class Bugzilla:
         return jsondata[0]['summary']
 
     @classmethod
+    def login(cls, user: str, password: str) -> bool:
+        """Login to bugzilla REST API."""
+        session = Session()
+
+        logger.info("Sending logging request...")
+        params = {
+            'login': user,
+            'password': password,
+        }
+
+        fparams = urllib.parse.urlencode(params)
+        req = f"{REST_BASE_URL}login?{fparams}"
+
+        try:
+            data = session.get(req, 0)
+        except requests.exceptions.HTTPError:
+            logger.error("Login failed")
+            return False
+
+        token = json.loads(data)['token']
+        logger.info("Logging success")
+
+        with TOKENFILE.open('w') as file:
+            file.write(token)
+
+        return True
+
+    @classmethod
     def add_bug_comment(cls, bugid: int, comment: str):
         """Publish a new comment to a bugzilla issue."""
-        bugurl = cls.get_bug_url(bugid)
+        with TOKENFILE.open('r') as file:
+            token = file.read()
 
-        # TODO: remove and publish using REST API
-        print(f"\nPlease update {bugurl} ticket id with:\n"
-              f"{'-'*40}\n"
-              f"{comment}\n"
-              f"{'-'*40}\n")
+        data = {
+            'token': token,
+            'comment': comment,
+        }
+
+        url = f"{REST_BASE_URL}bug/{bugid}/comment"
+        try:
+            Session().post(url, data)
+        except requests.exceptions.HTTPError:
+            logging.error("Failed to post comment on Bugzilla, please login")
+            raise

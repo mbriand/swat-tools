@@ -107,6 +107,14 @@ def login(user: str, password: str):
     swatbotrest.login(user, password)
 
 
+@maingroup.command()
+@click.option('--user', '-u', prompt=True)
+@click.option('--password', '-p', prompt=True, hide_input=True)
+def bugzilla_login(user: str, password: str):
+    """Login to Yocto Project Bugzilla."""
+    Bugzilla.login(user, password)
+
+
 failures_list_options = [
     click.option('--limit', '-l', type=click.INT, default=None,
                  help="Only parse the n last failures"),
