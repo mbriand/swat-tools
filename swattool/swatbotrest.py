@@ -164,7 +164,7 @@ def invalidate_stepfailures_cache():
     This can be used to force fetching failures on next build, when we suspect
     it might have changed remotely.
     """
-    Session().invalidate_cache(f"{REST_BASE_URL}/stepfailure/")
+    Session().invalidate_cache(f"{REST_BASE_URL}/stepfailure/", allparams=True)
 
 
 def get_stepfailures(status: Optional[TriageStatus] = None,

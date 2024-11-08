@@ -53,25 +53,35 @@ class Session:
             with COOKIESFILE.open('wb') as file:
                 pickle.dump(self.session.cookies, file)
 
-    def invalidate_cache(self, url: str):
+    def invalidate_cache(self, url: str, allparams: bool = False):
         """Invalidate cache for a given URL."""
         with cache_lock:
-            for file in self._get_cache_file_candidates(url):
-                file.unlink(missing_ok=True)
+            if allparams:
+                prefix = self._get_cache_file_prefix(url)
+                for file in prefix.parent.glob(f"{prefix.name}*"):
+                    file.unlink()
+            else:
+                for file in self._get_cache_file_candidates(url):
+                    file.unlink(missing_ok=True)
 
-    def _get_cache_file_candidates(self, url: str) -> list[pathlib.Path]:
+    def _get_cache_file_prefix(self, url: str) -> pathlib.Path:
         filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
 
         if len(filestem) > 100:
             hashname = hashlib.sha256(filestem.encode(), usedforsecurity=False)
             filestem = hashname.hexdigest()
 
+        return utils.CACHEDIR / filestem
+
+    def _get_cache_file_candidates(self, url: str) -> list[pathlib.Path]:
+        prefix = self._get_cache_file_prefix(url)
+
         candidates = [
-            utils.CACHEDIR / f"{filestem}.gz",
-            utils.CACHEDIR / filestem,
+            prefix.parent / f'{prefix.name}.gz',
+            prefix,
 
             # For compatibility with old cache files
-            utils.CACHEDIR / f"{filestem}.json",
+            prefix.parent / f'{prefix.name}.json',
         ]
 
         return candidates
