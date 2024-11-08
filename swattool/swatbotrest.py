@@ -34,7 +34,6 @@ class RefreshManager:
 
     _instance = None
 
-    FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
     AUTO_REFRESH_S = 60 * 60 * 24 * 30
 
     # pylint: disable=duplicate-code
@@ -64,7 +63,8 @@ class RefreshManager:
 
     def get_refresh_max_age(self,
                             refresh_override: Optional[RefreshPolicy] = None,
-                            failures: bool = False
+                            failures: bool = False,
+                            auto: int = AUTO_REFRESH_S
                             ) -> int:
         """Get the maximum age before refresh for a given policy."""
         policy = refresh_override if refresh_override else self.refresh_policy
@@ -76,9 +76,7 @@ class RefreshManager:
         if policy == RefreshPolicy.NO:
             return -1
 
-        if failures:
-            return self.FAILURES_AUTO_REFRESH_S
-        return self.AUTO_REFRESH_S
+        return auto
 
 
 class TriageStatus(enum.IntEnum):
@@ -167,16 +165,24 @@ def invalidate_stepfailures_cache():
     Session().invalidate_cache(f"{REST_BASE_URL}/stepfailure/", allparams=True)
 
 
+FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
+PENDING_FAILURES_AUTO_REFRESH_S = 60 * 10
+
+
 def get_stepfailures(status: Optional[TriageStatus] = None,
                      refresh_override: Optional[RefreshPolicy] = None):
     """Get info on all failures."""
-    maxage = RefreshManager().get_refresh_max_age(refresh_override,
-                                                  failures=True)
+    auto_refresh_s = FAILURES_AUTO_REFRESH_S
     params: dict[str, Any] = {}
     if status is not None:
         params['triage'] = status.value
+        if status.value == TriageStatus.PENDING:
+            auto_refresh_s = PENDING_FAILURES_AUTO_REFRESH_S
 
     request = f"/stepfailure/?{urllib.parse.urlencode(params)}"
+    maxage = RefreshManager().get_refresh_max_age(refresh_override,
+                                                  failures=True,
+                                                  auto=auto_refresh_s)
 
     return _get_json(request, maxage)['data']
 
