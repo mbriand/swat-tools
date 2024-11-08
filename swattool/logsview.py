@@ -7,12 +7,10 @@ import re
 import shutil
 from typing import Optional
 
-import requests
 from simple_term_menu import TerminalMenu  # type: ignore
 
 from . import swatbuild
 from . import utils
-from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -245,22 +243,6 @@ def _show_log(loglines: list[str], selected_line: Optional[int],
     else:
         startline = selected_line
     utils.show_in_less("\n".join(colorlines), startline)
-
-
-def _load_log(failure: swatbuild.Failure, logname: str
-              ) -> Optional[str]:
-    logurl = failure.get_log_raw_url(logname)
-    if not logurl:
-        logging.error("Failed to find log")
-        return None
-
-    try:
-        logdata = Session().get(logurl)
-    except requests.exceptions.ConnectionError:
-        logger.warning("Failed to download stdio log")
-        return None
-
-    return logdata
 
 
 def _get_preview_sizes(preview_size: float) -> tuple[int, int]:
