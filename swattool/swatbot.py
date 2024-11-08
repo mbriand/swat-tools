@@ -4,7 +4,7 @@
 
 import concurrent.futures
 import logging
-from typing import Any, Collection
+from typing import Any, Collection, Optional
 
 import click
 
@@ -13,6 +13,18 @@ from . import swatbuild
 from . import userdata
 
 logger = logging.getLogger(__name__)
+
+
+def _create_build(filters: dict[str, Any],
+                  buildid: int,
+                  failures: dict[int, dict],
+                  userinfo: userdata.UserInfo) -> Optional[swatbuild.Build]:
+    build = swatbuild.Build(buildid, failures)
+
+    if not build.match_filters(filters, userinfo):
+        return None
+
+    return build
 
 
 def _create_builds(filters: dict[str, Any],
@@ -37,8 +49,8 @@ def _create_builds(filters: dict[str, Any],
                 if triages.isdisjoint(filters['triage']):
                     continue
 
-            jobs.append(executor.submit(swatbuild.Build, buildid,
-                                        failures[buildid]))
+            jobs.append(executor.submit(_create_build, filters, buildid,
+                                        failures[buildid], userinfos[buildid]))
 
         try:
             complete_iterator = concurrent.futures.as_completed(jobs)
@@ -46,7 +58,7 @@ def _create_builds(filters: dict[str, Any],
                                    length=len(jobs)) as jobsprogress:
                 for future in jobsprogress:
                     build = future.result()
-                    if build.match_filters(filters, userinfos[build.id]):
+                    if build is not None:
                         infos.append(build)
         except KeyboardInterrupt:
             executor.shutdown(cancel_futures=True)

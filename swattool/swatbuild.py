@@ -125,6 +125,21 @@ class Failure:
         logid = info_json_data['logs'][0]['logid']
         return f"{rest_url}/logs/{logid}/raw"
 
+    def get_log(self, logname: str) -> Optional[str]:
+        """Get content of a given log file."""
+        logurl = self.get_log_raw_url(logname)
+        if not logurl:
+            logging.error("Failed to find log")
+            return None
+
+        try:
+            logdata = Session().get(logurl)
+        except requests.exceptions.ConnectionError:
+            logger.warning("Failed to download stdio log")
+            return None
+
+        return logdata
+
     def get_triage_with_notes(self) -> str:
         """Get triage desctiption string, including notes."""
         notes = self.triagenotes
@@ -214,10 +229,26 @@ class Build:
 
         return True
 
+    def _logs_match_filters(self, filters: dict[str, Any]) -> bool:
+        if not filters['log-matches']:
+            return True
+
+        logdata = self.get_first_failure().get_log('stdio')
+        if not logdata:
+            return False
+
+        for pat in filters['log-matches']:
+            for line in logdata.splitlines():
+                if pat.match(line):
+                    return True
+
+        return False
+
     def match_filters(self, filters: dict[str, Any],
                       userinfo: userdata.UserInfo
                       ) -> bool:
         """Check if this build match given filters."""
+        # pylint: disable=too-many-return-statements
 
         def simple_match(field: Field):
             filtr = filters[field.name.lower()]
@@ -237,6 +268,9 @@ class Build:
             return False
 
         if not self._triage_match_filters(filters):
+            return False
+
+        if not self._logs_match_filters(filters):
             return False
 
         return True

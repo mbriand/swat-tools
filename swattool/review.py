@@ -170,6 +170,7 @@ def _handle_navigation_command(builds: list[swatbuild.Build],
 
 def _handle_view_command(build: swatbuild.Build, command: str
                          ) -> tuple[bool, bool]:
+    # pylint: disable=too-many-return-statements
     if command == "u":  # Open autobuilder URL
         click.launch(build.autobuilder_url)
         return (True, False)

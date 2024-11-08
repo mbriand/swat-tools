@@ -61,6 +61,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
                'with-notes': kwargs['with_notes'],
                'with-new-status': kwargs['with_new_status'],
                'triage': triages,
+               'log-matches': [re.compile(r) for r in kwargs['log_matches']],
                }
     return filters
 
@@ -140,6 +141,8 @@ failures_list_options = [
                  help="Only show failures with or without attached note"),
     click.option('--with-new-status', type=click.BOOL, default=None,
                  help="Only show failures with or without new (local) status"),
+    click.option('--log-matches', multiple=True, default=None,
+                 help="Only show failures with logs matching a given string"),
 ]
 
 url_open_options = [

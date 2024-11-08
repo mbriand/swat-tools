@@ -219,7 +219,7 @@ def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
 def get_log_highlights(failure: swatbuild.Failure, logname: str
                        ) -> list[str]:
     """Get log highlights for a given log file."""
-    logdata = _load_log(failure, logname)
+    logdata = failure.get_log(logname)
     if not logdata:
         return []
 
@@ -273,7 +273,7 @@ def _get_preview_sizes(preview_size: float) -> tuple[int, int]:
 
 def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
     """Analyze a failure log file."""
-    logdata = _load_log(failure, logname)
+    logdata = failure.get_log(logname)
     if not logdata:
         return False
 
