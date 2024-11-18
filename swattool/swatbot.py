@@ -18,9 +18,10 @@ logger = logging.getLogger(__name__)
 def _create_build(filters: dict[str, Any],
                   buildid: int,
                   failures: dict[int, dict],
-                  userinfo: userdata.UserInfo) -> Optional[swatbuild.Build]:
+                  userinfos: userdata.UserInfos) -> Optional[swatbuild.Build]:
     build = swatbuild.Build(buildid, failures)
 
+    userinfo = userinfos[build.id]
     if not build.match_filters(filters, userinfo):
         return None
 
@@ -50,7 +51,7 @@ def _create_builds(filters: dict[str, Any],
                     continue
 
             jobs.append(executor.submit(_create_build, filters, buildid,
-                                        failures[buildid], userinfos[buildid]))
+                                        failures[buildid], userinfos))
 
         try:
             complete_iterator = concurrent.futures.as_completed(jobs)
