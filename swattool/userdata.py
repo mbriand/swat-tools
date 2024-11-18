@@ -127,6 +127,9 @@ class UserInfo:
 
         return None
 
+    def __repr__(self):
+        return repr(self.as_dict())
+
 
 class UserInfos(collections.abc.MutableMapping):
     """A collection of failure user data."""
@@ -183,3 +186,6 @@ class UserInfos(collections.abc.MutableMapping):
 
     def __iter__(self):
         return iter(self.infos)
+
+    def __repr__(self):
+        return ", ".join(repr(info) for info in self.infos.items())
