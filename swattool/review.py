@@ -63,10 +63,15 @@ def _prompt_bug_infos(build: swatbuild.Build,
     if logurl:
         testinfos = " ".join([build.test, build.worker, build.branch,
                               f'completed at {build.completed}'])
-        bcomment = click.edit("\n".join([testinfos, logurl]),
-                              require_save=False)
+        bcomment = "\n".join([testinfos, logurl])
     else:
-        bcomment = click.edit(None, require_save=False)
+        bcomment = None
+
+    try:
+        bcomment = click.edit(bcomment, require_save=False)
+    except click.exceptions.ClickException as e:
+        logger.warning("Got exception, aborting triage: %s", e)
+        return None
 
     newstatus = userdata.Triage()
     newstatus.status = swatbotrest.TriageStatus.BUG
