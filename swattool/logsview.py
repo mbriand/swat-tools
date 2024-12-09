@@ -93,9 +93,14 @@ def _split_preview_line(text: str, preview_width: int):
             for offset in range(0, max(1, len(preview_text)), preview_width)]
 
 
+def _escape_log_line(text):
+    return repr(text)[1:-1]
+
+
 def _format_log_preview_line(linenum: int, text: str, colorized_line: int,
                              highlight_lines: dict[int, _Highlight],
                              preview_width: int):
+    text = _escape_log_line(text)
     for i, wrappedtext in enumerate(_split_preview_line(text, preview_width)):
         formatted_text = _format_log_line(linenum, wrappedtext, colorized_line,
                                           highlight_lines)
