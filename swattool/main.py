@@ -150,7 +150,8 @@ failures_list_options = [
     click.option('--with-new-status', type=click.BOOL, default=None,
                  help="Only show failures with or without new (local) status"),
     click.option('--log-matches', multiple=True, default=None,
-                 help="Only show failures with logs matching a given string"),
+                 help="Only show failures with logs matching a given regex. "
+                 "E.g. '.*Error.*'"),
 ]
 
 url_open_options = [
