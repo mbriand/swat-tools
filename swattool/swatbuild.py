@@ -3,7 +3,6 @@
 """Interraction with the swatbot Django server."""
 
 import enum
-import json
 import logging
 from datetime import datetime
 from typing import Any, Iterable, Optional
@@ -12,6 +11,7 @@ import click
 import requests
 import tabulate
 
+from . import buildbotrest
 from . import bugzilla
 from . import swatbotrest
 from . import userdata
@@ -108,22 +108,8 @@ class Failure:
                         ) -> Optional[str]:
         """Get the URL of a raw log file."""
         rest_url = self.build.rest_api_url()
-        info_url = f"{rest_url}/builds/{self.build.id}/steps/" \
-                   f"{self.stepnumber}/logs/{logname}"
-        logging.debug("Log info URL: %s", info_url)
-
-        try:
-            info_data = Session().get(info_url)
-        except requests.exceptions.HTTPError:
-            return None
-
-        try:
-            info_json_data = json.loads(info_data)
-        except json.decoder.JSONDecodeError:
-            return None
-
-        logid = info_json_data['logs'][0]['logid']
-        return f"{rest_url}/logs/{logid}/raw"
+        return buildbotrest.get_log_raw_url(rest_url, self.build.id,
+                                            self.stepnumber, logname)
 
     def get_log(self, logname: str) -> Optional[str]:
         """Get content of a given log file."""
@@ -178,6 +164,19 @@ class Build:
         self.autobuilder_url = attributes['url']
         self.owner = collection['attributes']['owner']
         self.branch = collection['attributes']['branch']
+
+        self.parent_builder_name = None
+        self.parent_builder = self.parent_build_number = None
+
+        if collection['attributes']['buildid'] != self.id:
+            pbid = collection['attributes']['buildid']
+            buildboturl = Build._rest_api_url(self.autobuilder_url)
+            parent_build = buildbotrest.get_build(buildboturl, pbid)
+            self.parent_builder_name = collection['attributes']["targetname"]
+            self.parent_builder = self.parent_build_number = None
+            if parent_build:
+                self.parent_builder = parent_build['builds'][0]['builderid']
+                self.parent_build_number = parent_build['builds'][0]['number']
 
         self.failures = {fid: Failure(fid, fdata, self)
                          for fid, fdata in failures.items()}
@@ -317,6 +316,12 @@ class Build:
 
         return tuple(get_field(k) for k in keys)
 
+    def _format_parent_description(self) -> str:
+        pbldr, pnmbr = self.parent_builder, self.parent_build_number
+        ab_url = Build._autobuilder_base_url(self.autobuilder_url)
+        parent_url = f"{ab_url}/#/builders/{pbldr}/builds/{pnmbr}"
+        return f"{parent_url} ({self.parent_builder_name})"
+
     def format_description(self, userinfo: userdata.UserInfo,
                            maxwidth: int) -> str:
         """Get info on one given failure in a pretty way."""
@@ -346,6 +351,9 @@ class Build:
         ]
         table = [[k, format_field(k)] for k in simple_fields]
 
+        if self.parent_build_number:
+            table.append(["Parent", self._format_parent_description()])
+
         for i, (failureid, failure) in enumerate(self.failures.items()):
             # Create strings for all failures and the attributed new status (if
             # one was set).
@@ -369,10 +377,19 @@ class Build:
                f"{self.test} on {self.worker}, " \
                f"{str(self.status).lower()} at {self.completed}"
 
+    @staticmethod
+    def _autobuilder_base_url(autobuilder_url) -> str:
+        url, _, _ = autobuilder_url.partition('/#/builders')
+        return url
+
+    @staticmethod
+    def _rest_api_url(autobuilder_url) -> str:
+        base_url = Build._autobuilder_base_url(autobuilder_url)
+        return buildbotrest.rest_api_url(base_url)
+
     def rest_api_url(self) -> str:
         """Get the REST API URL prefix for this build."""
-        url, _, _ = self.autobuilder_url.partition('/#/builders')
-        return f"{url}/api/v2"
+        return self._rest_api_url(self.autobuilder_url)
 
     def open_urls(self, urlopens: set[str]) -> None:
         """Open requested URLs in default browser."""
