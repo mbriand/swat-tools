@@ -193,10 +193,11 @@ def _handle_view_command(build: swatbuild.Build, command: str
     if command == "x":  # Explore logs
         need_refresh = logsview.show_logs_menu(build)
         return (True, need_refresh)
-    if command == "v":  # Explore logs
+    if command in ["v", "view git log"]:  # View git log
         base = build.git_info['base_commit']
         tip = build.git_info['tip_commit']
-        success = pokyciarchive.show_log(tip, base)
+        options = ['--oneline'] if command == "v" else []
+        success = pokyciarchive.show_log(tip, base, options)
         return (True, success)
 
     return (False, False)
@@ -242,7 +243,8 @@ def _get_commands(build: swatbuild.Build):
         "[g] open stdio log of first failed step URL",
         "[l] show stdio log of first failed step",
         "[x] explore all logs",
-        "[v] view git log" if build.git_info else "",
+        "[v] view git log (oneline)" if build.git_info else "",
+        "view git log" if build.git_info else "",
         None,
         "[n] next",
         "[p] previous",
@@ -278,7 +280,9 @@ def review_menu(builds: list[swatbuild.Build],
             command_index = action_menu.show()
             if command_index is None:
                 return (None, False)
-            command = commands[command_index][1]
+            command = commands[command_index]
+            if command[0] == '[' and command[2] == ']':
+                command = command[1]
         except EOFError:
             return (None, False)
 

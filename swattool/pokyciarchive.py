@@ -57,9 +57,14 @@ def get_build_commits(buildname: str, basebranch: str = "master",
             }
 
 
-def show_log(tip: str, base: Optional[str] = None) -> bool:
+def show_log(tip: str, base: Optional[str] = None,
+             options: Optional[list[str]] = None) -> bool:
     """Show git log."""
-    gitcmd = ["git", "-C", GITDIR, "log", f"{base}..{tip}" if base else tip]
+    if options is None:
+        options = []
+    gitcmd = ["git", "-C", GITDIR, "-c", "core.pager=less",
+              "log", *options,
+              f"{base}..{tip}" if base else tip]
     try:
         subprocess.run(gitcmd, check=True)
     except subprocess.CalledProcessError:
