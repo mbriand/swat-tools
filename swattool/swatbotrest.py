@@ -210,7 +210,6 @@ def get_failures(status: Optional[TriageStatus] = None
 def publish_status(failureid: int,
                    status: TriageStatus, comment: str):
     """Publish new triage status to the swatbot Django server."""
-    # TODO: remove and publish result using REST API
     # Here we need to send a POST request to the page of any collection, there
     # is no need to use the page of the collection corresponding the failure we
     # want to update. Just use collection 1.
