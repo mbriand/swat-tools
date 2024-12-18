@@ -13,6 +13,7 @@ import tabulate
 
 from . import buildbotrest
 from . import bugzilla
+from . import pokyciarchive
 from . import swatbotrest
 from . import userdata
 from . import utils
@@ -178,8 +179,45 @@ class Build:
                 self.parent_builder = parent_build['builds'][0]['builderid']
                 self.parent_build_number = parent_build['builds'][0]['number']
 
+        self._git_info: Optional[dict[str, Any]] = None
+
         self.failures = {fid: Failure(fid, fdata, self)
                          for fid, fdata in failures.items()}
+
+    @property
+    def git_info(self) -> dict[str, Any]:
+        """Get informations about built git branch."""
+        if self._git_info is None:
+            gittag = None
+            if self.parent_builder_name and self.parent_build_number:
+                name = self.parent_builder_name
+                number = self.parent_build_number
+            elif self.test in ['a-quick', 'a-full']:
+                name = self.test
+                _, _, number = self.autobuilder_url.rpartition('/')
+                gittag = f"{self.test}-"
+            else:
+                return {}
+
+            gittag = f"{name}-{number}"
+            basebranch = self.branch.split('/')[-1]
+            if basebranch.endswith('-next'):
+                basebranch = basebranch[:-len('-next')]
+
+            limit = 100
+            git_info = pokyciarchive.get_build_commits(gittag, basebranch,
+                                                       limit)
+            if git_info is None:
+                self._git_info = {}
+            else:
+                self._git_info = git_info
+
+                commitcount = len(self._git_info['commits'])
+                plus = '+' if commitcount == limit else ''
+                desc = f"{commitcount}{plus} ahead of {basebranch}"
+                self._git_info['description'] = desc
+
+        return self._git_info
 
     def _test_match_filters(self, filters: dict[str, Any]) -> bool:
         matches = [True for r in filters['test'] if r.match(self.test)]
@@ -353,6 +391,9 @@ class Build:
 
         if self.parent_build_number:
             table.append(["Parent", self._format_parent_description()])
+
+        if 'description' in self.git_info:
+            table.append(["Git data", self.git_info['description']])
 
         for i, (failureid, failure) in enumerate(self.failures.items()):
             # Create strings for all failures and the attributed new status (if

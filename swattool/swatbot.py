@@ -39,7 +39,7 @@ def _create_builds(filters: dict[str, Any],
 
     # Generate a list of all pending failures, fetching details from the remote
     # server as needed.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         for buildid in limited_pending_ids:
             # Filter on status now, limiting the size of data we will have to
             # download from the server.

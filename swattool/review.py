@@ -12,6 +12,7 @@ import click
 from simple_term_menu import TerminalMenu  # type: ignore
 
 from . import logsview
+from . import pokyciarchive
 from . import swatbotrest
 from . import swatbuild
 from .bugzilla import Bugzilla
@@ -192,6 +193,11 @@ def _handle_view_command(build: swatbuild.Build, command: str
     if command == "x":  # Explore logs
         need_refresh = logsview.show_logs_menu(build)
         return (True, need_refresh)
+    if command == "v":  # Explore logs
+        base = build.git_info['base_commit']
+        tip = build.git_info['tip_commit']
+        success = pokyciarchive.show_log(tip, base)
+        return (True, success)
 
     return (False, False)
 
@@ -217,33 +223,34 @@ def _handle_edit_command(build: swatbuild.Build, userinfo: userdata.UserInfo,
     return (False, False)
 
 
-_commands = [
-    "[a] ab-int",
-    "[b] bug opened",
-    "[c] cancelled no errors",
-    "[m] mail sent",
-    f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
-    "[o] other",
-    "[f] other: Fixed",
-    "[d] other: Patch dropped",
-    "[t] not for swat",
-    "[r] reset status",
-    None,
-    "[e] edit notes",
-    "[u] open autobuilder URL",
-    "[w] open swatbot URL",
-    "[g] open stdio log of first failed step URL",
-    "[l] show stdio log of first failed step",
-    "[x] explore all logs",
-    None,
-    "[n] next",
-    "[p] previous",
-    "[s] select in failures list",
-    "[q] quit",
-]
+def _get_commands(build: swatbuild.Build):
+    commands = [
+        "[a] ab-int",
+        "[b] bug opened",
+        "[c] cancelled no errors",
+        "[m] mail sent",
+        f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
+        "[o] other",
+        "[f] other: Fixed",
+        "[d] other: Patch dropped",
+        "[t] not for swat",
+        "[r] reset status",
+        None,
+        "[e] edit notes",
+        "[u] open autobuilder URL",
+        "[w] open swatbot URL",
+        "[g] open stdio log of first failed step URL",
+        "[l] show stdio log of first failed step",
+        "[x] explore all logs",
+        "[v] view git log" if build.git_info else "",
+        None,
+        "[n] next",
+        "[p] previous",
+        "[s] select in failures list",
+        "[q] quit",
+    ]
 
-
-valid_commands = [c for c in _commands if c != ""]
+    return [c for c in commands if c != ""]
 
 
 def review_menu(builds: list[swatbuild.Build],
@@ -253,23 +260,25 @@ def review_menu(builds: list[swatbuild.Build],
     """Allow a user to interactively triage a failure."""
     need_refresh = False
 
+    build = builds[entry]
+    userinfo = userinfos[build.id]
+
+    commands = _get_commands(build)
+
     default_action = "n"
     default_index = [c[1] if c and len(c) > 1 else None
-                     for c in valid_commands].index(default_action)
-    action_menu = TerminalMenu(valid_commands, title="Action",
+                     for c in commands].index(default_action)
+    action_menu = TerminalMenu(commands, title="Action",
                                cursor_index=default_index,
                                status_bar=statusbar,
                                raise_error_on_interrupt=True)
-
-    build = builds[entry]
-    userinfo = userinfos[build.id]
 
     while True:
         try:
             command_index = action_menu.show()
             if command_index is None:
                 return (None, False)
-            command = valid_commands[command_index][1]
+            command = commands[command_index][1]
         except EOFError:
             return (None, False)
 

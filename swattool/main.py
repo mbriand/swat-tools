@@ -12,6 +12,7 @@ import click
 import tabulate
 
 from .bugzilla import Bugzilla
+from . import pokyciarchive
 from . import review
 from . import swatbot
 from . import swatbotrest
@@ -294,6 +295,9 @@ def review_pending_failures(refresh: str,
             logurl = build.get_first_failure().get_log_raw_url()
             if logurl:
                 Session().get(logurl)
+
+    logger.info("Fetching poky-ci-archive git...")
+    pokyciarchive.update()
 
     # Make sure abints are up-to-date.
     Bugzilla.get_abints()
