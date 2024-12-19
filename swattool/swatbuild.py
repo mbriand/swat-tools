@@ -338,7 +338,7 @@ class Build:
         def get_field(field):
             # pylint: disable=too-many-return-statements
             if field == Field.FAILURES:
-                return sorted(fail['stepname']
+                return sorted(fail.stepname
                               for fail in self.failures.values())
             if field == Field.OWNER:
                 return str(self.owner)
