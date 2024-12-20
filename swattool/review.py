@@ -22,6 +22,18 @@ from . import userdata
 logger = logging.getLogger(__name__)
 
 
+def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
+    logurl = build.get_first_failure().get_log_url()
+    if logurl:
+        testinfos = " ".join([build.test, build.worker, build.branch,
+                              f'completed at {build.completed}'])
+        bcomment = "\n".join([testinfos, logurl])
+    else:
+        bcomment = None
+
+    return bcomment
+
+
 def _prompt_bug_infos(build: swatbuild.Build,
                       is_abint: bool):
     """Create new status of type BUG for a given failure."""
@@ -60,14 +72,7 @@ def _prompt_bug_infos(build: swatbuild.Build,
             logger.warning("Invalid issue: %s", bugnum_str)
 
     print("Please set the comment content")
-    logurl = build.get_first_failure().get_log_url()
-    if logurl:
-        testinfos = " ".join([build.test, build.worker, build.branch,
-                              f'completed at {build.completed}'])
-        bcomment = "\n".join([testinfos, logurl])
-    else:
-        bcomment = None
-
+    bcomment = _format_bugzilla_comment(build)
     try:
         bcomment = click.edit(bcomment, require_save=False)
     except click.exceptions.ClickException as e:
@@ -367,6 +372,47 @@ def review_failures(builds: list[swatbuild.Build],
                           filename)
             raise error
         kbinter = False
+
+
+def batch_review_failures(builds: list[swatbuild.Build],
+                          userinfos: userdata.UserInfos,
+                          ask_confirm: bool, status: swatbotrest.TriageStatus,
+                          status_comment: str):
+    """Allow a user batch triage a list of failures."""
+    commands = [
+        "[y] yes",
+        "[n] no",
+        "[q] quit"
+    ]
+
+    action_menu = TerminalMenu(commands, title="Apply triage on this failure?",
+                               raise_error_on_interrupt=True)
+
+    for build in builds:
+        userinfo = userinfos.get(build.id, {})
+        if ask_confirm:
+            _show_infos(build, userinfo)
+
+            command_index = action_menu.show()
+            if command_index is None:
+                return
+            command = commands[command_index][1]
+            if command == 'q':
+                return
+            if command == 'n':
+                continue
+
+        newstatus = userdata.Triage()
+        newstatus.status = status
+        newstatus.comment = status_comment
+        newstatus.failures = list(build.failures.keys())
+        if status == swatbotrest.TriageStatus.BUG:
+            newstatus.extra['bugzilla-comment'] = \
+                _format_bugzilla_comment(build)
+        userinfo.triages = [newstatus]
+
+        logging.info("applying triage %s (%s) on build %s", status,
+                     status_comment, build.format_tiny_description())
 
 
 def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],

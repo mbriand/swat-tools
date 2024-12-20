@@ -418,6 +418,10 @@ class Build:
                f"{self.test} on {self.worker}, " \
                f"{str(self.status).lower()} at {self.completed}"
 
+    def format_tiny_description(self) -> str:
+        """Get very short info on one given failure."""
+        return f"{self.id} {self.test} ({self.branch})"
+
     @staticmethod
     def _autobuilder_base_url(autobuilder_url) -> str:
         url, _, _ = autobuilder_url.partition('/#/builders')

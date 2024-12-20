@@ -308,6 +308,38 @@ def review_pending_failures(refresh: str,
 
 
 @maingroup.command()
+@_add_options(failures_list_options)
+@click.option('--yes', '-n', is_flag=True,
+              help="Do not ask for confirmation for each failure")
+@click.argument('status',
+                type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
+                                  case_sensitive=False))
+@click.argument('status-comment', type=str)
+def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
+                          status: str, status_comment: str,
+                          **kwargs):
+    """Triage pending failures matching given criteria.
+
+    STATUS_COMMENT: free format string or bug number for 'Bug' status.
+    """
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+
+    filters = parse_filters(kwargs)
+    filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+
+    swatbotrest.RefreshManager().set_policy_by_name(refresh)
+
+    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
+                                                  filters=filters)
+    review.batch_review_failures(builds, userinfos, not yes,
+                                 swatbotrest.TriageStatus.from_str(status),
+                                 status_comment)
+    print(status, status_comment)
+
+    userinfos.save()
+
+
+@maingroup.command()
 @click.option('--dry-run', '-n', is_flag=True,
               help="Only shows what would be done")
 def publish_new_reviews(dry_run: bool):
