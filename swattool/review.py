@@ -3,6 +3,8 @@
 """Swatbot review functions."""
 
 import logging
+# Readline modifies input() behaviour when imported
+import readline  # noqa: F401 # pylint: disable=unused-import
 import shutil
 import sys
 import textwrap
@@ -61,13 +63,16 @@ def _prompt_bug_infos(build: swatbuild.Build,
         bugnum, _, _ = abint_list[abint_index].partition(' ')
     else:
         while True:
-            bugnum_str = input('Bug number:').strip()
+            try:
+                bugnum_str = input('Bug number:').strip()
+            except EOFError:
+                return None
+            if not bugnum_str or bugnum_str.strip() == "q":
+                return None
+
             if bugnum_str.isnumeric():
                 bugnum = int(bugnum_str)
                 break
-
-            if bugnum_str.strip() == "q":
-                return None
 
             logger.warning("Invalid issue: %s", bugnum_str)
 
@@ -115,7 +120,12 @@ def _create_new_status(build: swatbuild.Build, command: str
         newstatus.status = swatbotrest.TriageStatus.NOT_FOR_SWAT
 
     if newstatus and not newstatus.comment:
-        newstatus.comment = input('Comment:').strip()
+        try:
+            newstatus.comment = input('Comment:').strip()
+        except EOFError:
+            return None
+        if not newstatus.comment:
+            return None
 
     return newstatus
 
