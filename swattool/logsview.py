@@ -180,10 +180,14 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
                 status == swatbuild.Status.ERROR),
 
         # Generic rules:
-        #  - Do nothing on "libgpg-error:"
+        #  - Do nothing on "libgpg-error:".
+        #  - Do nothing on "test_fixed_size_error:".
+        #  - Do nothing on " error::.*ok" (tests cases).
         #  - Match on "error:", show in menu if build status is error.
         #  - Match on "warning:", show in menu if build status is warning.
         _Filter(re.compile(r".*libgpg-error:"), True, None, False),
+        _Filter(re.compile(r".*test_fixed_size_error:"), True, None, False),
+        _Filter(re.compile(r".*( |::)error::.*ok"), True, None, False),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
                 True, utils.Color.RED, status == swatbuild.Status.ERROR),
         _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
