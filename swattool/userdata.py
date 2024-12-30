@@ -164,11 +164,12 @@ class UserInfos(collections.abc.MutableMapping):
 
         # Create backup files. We might remove this once the code becomes more
         # stable
+        backupfile = filename.parent / 'backups' / filename.name
         i = 0
-        while filename.with_stem(f'{filename.stem}-backup-{i}').exists():
+        while backupfile.with_stem(f'{filename.stem}-backup-{i}').exists():
             i += 1
         shutil.copy(filename,
-                    filename.with_stem(f'{filename.stem}-backup-{i}'))
+                    backupfile.with_stem(f'{filename.stem}-backup-{i}'))
 
         return filename
 
