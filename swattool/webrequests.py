@@ -64,7 +64,7 @@ class Session:
                 for file in self._get_cache_file_candidates(url):
                     file.unlink(missing_ok=True)
 
-    def _get_cache_file_prefix(self, url: str) -> pathlib.Path:
+    def _get_old_cache_file_prefix(self, url: str) -> pathlib.Path:
         filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
 
         if len(filestem) > 100:
@@ -73,15 +73,30 @@ class Session:
 
         return utils.CACHEDIR / filestem
 
+    def _get_cache_file_prefix(self, url: str) -> pathlib.Path:
+        if url.endswith('/'):
+            url = url[:-1] + '_'
+        filename = pathlib.Path(url.split('://', 1)[1].replace(':', '_'))
+
+        if len(filename.stem) > 50:
+            hashname = hashlib.sha256(filename.stem.encode(),
+                                      usedforsecurity=False)
+            filename = filename.with_stem(hashname.hexdigest())
+
+        return utils.CACHEDIR / filename
+
     def _get_cache_file_candidates(self, url: str) -> list[pathlib.Path]:
         prefix = self._get_cache_file_prefix(url)
+        old_prefix = self._get_old_cache_file_prefix(url)
 
         candidates = [
             prefix.parent / f'{prefix.name}.gz',
             prefix,
 
             # For compatibility with old cache files
-            prefix.parent / f'{prefix.name}.json',
+            old_prefix.parent / f'{old_prefix.name}.gz',
+            old_prefix,
+            old_prefix.parent / f'{old_prefix.name}.json',
         ]
 
         return candidates
@@ -109,6 +124,7 @@ class Session:
         return None
 
     def _create_cache_file(self, cachefile: pathlib.Path, data: str):
+        cachefile.parent.mkdir(parents=True, exist_ok=True)
         if cachefile.suffix == ".gz":
             with gzip.open(cachefile, mode='w') as gzfile:
                 gzfile.write(data.encode())
@@ -120,7 +136,6 @@ class Session:
         """Do a GET request."""
         cache_candidates = self._get_cache_file_candidates(url)
         cache_new_file = cache_candidates[0]
-        cache_new_file.parent.mkdir(parents=True, exist_ok=True)
 
         with cache_lock:
             cache_olds = [file for file in cache_candidates if file.exists()]
