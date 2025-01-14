@@ -358,18 +358,23 @@ def publish_new_reviews(dry_run: bool):
 
             if any(logs):
                 comment = bugurl = Bugzilla.get_bug_url(bugid)
-                logger.info('Need to update %s with %s', bugurl,
-                            ", ".join(logs).replace('\n', ' '))
+                logger.info('Need to update %s with:\n%s', bugurl,
+                            "\n".join(textwrap.indent(log, '    ')
+                                      for log in logs))
                 if not dry_run:
                     Bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
-        for triage in triages:
-            for failureid in triage.failures:
-                logger.info('Need to update failure %s '
-                            'to status %s (%s) with "%s"',
-                            failureid, status, status.name.title(), comment)
-                if not dry_run:
-                    swatbotrest.publish_status(failureid, status, comment)
+        failureids = [fid for triage in triages for fid in triage.failures]
+        wrappedfails = textwrap.wrap(', '.join(str(fid) for fid in failureids),
+                                     initial_indent='    ',
+                                     subsequent_indent='    ')
+
+        logger.info('Need to update failures to status %s with comment "%s"'
+                    '\n%s\n',
+                    status, comment, "\n".join(wrappedfails))
+        if not dry_run:
+            for failureid in failureids:
+                swatbotrest.publish_status(failureid, status, comment)
 
     if not dry_run:
         swatbotrest.invalidate_stepfailures_cache()
