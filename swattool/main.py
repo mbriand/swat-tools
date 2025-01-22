@@ -384,7 +384,7 @@ def publish_new_reviews(dry_run: bool):
                                      subsequent_indent='    ')
 
         logger.info('Need to update failures to status %s with comment "%s"'
-                    '\n%s\n',
+                    '\n%s',
                     status, comment, "\n".join(wrappedfails))
         if not dry_run:
             for failureid in failureids:
