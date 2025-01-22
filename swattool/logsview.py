@@ -15,6 +15,9 @@ from . import utils
 logger = logging.getLogger(__name__)
 
 
+BIG_LOG_LIMIT = 100000
+
+
 class _Highlight:
     # pylint: disable=too-few-public-methods
     def __init__(self, keyword: str, color: str, in_menu: bool):
@@ -168,36 +171,55 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
                         ) -> dict[int, _Highlight]:
     status = failure.build.status
     test = failure.build.test
-    filters = [
-        # Toaster specific rules:
-        #  - Do nothing on "except xxxError:" (likely python code output).
-        #  - Match on "selenium .*exception:".
-        _Filter(re.compile(r".*except\s*\S*error:", flags=re.I),
-                test == "toaster", None, False),
-        _Filter(re.compile(r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
-                           flags=re.I),
-                test == "toaster", utils.Color.RED,
-                status == swatbuild.Status.ERROR),
 
-        # Generic rules:
-        #  - Do nothing on "libgpg-error:".
-        #  - Do nothing on "test_fixed_size_error:".
-        #  - Do nothing on " error::.*ok" (tests cases).
-        #  - Match on "error:", show in menu if build status is error.
-        #  - Match on "warning:", show in menu if build status is warning.
-        _Filter(re.compile(r".*libgpg-error:"), True, None, False),
-        _Filter(re.compile(r".*test_fixed_size_error:"), True, None, False),
-        _Filter(re.compile(r".*( |::)error::.*ok"), True, None, False),
-        _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
-                True, utils.Color.RED, status == swatbuild.Status.ERROR),
-        _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
-                           flags=re.I),
-                True, utils.Color.YELLOW, status == swatbuild.Status.WARNING),
-        _Filter(re.compile(r"^(?P<keyword>fatal):", flags=re.I),
-                True, utils.Color.RED, status == swatbuild.Status.ERROR),
-        _Filter(re.compile(r"(.*\s|^)(?P<keyword>make\[\d\]):.* Error"),
-                True, utils.Color.RED, status == swatbuild.Status.ERROR),
-    ]
+    if len(loglines) > BIG_LOG_LIMIT:
+        logging.warning("Log file for build %s (failure %s) is quite big: "
+                        "using simplified log filters",
+                        failure.build.id, failure.id)
+        filters = [
+            _Filter(re.compile(r"(?P<keyword>\S*error):", flags=re.I),
+                    True, utils.Color.RED, status == swatbuild.Status.ERROR),
+            _Filter(re.compile(r"(?P<keyword>\S*warning):",
+                               flags=re.I),
+                    True, utils.Color.YELLOW,
+                    status == swatbuild.Status.WARNING),
+        ]
+    else:
+        filters = [
+            # Toaster specific rules:
+            #  - Do nothing on "except xxxError:" (likely python code output).
+            #  - Match on "selenium .*exception:".
+            _Filter(re.compile(r".*except\s*\S*error:", flags=re.I),
+                    test == "toaster", None, False),
+            _Filter(re.compile(r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
+                               flags=re.I),
+                    test == "toaster", utils.Color.RED,
+                    status == swatbuild.Status.ERROR),
+
+            # Generic rules:
+            #  - Do nothing on "libgpg-error:".
+            #  - Do nothing on "test_fixed_size_error:".
+            #  - Do nothing on " error::.*ok" (tests cases).
+            #  - Match on "error:", show in menu if build status is error.
+            #  - Match on "warning:", show in menu if build status is warning.
+            #  - Match on "fatal:", show in menu if build status is error.
+            #  - Match on makefile "Error", show in menu if build status is
+            #    error.
+            _Filter(re.compile(r".*libgpg-error:"), True, None, False),
+            _Filter(re.compile(r".*test_fixed_size_error:"),
+                    True, None, False),
+            _Filter(re.compile(r".*( |::)error::.*ok"), True, None, False),
+            _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):", flags=re.I),
+                    True, utils.Color.RED, status == swatbuild.Status.ERROR),
+            _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
+                               flags=re.I),
+                    True, utils.Color.YELLOW,
+                    status == swatbuild.Status.WARNING),
+            _Filter(re.compile(r"^(?P<keyword>fatal):", flags=re.I),
+                    True, utils.Color.RED, status == swatbuild.Status.ERROR),
+            _Filter(re.compile(r"(.*\s|^)(?P<keyword>make\[\d\]):.* Error"),
+                    True, utils.Color.RED, status == swatbuild.Status.ERROR),
+        ]
 
     highlight_lines = {}
     for linenum, line in enumerate(loglines, start=1):
