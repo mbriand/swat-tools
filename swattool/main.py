@@ -3,6 +3,7 @@
 
 """A tool helping triage of Yocto autobuilder failures."""
 
+import concurrent.futures
 import logging
 import re
 import textwrap
@@ -12,6 +13,7 @@ import click
 import tabulate
 
 from .bugzilla import Bugzilla
+from . import logsview
 from . import pokyciarchive
 from . import review
 from . import swatbot
@@ -19,7 +21,6 @@ from . import swatbotrest
 from . import swatbuild
 from . import userdata
 from . import utils
-from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +270,23 @@ def show_pending_failures(refresh: str, limit: int, sort: list[str],
     _show_failures(refresh, urlopens, limit, sort, filters)
 
 
+def _prepare_logs(builds: list[swatbuild.Build]):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        jobs = [executor.submit(logsview.get_log_highlights,
+                                build.get_first_failure(),
+                                "stdio") for build in builds]
+
+        try:
+            complete_iterator = concurrent.futures.as_completed(jobs)
+            with click.progressbar(complete_iterator,
+                                   length=len(jobs)) as jobsprogress:
+                for future in jobsprogress:
+                    future.result()
+        except Exception:
+            executor.shutdown(cancel_futures=True)
+            raise
+
+
 @maingroup.command()
 @_add_options(failures_list_options)
 @_add_options(url_open_options)
@@ -289,12 +307,8 @@ def review_pending_failures(refresh: str,
     if not builds:
         return
 
-    logger.info("Downloading logs...")
-    with click.progressbar(builds) as builds_progress:
-        for build in builds_progress:
-            logurl = build.get_first_failure().get_log_raw_url()
-            if logurl:
-                Session().get(logurl)
+    logger.info("Preparing logs...")
+    _prepare_logs(builds)
 
     logger.info("Fetching poky-ci-archive git...")
     pokyciarchive.update()
