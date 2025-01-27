@@ -80,10 +80,13 @@ class Field(enum.StrEnum):
 class Failure:
     """A Swatbot failure."""
 
+    # pylint: disable=too-many-instance-attributes
+
     def __init__(self, failure_id: int, failure_data: dict, build: 'Build'):
         self.id = failure_id
         self.build = build
         self.stepnumber = int(failure_data['attributes']['stepnumber'])
+        self.status = Status.from_int(failure_data['attributes']['status'])
         self.stepname = failure_data['attributes']['stepname']
         self.urls = {u.split()[0].rsplit('/')[-1]: u
                      for u in failure_data['attributes']['urls'].split()}
@@ -323,8 +326,10 @@ class Build:
 
     def get_first_failure(self) -> Failure:
         """Get the first failure of the build."""
-        first_failure = min(self.failures)
-        return self.failures[first_failure]
+        for _, failure in sorted(self.failures.items()):
+            if failure.status == self.status:
+                return failure
+        return self.failures[min(self.failures)]
 
     def get_sort_tuple(self, keys: Iterable[Field],
                        userinfos: Optional[dict[int, dict[Field, Any]]] = None
