@@ -217,7 +217,7 @@ class Build:
 
                 commitcount = len(self._git_info['commits'])
                 plus = '+' if commitcount == limit else ''
-                desc = f"{commitcount}{plus} ahead of {basebranch}"
+                desc = f"{commitcount}{plus} commits ahead of {basebranch}"
                 self._git_info['description'] = desc
 
         return self._git_info
@@ -398,7 +398,7 @@ class Build:
             table.append(["Parent", self._format_parent_description()])
 
         if 'description' in self.git_info:
-            table.append(["Git data", self.git_info['description']])
+            table.append(["Git info", self.git_info['description']])
 
         for i, (failureid, failure) in enumerate(self.failures.items()):
             # Create strings for all failures and the attributed new status (if
