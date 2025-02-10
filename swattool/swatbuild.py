@@ -6,6 +6,7 @@ import enum
 import logging
 from datetime import datetime
 from typing import Any, Iterable, Optional
+import urllib
 
 import click
 import requests
@@ -198,11 +199,13 @@ class Build:
             elif self.test in ['a-quick', 'a-full']:
                 name = self.test
                 _, _, number = self.autobuilder_url.rpartition('/')
-                gittag = f"{self.test}-"
             else:
                 return {}
 
-            gittag = f"{name}-{number}"
+            aburl = urllib.parse.urlparse(self.autobuilder_url)
+            host = aburl.netloc.replace(':', '_')
+
+            gittag = f"{host}{aburl.path}{name}-{number}"
             basebranch = self.branch.split('/')[-1]
             if basebranch.endswith('-next'):
                 basebranch = basebranch[:-len('-next')]
