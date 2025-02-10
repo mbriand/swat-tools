@@ -455,7 +455,8 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                 # Make sure failures are still pending
                 triage.failures = {f for f in triage.failures if is_pending(f)}
 
-                reviews.setdefault((status, comment), []).append(triage)
+                if triage.failures:
+                    reviews.setdefault((status, comment), []).append(triage)
 
     userinfos.save()
 
