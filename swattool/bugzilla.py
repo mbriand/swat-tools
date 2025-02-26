@@ -8,6 +8,7 @@ import json
 from typing import Optional
 
 import requests
+import tabulate
 
 from .webrequests import Session
 from . import utils
@@ -21,18 +22,30 @@ ISSUE_URL = f"{BASE_URL}/show_bug.cgi?id="
 TOKENFILE = utils.DATADIR / 'bugzilla_token'
 
 
+class Bug:
+    """Bugzilla bug entry."""
+
+    def __init__(self, bugdata):
+        self.id = bugdata['id']
+        self.summary = bugdata['summary']
+        self.classification = bugdata['classification']
+        self.status = bugdata['status']
+        self.resolution = bugdata['resolution']
+
+
 class Bugzilla:
     """Bugzilla server interaction class."""
 
     CACHE_TIMEOUT_S = 60 * 60 * 24
 
-    known_abints: dict[int, str] = {}
+    known_abints: dict[int, Bug] = {}
 
     @classmethod
-    def get_abints(cls, force_refresh: bool = False) -> dict[int, str]:
-        """Get a dictionarry of all AB-INT issues currently open."""
+    def get_abints(cls, force_refresh: bool = False) -> dict[int, Bug]:
+        """Get a dictionary of all AB-INT issues."""
         if not cls.known_abints or force_refresh:
             logger.info("Loading AB-INT list...")
+            fields = ['summary', 'classification', 'status', 'resolution']
             params = {
                 'order': 'order=bug_id%20DESC',
                 'query_format': 'advanced',
@@ -46,11 +59,9 @@ class Bugzilla:
                                "WORKSFORME",
                                "MOVED",
                                ],
-                # 'short_desc': 'AB-INT.*',
-                # 'short_desc_type': 'regexp',
                 'status_whiteboard': 'AB-INT',
                 'status_whiteboard_type': 'allwordssubstr',
-                'include_fields': ['id', 'summary'],
+                'include_fields': ['id'] + fields,
             }
 
             fparams = urllib.parse.urlencode(params, doseq=True)
@@ -58,10 +69,25 @@ class Bugzilla:
             cache_timeout = 0 if force_refresh else cls.CACHE_TIMEOUT_S
             data = Session().get(req, cache_timeout)
 
-            cls.known_abints = {bug['id']: bug['summary']
+            cls.known_abints = {bug['id']: Bug(bug)
                                 for bug in json.loads(data)['bugs']}
 
         return cls.known_abints
+
+    @classmethod
+    def get_formatted_abints(cls, force_refresh: bool = False
+                             ) -> list[str]:
+        """Get a formatted list of all AB-INT issues."""
+
+        def format_status(abint):
+            if abint.status == "RESOLVED":
+                return f"rslvd:{abint.resolution}".upper()
+            return abint.status
+
+        abints = cls.get_abints(force_refresh)
+        table = [[abint.id, abint.summary, format_status(abint)]
+                 for abint in abints.values()]
+        return tabulate.tabulate(table, tablefmt="plain").splitlines()
 
     @classmethod
     def get_bug_url(cls, bugid: int) -> str:
@@ -83,9 +109,8 @@ class Bugzilla:
         """Get bugzilla bug title."""
         abints = cls.get_abints()
         if bugid in abints:
-            return abints[bugid]
+            return abints[bugid].summary
 
-        # order=order=bug_id DESC&query_format=advanced&bug_id=15614
         params = {
             'order': 'order=bug_id%20DESC',
             'query_format': 'advanced',
@@ -101,6 +126,29 @@ class Bugzilla:
             return None
 
         return jsondata[0]['summary']
+
+    @classmethod
+    def get_bug_description(cls, bugid: int) -> Optional[str]:
+        """Get bugzilla bug description."""
+
+        # It looks like this is too slow and the bugzilla version we are using
+        # so far is not able to fetch this data at the same time as the ab ints
+        # list. Next bugzilla releases will offer a 'description' field in bug
+        # description.
+        # Disable this and just show a link...
+        # req = f"{REST_BASE_URL}bug/{bugid}/comment"
+        # data = Session().get(req, cls.CACHE_TIMEOUT_S)
+
+        # jsondata = json.loads(data)['bugs']
+        # if str(bugid) not in jsondata:
+        #     return None
+
+        # comments = jsondata[str(bugid)]['comments']
+        # if len(comments) < 1:
+        #     return None
+
+        # return comments[0]['text']
+        return f'{BASE_URL}/show_bug.cgi?id={bugid}'
 
     @classmethod
     def login(cls, user: str, password: str) -> bool:

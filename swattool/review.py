@@ -39,25 +39,32 @@ def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
 def _prompt_bug_infos(build: swatbuild.Build,
                       is_abint: bool):
     """Create new status of type BUG for a given failure."""
+
+    def preview_bug(fstr):
+        bugnum, _, _ = fstr.partition(' ')
+        try:
+            bugnum = int(bugnum)
+        except ValueError:
+            return None
+        return Bugzilla.get_bug_description(bugnum)
+
     if is_abint:
-        abints = Bugzilla.get_abints()
+        abints = Bugzilla.get_formatted_abints()
         abrefresh = "Refresh AB-INT list from server"
 
         while True:
-            abint_list = [
-                abrefresh,
-                *[f"{k} {v}" for (k, v) in abints.items()],
-            ]
+            abint_list = [abrefresh, *abints]
 
             abint_menu = TerminalMenu(abint_list, title="Bug", search_key=None,
-                                      raise_error_on_interrupt=True)
+                                      raise_error_on_interrupt=True,
+                                      preview_command=preview_bug)
             abint_index = abint_menu.show()
 
             if abint_index is None:
                 return None
 
             if abint_list[abint_index] == abrefresh:
-                abints = Bugzilla.get_abints(force_refresh=True)
+                abints = Bugzilla.get_formatted_abints(force_refresh=True)
             else:
                 break
         bugnum, _, _ = abint_list[abint_index].partition(' ')
