@@ -151,7 +151,9 @@ def _list_failures_menu(builds: list[swatbuild.Build],
 
     shown_fields = [
         swatbuild.Field.BUILD,
+        swatbuild.Field.BRANCH,
         swatbuild.Field.TEST,
+        swatbuild.Field.WORKER,
         swatbuild.Field.OWNER,
     ]
     entries = [[build.get(f) for f in shown_fields] for build in builds]
