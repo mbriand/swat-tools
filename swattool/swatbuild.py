@@ -200,28 +200,39 @@ class Build:
                 name = self.test
                 _, _, number = self.autobuilder_url.rpartition('/')
             else:
-                return {}
+                name = number = None
 
-            aburl = urllib.parse.urlparse(self.autobuilder_url)
-            host = aburl.netloc.replace(':', '_')
+            if name and number:
+                aburl = urllib.parse.urlparse(self.autobuilder_url)
+                host = aburl.netloc.replace(':', '_')
 
-            gittag = f"{host}{aburl.path}{name}-{number}"
-            basebranch = self.branch.split('/')[-1]
-            if basebranch.endswith('-next'):
-                basebranch = basebranch[:-len('-next')]
+                gittag = f"{host}{aburl.path}{name}-{number}"
+                basebranch = self.branch.split('/')[-1]
+                if basebranch.endswith('-next'):
+                    basebranch = basebranch[:-len('-next')]
 
-            limit = 100
-            git_info = pokyciarchive.get_build_commits(gittag, basebranch,
-                                                       limit)
-            if git_info is None:
-                self._git_info = {}
-            else:
-                self._git_info = git_info
+                limit = 100
+                git_info = pokyciarchive.get_build_commits(gittag, basebranch,
+                                                           limit)
 
-                commitcount = len(self._git_info['commits'])
-                plus = '+' if commitcount == limit else ''
-                desc = f"{commitcount}{plus} commits ahead of {basebranch}"
-                self._git_info['description'] = desc
+                if git_info is not None:
+                    self._git_info = git_info
+
+                    commitcount = len(self._git_info['commits'])
+                    plus = '+' if commitcount == limit else ''
+                    desc = f"{commitcount}{plus} commits ahead of {basebranch}"
+                    self._git_info['description'] = desc
+
+            if self._git_info is None:
+                buildboturl = Build._rest_api_url(self.autobuilder_url)
+                buildbot_build = buildbotrest.get_build(buildboturl, self.id)
+                if buildbot_build:
+                    properties = buildbot_build['builds'][0]['properties']
+                    rev = properties['yp_build_revision'][0]
+
+                    self._git_info = {'description': f"On commit {rev}"}
+                else:
+                    self._git_info = {'description': "On unknown revision"}
 
         return self._git_info
 

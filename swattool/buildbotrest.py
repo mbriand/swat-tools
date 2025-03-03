@@ -34,7 +34,7 @@ def _get_json(url) -> Optional[dict[str, Any]]:
 
 def get_build(rest_url: str, buildid: int) -> Optional[dict[str, Any]]:
     """Get data about a given build."""
-    build_url = f"{rest_url}/builds/{buildid}"
+    build_url = f"{rest_url}/builds/{buildid}?property=*"
     logging.debug("Build info URL: %s", build_url)
 
     return _get_json(build_url)
