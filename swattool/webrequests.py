@@ -138,7 +138,7 @@ class Session:
         cache_new_file = cache_candidates[0]
 
         with cache_lock:
-            cache_olds = [file for file in cache_candidates if file.exists()]
+            cache_olds = [file for file in cache_candidates if file.is_file()]
             for cachefile in cache_olds:
                 data = self._try_load_cache(cachefile, max_cache_age)
                 if data:
@@ -151,7 +151,7 @@ class Session:
         req.raise_for_status()
 
         with cache_lock:
-            cache_olds = [file for file in cache_candidates if file.exists()]
+            cache_olds = [file for file in cache_candidates if file.is_file()]
             for cachefile in cache_olds:
                 cachefile.unlink()
             self._create_cache_file(cache_new_file, req.text)
