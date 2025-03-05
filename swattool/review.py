@@ -227,6 +227,12 @@ def _handle_view_command(build: swatbuild.Build, command: str
     return (False, False)
 
 
+def _can_show_git_log(build: swatbuild.Build) -> bool:
+    return (build.git_info is not None
+            and 'base_commit' in build.git_info
+            and 'tip_commit' in build.git_info)
+
+
 def _handle_edit_command(build: swatbuild.Build, userinfo: userdata.UserInfo,
                          command: str) -> tuple[bool, bool]:
     if command == "e":  # Edit notes
@@ -267,8 +273,8 @@ def _get_commands(build: swatbuild.Build):
         "[g] open stdio log of first failed step URL",
         "[l] show stdio log of first failed step",
         "[x] explore all logs",
-        "[v] view git log (oneline)" if build.git_info else "",
-        "view git log" if build.git_info else "",
+        "[v] view git log (oneline)" if _can_show_git_log(build) else "",
+        "view git log" if _can_show_git_log(build) else "",
         None,
         "[n] next",
         "[p] previous",
