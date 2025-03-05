@@ -227,11 +227,15 @@ class Build:
                 buildboturl = Build._rest_api_url(self.autobuilder_url)
                 buildbot_build = buildbotrest.get_build(buildboturl, self.id)
                 if buildbot_build:
-                    properties = buildbot_build['builds'][0]['properties']
-                    rev = properties['yp_build_revision'][0]
+                    try:
+                        properties = buildbot_build['builds'][0]['properties']
+                        rev = properties['yp_build_revision'][0]
 
-                    self._git_info = {'description': f"On commit {rev}"}
-                else:
+                        self._git_info = {'description': f"On commit {rev}"}
+                    except (KeyError, IndexError):
+                        pass
+
+                if self._git_info is None:
                     self._git_info = {'description': "On unknown revision"}
 
         return self._git_info
