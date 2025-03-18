@@ -144,6 +144,12 @@ class Failure:
 
         return str(self.triage)
 
+    def __str__(self):
+        return (f"Failure {self.id}: "
+                f"{self.status} on step {self.stepnumber} "
+                f"of build {self.build}, {self.stepname}"
+                )
+
 
 class Build:
     """A Swatbot build."""
