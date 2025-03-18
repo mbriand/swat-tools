@@ -220,7 +220,10 @@ def _handle_view_command(build: swatbuild.Build, command: str
     if command in ["v", "view git log"]:  # View git log
         base = build.git_info['base_commit']
         tip = build.git_info['tip_commit']
-        options = ['--oneline'] if command == "v" else []
+        if command == "v":
+            options = ['--oneline']
+        else:
+            options = ["--patch", "--name-only"]
         success = pokyciarchive.show_log(tip, base, options)
         return (True, success)
 
