@@ -169,7 +169,7 @@ def _format_log_preview(linenum: int, lines: list[str],
 
 def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
                         ) -> dict[int, _Highlight]:
-    status = failure.build.status
+    status = failure.status
     test = failure.build.test
 
     if len(loglines) > BIG_LOG_LIMIT:
