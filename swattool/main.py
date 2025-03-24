@@ -3,7 +3,6 @@
 
 """A tool helping triage of Yocto autobuilder failures."""
 
-import concurrent.futures
 import logging
 import re
 import textwrap
@@ -14,7 +13,6 @@ import pygit2
 import tabulate
 
 from .bugzilla import Bugzilla
-from . import logsview
 from . import pokyciarchive
 from . import review
 from . import swatbot
@@ -271,23 +269,6 @@ def show_pending_failures(refresh: str, limit: int, sort: list[str],
     _show_failures(refresh, urlopens, limit, sort, filters)
 
 
-def _prepare_logs(builds: list[swatbuild.Build]):
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        jobs = [executor.submit(logsview.get_log_highlights,
-                                build.get_first_failure(),
-                                "stdio") for build in builds]
-
-        try:
-            complete_iterator = concurrent.futures.as_completed(jobs)
-            with click.progressbar(complete_iterator,
-                                   length=len(jobs)) as jobsprogress:
-                for future in jobsprogress:
-                    future.result()
-        except Exception:
-            executor.shutdown(cancel_futures=True)
-            raise
-
-
 @maingroup.command()
 @_add_options(failures_list_options)
 @_add_options(url_open_options)
@@ -303,13 +284,11 @@ def review_pending_failures(refresh: str,
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
     builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
-                                                  filters=filters)
+                                                  filters=filters,
+                                                  preparelogs=True)
 
     if not builds:
         return
-
-    logger.info("Preparing logs...")
-    _prepare_logs(builds)
 
     logger.info("Fetching poky-ci-archive git...")
     try:

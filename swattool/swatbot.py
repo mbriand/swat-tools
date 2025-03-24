@@ -8,6 +8,7 @@ from typing import Any, Collection, Optional
 
 import click
 
+from . import logsview
 from . import swatbotrest
 from . import swatbuild
 from . import userdata
@@ -18,21 +19,27 @@ logger = logging.getLogger(__name__)
 def _create_build(filters: dict[str, Any],
                   buildid: int,
                   failures: dict[int, dict],
-                  userinfos: userdata.UserInfos) -> Optional[swatbuild.Build]:
+                  userinfos: userdata.UserInfos
+                  ) -> tuple[str, Optional[swatbuild.Build]]:
     build = swatbuild.Build(buildid, failures)
 
     userinfo = userinfos[build.id]
     if not build.match_filters(filters, userinfo):
-        return None
+        return ("build", None)
 
-    return build
+    return ("build", build)
+
+
+def _prepare_log(build: swatbuild.Build):
+    logsview.get_log_highlights(build.get_first_failure(), "stdio")
+    return ("preparelogs", None)
 
 
 def _create_builds(filters: dict[str, Any],
                    failures: dict[int, dict[int, dict]],
                    limit: int,
-                   userinfos: userdata.UserInfos):
-    logger.info("Loading build failures details...")
+                   userinfos: userdata.UserInfos,
+                   preparelogs: bool = False):
     infos = []
     limited_pending_ids = sorted(failures.keys(), reverse=True)[:limit]
     jobs = []
@@ -54,13 +61,27 @@ def _create_builds(filters: dict[str, Any],
                                         failures[buildid], userinfos))
 
         try:
-            complete_iterator = concurrent.futures.as_completed(jobs)
-            with click.progressbar(complete_iterator,
-                                   length=len(jobs)) as jobsprogress:
-                for future in jobsprogress:
-                    build = future.result()
-                    if build is not None:
-                        infos.append(build)
+            progress = 0
+            jobcount = len(jobs) * (2 if preparelogs else 1)
+            with click.progressbar(length=jobcount,
+                                   label="Loading build failures details"
+                                   ) as jobsprogress:
+                for future in concurrent.futures.as_completed(jobs):
+                    restype, res = future.result()
+                    if restype == "build":
+                        if res is not None:
+                            infos.append(res)
+                            if preparelogs:
+                                jobs.append(executor.submit(_prepare_log, res))
+                                progress += 1
+                            else:
+                                progress += 2
+                        else:
+                            progress += 2
+                    elif restype == "preparelogs":
+                        progress += 1
+
+                    jobsprogress.update(progress)
         except KeyboardInterrupt:
             executor.shutdown(cancel_futures=True)
             return ([], userinfos)
@@ -72,7 +93,7 @@ def _create_builds(filters: dict[str, Any],
 
 
 def get_failure_infos(limit: int, sort: Collection[str],
-                      filters: dict[str, Any]
+                      filters: dict[str, Any], preparelogs: bool = False
                       ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
     """Get consolidated list of failure infos and local reviews infos."""
     userinfos = userdata.UserInfos()
@@ -84,7 +105,7 @@ def get_failure_infos(limit: int, sort: Collection[str],
         statusfilter = filters['triage'][0]
     failures = swatbotrest.get_failures(statusfilter)
 
-    infos = _create_builds(filters, failures, limit, userinfos)
+    infos = _create_builds(filters, failures, limit, userinfos, preparelogs)
 
     def sortfn(elem):
         return elem.get_sort_tuple([swatbuild.Field(k) for k in sort])
