@@ -89,8 +89,8 @@ def main():
     """Handle triage of Yocto autobuilder failures."""
     try:
         maingroup()  # pylint: disable=no-value-for-parameter
-    except utils.LoginRequiredException as e:
-        if e.service == "swatbot":
+    except utils.LoginRequiredException as err:
+        if err.service == "swatbot":
             logger.warning("Login required to swatbot server")
             user = click.prompt('swatbot user')
             password = click.prompt('swatbot password', hide_input=True)
@@ -294,7 +294,7 @@ def review_pending_failures(refresh: str,
                             limit: int, sort: list[str],
                             **kwargs):
     """Review failures waiting for triage."""
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    # pylint: disable=too-many-arguments
 
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
@@ -336,7 +336,7 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
 
     STATUS_COMMENT: free format string or bug number for 'Bug' status.
     """
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    # pylint: disable=too-many-arguments
 
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]

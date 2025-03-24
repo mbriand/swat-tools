@@ -194,25 +194,31 @@ class Build:
         self.failures = {fid: Failure(fid, fdata, self)
                          for fid, fdata in failures.items()}
 
+    def _get_git_tag(self) -> Optional[str]:
+        if self.parent_builder_name and self.parent_build_number:
+            name = self.parent_builder_name
+            number = self.parent_build_number
+        elif self.test in ['a-quick', 'a-full']:
+            name = self.test
+            _, _, number = self.autobuilder_url.rpartition('/')
+        else:
+            name = number = None
+
+        if name and number:
+            aburl = urllib.parse.urlparse(self.autobuilder_url)
+            host = aburl.netloc.replace(':', '_')
+
+            return f"{host}{aburl.path}{name}-{number}"
+
+        return None
+
     @property
     def git_info(self) -> dict[str, Any]:
         """Get informations about built git branch."""
         if self._git_info is None:
-            gittag = None
-            if self.parent_builder_name and self.parent_build_number:
-                name = self.parent_builder_name
-                number = self.parent_build_number
-            elif self.test in ['a-quick', 'a-full']:
-                name = self.test
-                _, _, number = self.autobuilder_url.rpartition('/')
-            else:
-                name = number = None
+            gittag = self._get_git_tag()
 
-            if name and number:
-                aburl = urllib.parse.urlparse(self.autobuilder_url)
-                host = aburl.netloc.replace(':', '_')
-
-                gittag = f"{host}{aburl.path}{name}-{number}"
+            if gittag:
                 basebranch = self.branch.split('/')[-1]
                 if basebranch.endswith('-next'):
                     basebranch = basebranch[:-len('-next')]

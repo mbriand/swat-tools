@@ -142,19 +142,19 @@ def show_in_less(text: str, startline: Optional[int] = 0):
     if startline:
         less_cmd.append(f"+G{startline}")
 
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-        f.write(text)
-        f.close()
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as file:
+        file.write(text)
+        file.close()
         try:
-            subprocess.run([*less_cmd, f.name], check=True)
+            subprocess.run([*less_cmd, file.name], check=True)
         except subprocess.CalledProcessError:
             logger.error("Failed to start less")
-        os.unlink(f.name)
+        os.unlink(file.name)
 
 
 def launch_in_system_defaultshow_in_less(text: str):
     """Show a text buffer in system default program."""
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-        f.write(text)
-        f.close()
-        click.launch(f.name)
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as file:
+        file.write(text)
+        file.close()
+        click.launch(file.name)

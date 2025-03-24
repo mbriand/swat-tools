@@ -87,8 +87,8 @@ def _prompt_bug_infos(build: swatbuild.Build,
     bcomment = _format_bugzilla_comment(build)
     try:
         bcomment = click.edit(bcomment, require_save=False)
-    except click.exceptions.ClickException as e:
-        logger.warning("Got exception, aborting triage: %s", e)
+    except click.exceptions.ClickException as err:
+        logger.warning("Got exception, aborting triage: %s", err)
         return None
 
     newstatus = userdata.Triage()
@@ -465,9 +465,9 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                     continue
 
                 def is_pending(failure_id):
-                    r = swatbotrest.RefreshPolicy.FORCE
+                    pol = swatbotrest.RefreshPolicy.FORCE
                     failure = swatbotrest.get_stepfailure(failure_id,
-                                                          refresh_override=r)
+                                                          refresh_override=pol)
                     return failure['attributes']['triage'] == 0
 
                 # Make sure failures are still pending

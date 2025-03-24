@@ -47,8 +47,8 @@ class _Filter:
         if not self.color:
             return (True, None)
 
-        hl = _Highlight(match.group("keyword"), self.color, self.in_menu)
-        return (True, hl)
+        hilight = _Highlight(match.group("keyword"), self.color, self.in_menu)
+        return (True, hilight)
 
 
 def show_logs_menu(build: swatbuild.Build) -> bool:

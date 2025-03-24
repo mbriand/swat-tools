@@ -25,6 +25,8 @@ TOKENFILE = utils.DATADIR / 'bugzilla_token'
 class Bug:
     """Bugzilla bug entry."""
 
+    # pylint: disable=too-few-public-methods
+
     def __init__(self, bugdata):
         self.id = bugdata['id']
         self.summary = bugdata['summary']
@@ -130,7 +132,6 @@ class Bugzilla:
     @classmethod
     def get_bug_description(cls, bugid: int) -> Optional[str]:
         """Get bugzilla bug description."""
-
         # It looks like this is too slow and the bugzilla version we are using
         # so far is not able to fetch this data at the same time as the ab ints
         # list. Next bugzilla releases will offer a 'description' field in bug
