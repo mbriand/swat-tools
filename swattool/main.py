@@ -376,7 +376,9 @@ def publish_new_reviews(dry_run: bool):
 
             if any(logs):
                 comment = bugurl = Bugzilla.get_bug_url(bugid)
-                logger.info('Need to update %s with:\n%s', bugurl,
+                bugtitle = Bugzilla.get_bug_title(bugid)
+                logger.info('Need to update ticket %s (%s) with:\n%s',
+                            bugtitle, bugurl,
                             "\n".join(textwrap.indent(log, '    ')
                                       for log in logs))
                 if not dry_run:
@@ -388,7 +390,7 @@ def publish_new_reviews(dry_run: bool):
                                      subsequent_indent='    ')
 
         logger.info('Need to update failures to status %s with comment "%s"'
-                    '\n%s',
+                    '\n%s\n',
                     status, comment, "\n".join(wrappedfails))
         if not dry_run:
             for failureid in failureids:
