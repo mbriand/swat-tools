@@ -2,20 +2,25 @@
 
 """Swatbot review functions."""
 
+import hashlib
 import logging
+import pickle
 import re
 import shutil
 from typing import Optional
 
 from simple_term_menu import TerminalMenu  # type: ignore
+import yaml
 
 from . import swatbuild
 from . import utils
 
 logger = logging.getLogger(__name__)
 
+HILIGHTS_FORMAT_VERSION = 1
 
-BIG_LOG_LIMIT = 100000
+# Big log thershold in bytes
+BIG_LOG_LIMIT = 100 * 1024 * 1024
 
 
 class _Highlight:
@@ -167,12 +172,12 @@ def _format_log_preview(linenum: int, lines: list[str],
     return "\n".join(lines[:preview_height])
 
 
-def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
-                        ) -> dict[int, _Highlight]:
+def _get_log_highlights_filters(loglen: int, failure: swatbuild.Failure
+                                ) -> list[_Filter]:
     status = failure.status
     test = failure.build.test
 
-    if len(loglines) > BIG_LOG_LIMIT:
+    if loglen > BIG_LOG_LIMIT:
         logging.warning("Log file for build %s (failure %s) is quite big: "
                         "using simplified log filters",
                         failure.build.id, failure.id)
@@ -221,6 +226,11 @@ def _get_log_highlights(loglines: list[str], failure: swatbuild.Failure
                     True, utils.Color.RED, status == swatbuild.Status.ERROR),
         ]
 
+    return filters
+
+
+def _get_log_highlights(loglines: list[str], filters: list[_Filter]
+                        ) -> dict[int, _Highlight]:
     highlight_lines = {}
     for linenum, line in enumerate(loglines, start=1):
         for filtr in filters:
@@ -238,14 +248,44 @@ _cached_log_highlights: dict[tuple[swatbuild.Failure, str],
 
 
 def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
-                               loglines: list[str]
+                               logdata: str,
                                ) -> dict[int, _Highlight]:
+    # Try to get data from memory cache
     highlights = _cached_log_highlights.get((failure, logname), None)
     if highlights:
         return highlights
 
-    highlights = _get_log_highlights(loglines, failure)
+    # Try to get data from disk cache
+    filename = utils.CACHEDIR / 'log_hilights' / f'{failure.id}_{logname}.yaml'
+    loghash = hashlib.sha256(logdata.encode())
+    filters = _get_log_highlights_filters(len(logdata), failure)
+    filtershash = hashlib.sha256(pickle.dumps(filters))
+    if filename.is_file():
+        with filename.open('rb') as file:
+            try:
+                data = yaml.load(file, Loader=yaml.Loader)
+                if (data['version'] == HILIGHTS_FORMAT_VERSION
+                        and data['sha256'] == loghash.hexdigest()
+                        and data['filtershash'] == filtershash.hexdigest()):
+                    highlights = data['hilights']
+            except (TypeError, KeyError):
+                pass
+
+    # Generate hilights data
+    if not highlights:
+        loglines = logdata.splitlines()
+        highlights = _get_log_highlights(loglines, filters)
+        with filename.open('wb') as file:
+            data = {
+                'version': HILIGHTS_FORMAT_VERSION,
+                'hilights': highlights,
+                'sha256': loghash.hexdigest(),
+                'filtershash': filtershash.hexdigest(),
+            }
+            yaml.dump(data, file, encoding='utf-8')
+
     _cached_log_highlights[(failure, logname)] = highlights
+
     return highlights
 
 
@@ -256,9 +296,8 @@ def get_log_highlights(failure: swatbuild.Failure, logname: str
     if not logdata:
         return []
 
+    highlights = _get_cached_log_highlights(failure, logname, logdata)
     loglines = logdata.splitlines()
-
-    highlights = _get_cached_log_highlights(failure, logname, loglines)
 
     return [loglines[line - 1] for line in highlights
             if highlights[line].in_menu]
@@ -296,7 +335,7 @@ def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
 
     utils.clear()
     loglines = logdata.splitlines()
-    highlights = _get_cached_log_highlights(failure, logname, loglines)
+    highlights = _get_cached_log_highlights(failure, logname, logdata)
 
     entries = ["View entire log file|",
                "View entire log file in default editor|",
