@@ -10,6 +10,7 @@ import textwrap
 from typing import Any, Collection
 
 import click
+import pygit2
 import tabulate
 
 from .bugzilla import Bugzilla
@@ -311,7 +312,10 @@ def review_pending_failures(refresh: str,
     _prepare_logs(builds)
 
     logger.info("Fetching poky-ci-archive git...")
-    pokyciarchive.update()
+    try:
+        pokyciarchive.update()
+    except pygit2.GitError:
+        logger.warning("Failed to update poky-ci-archive")
 
     # Make sure abints are up-to-date.
     Bugzilla.get_abints()
