@@ -2,6 +2,7 @@
 
 """Various helpers with no better place to."""
 
+import concurrent.futures
 import logging
 import os
 import pathlib
@@ -158,3 +159,33 @@ def launch_in_system_defaultshow_in_less(text: str):
         file.write(text)
         file.close()
         click.launch(file.name)
+
+
+class ExecutorWithProgress:
+    """Generate a thread pool executor with progress bar."""
+
+    def __init__(self):
+        self.executor = concurrent.futures.ThreadPoolExecutor(
+            min(16, os.cpu_count()))
+        self.jobs = []
+
+    def submit(self, name, *args, **kwargs):
+        """Submit a new job to the executor."""
+        self.jobs.append((name, self.executor.submit(*args, **kwargs)))
+
+    def run(self):
+        """Run all jobs in the executor."""
+        with click.progressbar(length=len(self.jobs), label="Loading failures",
+                               item_show_func=lambda a: a
+                               ) as jobsprogress:
+            try:
+                alljobs = [job[1] for job in self.jobs]
+                for _ in concurrent.futures.as_completed(alljobs):
+                    stepname = next((jobname for jobname, job in self.jobs
+                                    if job.running()), "")
+                    jobsprogress.update(1, str(stepname))
+            except KeyboardInterrupt:
+                self.executor.shutdown(cancel_futures=True)
+            except Exception:
+                self.executor.shutdown(cancel_futures=True)
+                raise
