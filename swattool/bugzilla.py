@@ -46,7 +46,6 @@ class Bugzilla:
     def get_abints(cls, force_refresh: bool = False) -> dict[int, Bug]:
         """Get a dictionary of all AB-INT issues."""
         if not cls.known_abints or force_refresh:
-            logger.info("Loading AB-INT list...")
             fields = ['summary', 'classification', 'status', 'resolution']
             params = {
                 'order': 'order=bug_id%20DESC',

@@ -199,13 +199,39 @@ def _format_pending_failures(builds: list[swatbuild.Build],
     return (table, headers)
 
 
+def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
+                      filters: dict[str, Any], for_review: bool = False,
+                      ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
+    def update_git():
+        try:
+            pokyciarchive.update()
+        except pygit2.GitError:
+            logger.warning("Failed to update poky-ci-archive")
+
+    swatbotrest.RefreshManager().set_policy_by_name(refresh)
+
+    userinfos = userdata.UserInfos()
+    buildsfetcher = swatbot.BuildFetcher(userinfos, limit=limit,
+                                         filters=filters,
+                                         preparelogs=for_review)
+
+    executor = utils.ExecutorWithProgress()
+    if for_review:
+        executor.submit("Fetching poky-ci-archive", update_git)
+        executor.submit("Updating AB-INT lists", Bugzilla.get_abints)
+
+    buildsfetcher.prepare_with_executor(executor)
+    executor.run()
+
+    builds = buildsfetcher.get_builds(sort)
+
+    return (builds, userinfos)
+
+
 def _show_failures(refresh: str, urlopens: set[str], limit: int,
                    sort: Collection[str], filters: dict[str, Any]):
     """Show all failures waiting for triage."""
-    swatbotrest.RefreshManager().set_policy_by_name(refresh)
-
-    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
-                                                  filters=filters)
+    builds, userinfos = _get_builds_infos(refresh, limit, sort, filters)
 
     for build in builds:
         build.open_urls(urlopens)
@@ -276,28 +302,15 @@ def review_pending_failures(refresh: str,
                             limit: int, sort: list[str],
                             **kwargs):
     """Review failures waiting for triage."""
-    # pylint: disable=too-many-arguments
-
-    swatbotrest.RefreshManager().set_policy_by_name(refresh)
-
     urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
-    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
-                                                  filters=filters,
-                                                  preparelogs=True)
+
+    builds, userinfos = _get_builds_infos(refresh, limit, sort, filters,
+                                          for_review=True)
 
     if not builds:
         return
-
-    logger.info("Fetching poky-ci-archive git...")
-    try:
-        pokyciarchive.update()
-    except pygit2.GitError:
-        logger.warning("Failed to update poky-ci-archive")
-
-    # Make sure abints are up-to-date.
-    Bugzilla.get_abints()
 
     review.review_failures(builds, userinfos, urlopens)
 
@@ -324,10 +337,7 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
 
-    swatbotrest.RefreshManager().set_policy_by_name(refresh)
-
-    builds, userinfos = swatbot.get_failure_infos(limit=limit, sort=sort,
-                                                  filters=filters)
+    builds, userinfos = _get_builds_infos(refresh, limit, sort, filters)
     review.batch_review_failures(builds, userinfos, not yes,
                                  swatbotrest.TriageStatus.from_str(status),
                                  status_comment)
