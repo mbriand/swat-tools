@@ -446,36 +446,40 @@ def batch_review_failures(builds: list[swatbuild.Build],
 def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                               list[userdata.Triage]]:
     """Get a list of new reviews waiting to be published on swatbot server."""
+
+    def update_userinfo(userinfo):
+        for triage in userinfo.triages:
+            status = triage.status
+            comment = triage.comment
+            if not status:
+                continue
+
+            if not comment:
+                logger.warning("Review for failure %s is missing comment: "
+                               "skipping", buildid)
+                continue
+
+            def is_pending(failure_id):
+                pol = swatbotrest.RefreshPolicy.FORCE
+                failure = swatbotrest.get_stepfailure(failure_id,
+                                                      refresh_override=pol)
+                return failure['attributes']['triage'] == 0
+
+            # Make sure failures are still pending
+            triage.failures = {f for f in triage.failures if is_pending(f)}
+
+            if triage.failures:
+                reviews.setdefault((status, comment), []).append(triage)
+
     userinfos = userdata.UserInfos()
 
-    logger.info("Loading pending reviews...")
     reviews: dict[tuple[swatbotrest.TriageStatus, Any],
                   list[userdata.Triage]] = {}
-    with click.progressbar(userinfos.items()) as userinfos_progress:
-        for buildid, userinfo in userinfos_progress:
-            for triage in userinfo.triages:
-                status = triage.status
-                comment = triage.comment
-                if not status:
-                    continue
+    executor = utils.ExecutorWithProgress(8)
+    for buildid, userinfo in userinfos.items():
+        executor.submit("Updating pending review", update_userinfo, userinfo)
 
-                if not comment:
-                    logger.warning("Review for failure %s is missing comment: "
-                                   "skipping", buildid)
-                    continue
-
-                def is_pending(failure_id):
-                    pol = swatbotrest.RefreshPolicy.FORCE
-                    failure = swatbotrest.get_stepfailure(failure_id,
-                                                          refresh_override=pol)
-                    return failure['attributes']['triage'] == 0
-
-                # Make sure failures are still pending
-                triage.failures = {f for f in triage.failures if is_pending(f)}
-
-                if triage.failures:
-                    reviews.setdefault((status, comment), []).append(triage)
-
+    executor.run()
     userinfos.save()
 
     return reviews

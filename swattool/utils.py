@@ -164,10 +164,12 @@ def launch_in_system_defaultshow_in_less(text: str):
 class ExecutorWithProgress:
     """Generate a thread pool executor with progress bar."""
 
-    def __init__(self):
-        self.executor = concurrent.futures.ThreadPoolExecutor(
-            min(16, os.cpu_count()))
-        self.jobs = []
+    def __init__(self, threads: Optional[int] = None):
+        if threads is None:
+            cpus = os.cpu_count()
+            threads = min(16, cpus) if cpus else 16
+        self.executor = concurrent.futures.ThreadPoolExecutor(threads)
+        self.jobs: list[tuple[str, concurrent.futures.Future]] = []
 
     def submit(self, name, *args, **kwargs):
         """Submit a new job to the executor."""
