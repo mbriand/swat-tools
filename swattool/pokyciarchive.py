@@ -4,6 +4,7 @@
 
 import logging
 import subprocess
+import time
 from typing import Any, Optional
 
 import pygit2  # type: ignore
@@ -17,10 +18,16 @@ POKYGIT_GITURL = 'https://git.yoctoproject.org/poky'
 ARCHIVE_GITURL = 'https://git.yoctoproject.org/poky-ci-archive'
 
 
-def update() -> None:
+def update(min_age: Optional[int] = None) -> None:
     """Update the CI archive git."""
     if GITDIR.exists():
         repo = pygit2.Repository(GITDIR)
+
+        if min_age:
+            fetch_head = GITDIR / "FETCH_HEAD"
+            ctime = fetch_head.stat().st_ctime
+            if time.time() - ctime < min_age:
+                return
     else:
         GITDIR.parent.mkdir(parents=True, exist_ok=True)
         repo = pygit2.clone_repository(POKYGIT_GITURL, GITDIR, bare=True)

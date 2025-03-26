@@ -204,7 +204,7 @@ def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
                       ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
     def update_git():
         try:
-            pokyciarchive.update()
+            pokyciarchive.update(min_age=10 * 60)
         except pygit2.GitError:
             logger.warning("Failed to update poky-ci-archive")
 
