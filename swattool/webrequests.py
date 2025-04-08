@@ -39,6 +39,10 @@ class Session:
             return
 
         self.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_maxsize=20,
+                                                pool_block=True)
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
 
         if COOKIESFILE.exists():
             with COOKIESFILE.open('rb') as file:
