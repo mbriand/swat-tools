@@ -210,6 +210,7 @@ def _get_log_highlights_filters(loglen: int, failure: swatbuild.Failure
             #  - Match on "fatal:", show in menu if build status is error.
             #  - Match on makefile "Error", show in menu if build status is
             #    error.
+            #  - Match on makefile "command timed out", always show in menu.
             _Filter(re.compile(r".*libgpg-error:"), True, None, False),
             _Filter(re.compile(r".*test_fixed_size_error:"),
                     True, None, False),
@@ -224,6 +225,8 @@ def _get_log_highlights_filters(loglen: int, failure: swatbuild.Failure
                     True, utils.Color.RED, status == swatbuild.Status.ERROR),
             _Filter(re.compile(r"(.*\s|^)(?P<keyword>make\[\d\]):.* Error"),
                     True, utils.Color.RED, status == swatbuild.Status.ERROR),
+            _Filter(re.compile(r"^(?P<keyword>command timed out:)"),
+                    True, utils.Color.RED, True),
         ]
 
     return filters
