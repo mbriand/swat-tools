@@ -5,6 +5,7 @@
 import enum
 import logging
 from datetime import datetime
+import textwrap
 from typing import Any, Iterable, Optional
 import urllib
 
@@ -353,6 +354,29 @@ class Build:
             return self.__dict__[field.name.lower()]
 
         raise utils.SwattoolException(f"Invalid field: {field}")
+
+    def format_field(self, userinfo: userdata.UserInfo, field: Field,
+                     multiline: bool = True) -> str:
+        """Get formatted failure data."""
+
+        def format_multi(data):
+            return "\n".join(data) if multiline or len(data) <= 1 else data[0]
+
+        if field == Field.STATUS:
+            return self.get(Field.STATUS).as_short_colored_str()
+        if field == Field.FAILURES:
+            return format_multi([f.stepname for f in self.get(field).values()])
+        if field == Field.TRIAGE:
+            return format_multi([str(f.get_triage_with_notes())
+                                 for f in self.failures.values()])
+        if field == Field.USER_STATUS:
+            statuses = [str(triage) for fail in self.failures.values()
+                        if (triage := userinfo.get_failure_triage(fail.id))]
+            return format_multi(statuses)
+        if field == Field.USER_NOTES:
+            notes = userinfo.get_notes()
+            return textwrap.shorten(notes, 80)
+        return str(self.get(field))
 
     def get_first_failure(self) -> Failure:
         """Get the first failure of the build."""

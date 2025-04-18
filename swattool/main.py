@@ -175,25 +175,8 @@ def _format_pending_failures(builds: list[swatbuild.Build],
             return "Sts"
         return str(field)
 
-    def format_field(build, userinfo, field):
-        if field == swatbuild.Field.STATUS:
-            return build.get(swatbuild.Field.STATUS).as_short_colored_str()
-        if field == swatbuild.Field.FAILURES:
-            return "\n".join([f.stepname for f in build.get(field).values()])
-        if field == swatbuild.Field.TRIAGE:
-            return "\n".join([str(f.get_triage_with_notes())
-                              for f in build.failures.values()])
-        if field == swatbuild.Field.USER_STATUS:
-            statuses = [str(triage) for fail in build.failures.values()
-                        if (triage := userinfo.get_failure_triage(fail.id))]
-            return "\n".join(statuses)
-        if field == swatbuild.Field.USER_NOTES:
-            notes = userinfo.get_notes()
-            return textwrap.shorten(notes, 80)
-        return str(build.get(field))
-
     headers = [format_header(f) for f in shown_fields]
-    table = [[format_field(build, userinfos.get(build.id, {}), field)
+    table = [[build.format_field(userinfos.get(build.id, {}), field)
               for field in shown_fields] for build in builds]
 
     return (table, headers)
