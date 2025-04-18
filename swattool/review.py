@@ -2,6 +2,7 @@
 
 """Swatbot review functions."""
 
+import copy
 import logging
 # Readline modifies input() behaviour when imported
 import readline  # noqa: F401 # pylint: disable=unused-import
@@ -139,15 +140,14 @@ def _create_new_status(build: swatbuild.Build, command: str
 
 def _list_failures_menu(builds: list[swatbuild.Build],
                         userinfos: userdata.UserInfos,
-                        entry: int) -> int:
-    """Allow the user to select the failure to review in a menu."""
+                        entry: int, **kwargs):
     termsize = shutil.get_terminal_size((80, 20))
     width = termsize.columns - 2  # Borders
 
     def preview_failure(fstr):
         fnum = int(fstr.split()[0])
         build = [b for (i, b) in enumerate(builds) if b.id == fnum][0]
-        return build.format_description(userinfos[fnum], width)
+        return _get_infos(build, userinfos[fnum], width)
 
     shown_fields = [
         swatbuild.Field.BUILD,
@@ -155,12 +155,33 @@ def _list_failures_menu(builds: list[swatbuild.Build],
         swatbuild.Field.TEST,
         swatbuild.Field.WORKER,
         swatbuild.Field.OWNER,
+        swatbuild.Field.USER_STATUS,
     ]
-    entries = [[build.get(f) for f in shown_fields] for build in builds]
+
+    def format_build(build):
+        userinfo = userinfos[build.id]
+        return [build.format_field(userinfo, f, False) for f in shown_fields]
+    entries = [format_build(build) for build in builds]
     failures_menu = utils.tabulated_menu(entries, title="Failures",
                                          cursor_index=entry,
-                                         preview_command=preview_failure)
-    newentry = failures_menu.show()
+                                         preview_command=preview_failure,
+                                         **kwargs)
+    return failures_menu.show()
+
+
+def _select_failures_menu(builds: list[swatbuild.Build],
+                          userinfos: userdata.UserInfos,
+                          entry: int) -> list[int]:
+    """Allow the user to select the failure to review in a menu."""
+    return _list_failures_menu(builds, userinfos, entry, multi_select=True,
+                               show_multi_select_hint=True)
+
+
+def _go_failures_menu(builds: list[swatbuild.Build],
+                      userinfos: userdata.UserInfos,
+                      entry: int) -> int:
+    """Allow the user to select the failure to review in a menu."""
+    newentry = _list_failures_menu(builds, userinfos, entry)
     if newentry is not None:
         entry = newentry
 
@@ -188,7 +209,7 @@ def _handle_navigation_command(builds: list[swatbuild.Build],
     elif command == "s":  # List
         utils.clear()
         need_refresh = True
-        entry = _list_failures_menu(builds, userinfos, entry)
+        entry = _go_failures_menu(builds, userinfos, entry)
     else:
         return (False, need_refresh, entry)
 
@@ -236,8 +257,12 @@ def _can_show_git_log(build: swatbuild.Build) -> bool:
             and 'tip_commit' in build.git_info)
 
 
-def _handle_edit_command(build: swatbuild.Build, userinfo: userdata.UserInfo,
-                         command: str) -> tuple[bool, bool]:
+def _handle_edit_command(builds: list[swatbuild.Build],
+                         userinfos: userdata.UserInfos,
+                         command: str, entry: int) -> tuple[bool, bool]:
+    build = builds[entry]
+    userinfo = userinfos[build.id]
+
     if command == "e":  # Edit notes
         userinfo.set_notes(click.edit(userinfo.get_notes(),
                                       require_save=False))
@@ -249,6 +274,21 @@ def _handle_edit_command(build: swatbuild.Build, userinfo: userdata.UserInfo,
             newstatus.failures = list(build.failures.keys())
             userinfo.triages = [newstatus]
             return (True, True)
+        return (True, False)
+    if command == "copy status":
+        def copy_status(status, build):
+            newstatus = userdata.Triage()
+            newstatus.status = status.status
+            newstatus.comment = status.comment
+            newstatus.extra = copy.deepcopy(status.extra)
+            newstatus.failures = list(build.failures.keys())
+            return newstatus
+
+        entries = _select_failures_menu(builds, userinfos, entry)
+        targetbuilds = [builds[e] for e in entries if e != entry]
+        for targetbuild in targetbuilds:
+            userinfos[targetbuild.id].triages = [copy_status(s, targetbuild)
+                                                 for s in userinfo.triages]
         return (True, False)
     if command == "r":  # Reset status
         userinfo.triages = []
@@ -269,6 +309,7 @@ def _get_commands(build: swatbuild.Build):
         "[d] other: Patch dropped",
         "[t] not for swat",
         "[r] reset status",
+        "copy status",
         None,
         "[e] edit notes",
         "[u] open autobuilder URL",
@@ -296,7 +337,6 @@ def review_menu(builds: list[swatbuild.Build],
     need_refresh = False
 
     build = builds[entry]
-    userinfo = userinfos[build.id]
 
     commands = _get_commands(build)
 
@@ -328,11 +368,31 @@ def review_menu(builds: list[swatbuild.Build],
         if handled:
             break
 
-        handled, need_refresh = _handle_edit_command(build, userinfo, command)
+        handled, need_refresh = _handle_edit_command(builds, userinfos,
+                                                     command, entry)
         if handled:
             break
 
     return (new_entry, need_refresh)
+
+
+def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
+               width: int) -> str:
+    buf = []
+    buf.append(build.format_description(userinfo, width))
+    buf.append('')
+
+    failure = build.get_first_failure()
+    highlights = logsview.get_log_highlights(failure, "stdio")
+    maxhighlights = 5
+    wrapped_highlights = [textwrap.indent(line, " " * 4)
+                          for highlight in highlights[:maxhighlights]
+                          for line in textwrap.wrap(highlight, width)
+                          ]
+    buf.append("Key log infos:")
+    buf.append("\n".join(wrapped_highlights))
+
+    return '\n'.join(buf)
 
 
 def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo):
@@ -340,19 +400,8 @@ def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo):
     reserved = 8
     termwidth = shutil.get_terminal_size((80, 20)).columns
     width = termwidth - reserved
-    maxhighlights = 5
 
-    print(build.format_description(userinfo, width))
-    print()
-
-    failure = build.get_first_failure()
-    highlights = logsview.get_log_highlights(failure, "stdio")
-    wrapped_highlights = [textwrap.indent(line, " " * 4)
-                          for highlight in highlights[:maxhighlights]
-                          for line in textwrap.wrap(highlight, width)
-                          ]
-    print("Key log infos:")
-    print("\n".join(wrapped_highlights))
+    print(_get_infos(build, userinfo, width))
     print()
 
 
