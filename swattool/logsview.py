@@ -7,8 +7,9 @@ import logging
 import pickle
 import re
 import shutil
-from typing import Optional
+from typing import Collection, Optional
 
+import jellyfish
 from simple_term_menu import TerminalMenu  # type: ignore
 import yaml
 
@@ -248,6 +249,7 @@ def _get_log_highlights(loglines: list[str], filters: list[_Filter]
 
 _cached_log_highlights: dict[tuple[swatbuild.Failure, str],
                              dict[int, _Highlight]] = {}
+_cached_log_fingerprint: dict[tuple[swatbuild.Failure, str], list[str]] = {}
 
 
 def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
@@ -304,6 +306,32 @@ def get_log_highlights(failure: swatbuild.Failure, logname: str
 
     return [loglines[line - 1] for line in highlights
             if highlights[line].in_menu]
+
+
+def get_log_fingerprint(failure: swatbuild.Failure,
+                        logname: str) -> list[str]:
+    """Get a finger print of the log, allowing to compare it with others."""
+    fingerprint = _cached_log_fingerprint.get((failure, logname), None)
+    if fingerprint is not None:
+        return fingerprint
+
+    logdata = failure.get_log(logname)
+    if not logdata:
+        return []
+
+    loglines = logdata.splitlines()
+
+    highlights = _get_cached_log_highlights(failure, logname, logdata)
+    highlight_lines = [line - 1 for line in highlights
+                       if highlights[line].in_menu]
+    # Limit finger print to the 100 first highlights. This is way above the
+    # number of hilights for most log files but allow to handle rare cases with
+    # thousands of matches.
+    fingerprint = [loglines[line] for line in highlight_lines[:100]]
+
+    _cached_log_fingerprint[(failure, logname)] = fingerprint
+
+    return fingerprint
 
 
 def _show_log(loglines: list[str], selected_line: Optional[int],
@@ -373,3 +401,52 @@ def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
             _, _, num = entries[entry].partition('|')
             _show_log(loglines, int(num), highlights, preview_height,
                       preview_width)
+
+
+def get_similarity_score(fingerprint1: Collection[str],
+                         fingerprint2: Collection[str]) -> float:
+    """Get similarity score between log of this entry and another log."""
+    if not fingerprint1 or not fingerprint2:
+        return 1 if not fingerprint1 and not fingerprint2 else 0
+
+    specific_error_re = re.compile(r"^\S+error:",
+                                   flags=re.IGNORECASE | re.MULTILINE)
+
+    # Compute scores for all fingerprint fragment combinations
+    # Only consider combinations with similar positions in the files:
+    # reduce both false positives and computation time.
+    scores = [[0 for f2 in fingerprint2] for f1 in fingerprint1]
+    lendiff = len(fingerprint1) - len(fingerprint2)
+    for i, fing1 in enumerate(fingerprint1):
+        for j, fing2 in enumerate(fingerprint2):
+            maxdist = 2
+            startdist = i - j
+            enddist = lendiff - startdist
+            if min(abs(startdist), abs(enddist)) > maxdist:
+                continue
+            scores[i][j] = jellyfish.jaro_similarity(fing1, fing2)
+
+    # Compute the final score as 2 half-scores: fingerprint A to B, then B
+    # to A, so the similarity score is commutative.
+    def half_score(fingerprint, hafnum):
+        num = 0
+        denom = 0
+        for i, fragment in enumerate(fingerprint):
+            # Lines with a specific error, such as "AssertionError" and not
+            # just "ERROR:" are more likely to be decisive: reflect this in
+            # the similarity score.
+            factor = 5 if any(specific_error_re.finditer(fragment)) else 1
+
+            if hafnum == 0:
+                bestsim = max(scores[i])
+            else:
+                bestsim = max(s[i] for s in scores)
+            num += factor * bestsim
+            denom += factor
+
+        return num / denom
+
+    score = half_score(fingerprint1, 0)
+    score *= half_score(fingerprint2, 1)
+
+    return score

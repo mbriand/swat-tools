@@ -144,6 +144,10 @@ def _list_failures_menu(builds: list[swatbuild.Build],
     termsize = shutil.get_terminal_size((80, 20))
     width = termsize.columns - 2  # Borders
 
+    build = builds[entry]
+    fingerprint = logsview.get_log_fingerprint(build.get_first_failure(),
+                                               'stdio')
+
     def preview_failure(fstr):
         fnum = int(fstr.split()[0])
         build = [b for (i, b) in enumerate(builds) if b.id == fnum][0]
@@ -160,8 +164,14 @@ def _list_failures_menu(builds: list[swatbuild.Build],
 
     def format_build(build):
         userinfo = userinfos[build.id]
-        return [build.format_field(userinfo, f, False) for f in shown_fields]
-    entries = [format_build(build) for build in builds]
+        data = [build.format_field(userinfo, f, False) for f in shown_fields]
+
+        bfing = logsview.get_log_fingerprint(build.get_first_failure(),
+                                             'stdio')
+        similarity = logsview.get_similarity_score(fingerprint, bfing)
+        data.append(f"similarity: {int(similarity*100):3}%")
+        return data
+    entries = [format_build(b) for b in builds]
     failures_menu = utils.tabulated_menu(entries, title="Failures",
                                          cursor_index=entry,
                                          preview_command=preview_failure,

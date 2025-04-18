@@ -9,6 +9,7 @@ dependencies = [
 	'setuptools',
 	'wheel',
 	'click==8.1.7',
+	'jellyfish',
 	'pygit2',
 	'PyYAML==6.0.2',
 	'requests==2.32.3',

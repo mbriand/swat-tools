@@ -35,6 +35,7 @@ class BuildFetcher:
         self.__infos.append(build)
         if self.preparelogs:
             logsview.get_log_highlights(build.get_first_failure(), "stdio")
+            logsview.get_log_fingerprint(build.get_first_failure(), "stdio")
 
     def _create_builds(self, failures: dict[int, dict[int, dict]],
                        executor: utils.ExecutorWithProgress):
