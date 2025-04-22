@@ -37,8 +37,8 @@ def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
     return bcomment
 
 
-def _prompt_bug_infos(build: swatbuild.Build,
-                      is_abint: bool):
+def _prompt_bug_infos(build: swatbuild.Build, is_abint: bool,
+                      userinfos: userdata.UserInfos):
     """Create new status of type BUG for a given failure."""
 
     def preview_bug(fstr):
@@ -70,6 +70,20 @@ def _prompt_bug_infos(build: swatbuild.Build,
                 break
         bugnum, _, _ = abint_list[abint_index].partition(' ')
     else:
+        # Print last used bug numbers.
+        # We only look for failures with unpublished new triages, this is kind
+        # of a dumb solution bu should be enough for a start.
+        lastbugs = {triage.comment
+                    for userinfo in userinfos.values()
+                    for triage in userinfo.triages
+                    if triage.status == swatbotrest.TriageStatus.BUG}
+        if lastbugs:
+            print("Last used bugs:")
+            for lastbug in lastbugs:
+                line = f"{lastbug}: {Bugzilla.get_bug_title(lastbug)}"
+                print(textwrap.indent(line, " " * 4))
+            print()
+
         while True:
             try:
                 bugnum_str = input('Bug number:').strip()
@@ -99,12 +113,13 @@ def _prompt_bug_infos(build: swatbuild.Build,
     return newstatus
 
 
-def _create_new_status(build: swatbuild.Build, command: str
+def _create_new_status(build: swatbuild.Build, command: str,
+                       userinfos: userdata.UserInfos
                        ) -> Optional[userdata.Triage]:
     """Create new status for a given failure."""
     newstatus = userdata.Triage()
     if command in ["a", "b"]:
-        newstatus = _prompt_bug_infos(build, command == "a")
+        newstatus = _prompt_bug_infos(build, command == "a", userinfos)
     elif command == "c":
         if build.status != swatbuild.Status.CANCELLED:
             logging.error("Only cancelled builds can be triaged as cancelled")
@@ -279,7 +294,7 @@ def _handle_edit_command(builds: list[swatbuild.Build],
         return (True, True)
     if command in ["a", "b", "c", "m", "i", "o", "f", "d", "t"]:
         # Set new status
-        newstatus = _create_new_status(build, command)
+        newstatus = _create_new_status(build, command, userinfos)
         if newstatus:
             newstatus.failures = list(build.failures.keys())
             userinfo.triages = [newstatus]
