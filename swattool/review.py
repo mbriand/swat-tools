@@ -292,13 +292,17 @@ def _handle_edit_command(builds: list[swatbuild.Build],
             newstatus.comment = status.comment
             newstatus.extra = copy.deepcopy(status.extra)
             newstatus.failures = list(build.failures.keys())
+            if newstatus.status == swatbotrest.TriageStatus.BUG:
+                newstatus.extra['bugzilla-comment'] = \
+                    _format_bugzilla_comment(build)
             return newstatus
 
         entries = _select_failures_menu(builds, userinfos, entry)
-        targetbuilds = [builds[e] for e in entries if e != entry]
-        for targetbuild in targetbuilds:
-            userinfos[targetbuild.id].triages = [copy_status(s, targetbuild)
-                                                 for s in userinfo.triages]
+        if entries:
+            targetbuilds = [builds[e] for e in entries if e != entry]
+            for tbuild in targetbuilds:
+                userinfos[tbuild.id].triages = [copy_status(s, tbuild)
+                                                for s in userinfo.triages]
         return (True, False)
     if command == "r":  # Reset status
         userinfo.triages = []
