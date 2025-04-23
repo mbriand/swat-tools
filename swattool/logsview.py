@@ -228,6 +228,8 @@ def _get_log_highlights_filters(loglen: int, failure: swatbuild.Failure
                     True, utils.Color.RED, status == swatbuild.Status.ERROR),
             _Filter(re.compile(r"^(?P<keyword>command timed out:)"),
                     True, utils.Color.RED, True),
+            _Filter(re.compile(r".* - INFO -  ... (?P<keyword>FAIL)"),
+                    True, utils.Color.RED, True),
         ]
 
     return filters
