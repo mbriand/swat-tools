@@ -199,7 +199,9 @@ def _select_failures_menu(builds: list[swatbuild.Build],
                           entry: int) -> list[int]:
     """Allow the user to select the failure to review in a menu."""
     return _list_failures_menu(builds, userinfos, entry, multi_select=True,
-                               show_multi_select_hint=True)
+                               show_multi_select_hint=True,
+                               multi_select_select_on_accept=False,
+                               multi_select_empty_ok=True)
 
 
 def _go_failures_menu(builds: list[swatbuild.Build],
