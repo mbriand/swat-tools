@@ -324,7 +324,7 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
 
     STATUS_COMMENT: free format string or bug number for 'Bug' status.
     """
-    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
 
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
