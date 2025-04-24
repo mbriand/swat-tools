@@ -234,10 +234,9 @@ def _show_failures(refresh: str, urlopens: set[str], limit: int,
 
     shown_fields_all = [
         swatbuild.Field.BUILD,
-        swatbuild.Field.STATUS if len(filters['status']) != 1 else None,
-        swatbuild.Field.TEST if len({build.test
-                                     for build in builds}) != 1 else None,
-        swatbuild.Field.OWNER if len(filters['owner']) != 1 else None,
+        swatbuild.Field.STATUS,
+        swatbuild.Field.TEST,
+        swatbuild.Field.OWNER,
         swatbuild.Field.WORKER,
         swatbuild.Field.COMPLETED,
         swatbuild.Field.SWAT_URL,
