@@ -166,7 +166,7 @@ def _list_failures_menu(builds: list[swatbuild.Build],
     def preview_failure(fstr):
         fnum = int(fstr.split()[0])
         build = [b for (i, b) in enumerate(builds) if b.id == fnum][0]
-        return _get_infos(build, userinfos[fnum], width)
+        return _get_infos(build, userinfos[fnum], width, 1)
 
     shown_fields = [
         swatbuild.Field.BUILD,
@@ -415,9 +415,9 @@ def review_menu(builds: list[swatbuild.Build],
 
 
 def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
-               width: int) -> str:
+               width: int, maxfailures: Optional[int] = None) -> str:
     buf = []
-    buf.append(build.format_description(userinfo, width))
+    buf.append(build.format_description(userinfo, width, maxfailures))
     buf.append('')
 
     failure = build.get_first_failure()

@@ -424,7 +424,8 @@ class Build:
         return f"{parent_url} ({self.parent_builder_name})"
 
     def format_description(self, userinfo: userdata.UserInfo,
-                           maxwidth: int) -> str:
+                           maxwidth: int, maxfailures: Optional[int] = None
+                           ) -> str:
         """Get info on one given failure in a pretty way."""
         def format_field(field):
             if field == Field.STATUS:
@@ -462,6 +463,12 @@ class Build:
             # Create strings for all failures and the attributed new status (if
             # one was set).
             triage = userinfo.get_failure_triage(failureid)
+
+            if (maxfailures is not None and i >= maxfailures):
+                if maxfailures != 0:
+                    removed = len(self.failures) - i
+                    table.append(["", f"... {removed} more failures ...", ""])
+                break
 
             table.append([Field.FAILURES if i == 0 else "",
                           failure.stepname,
