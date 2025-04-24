@@ -37,6 +37,22 @@ def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
     return bcomment
 
 
+def _print_last_bugs(userinfos: userdata.UserInfos):
+    """Print last used bug numbers."""
+    # We only look for failures with unpublished new triages, this is kind
+    # of a dumb solution but should be enough for a start.
+    lastbugs = {triage.comment
+                for userinfo in userinfos.values()
+                for triage in userinfo.triages
+                if triage.status == swatbotrest.TriageStatus.BUG}
+    if lastbugs:
+        print("Last used bugs:")
+        for lastbug in lastbugs:
+            line = f"{lastbug}: {Bugzilla.get_bug_title(lastbug)}"
+            print(textwrap.indent(line, " " * 4))
+        print()
+
+
 def _prompt_bug_infos(build: swatbuild.Build, is_abint: bool,
                       userinfos: userdata.UserInfos):
     """Create new status of type BUG for a given failure."""
@@ -70,19 +86,7 @@ def _prompt_bug_infos(build: swatbuild.Build, is_abint: bool,
                 break
         bugnum, _, _ = abint_list[abint_index].partition(' ')
     else:
-        # Print last used bug numbers.
-        # We only look for failures with unpublished new triages, this is kind
-        # of a dumb solution bu should be enough for a start.
-        lastbugs = {triage.comment
-                    for userinfo in userinfos.values()
-                    for triage in userinfo.triages
-                    if triage.status == swatbotrest.TriageStatus.BUG}
-        if lastbugs:
-            print("Last used bugs:")
-            for lastbug in lastbugs:
-                line = f"{lastbug}: {Bugzilla.get_bug_title(lastbug)}"
-                print(textwrap.indent(line, " " * 4))
-            print()
+        _print_last_bugs(userinfos)
 
         while True:
             try:
