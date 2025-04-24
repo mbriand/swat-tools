@@ -173,6 +173,7 @@ def _list_failures_menu(builds: list[swatbuild.Build],
         swatbuild.Field.BRANCH,
         swatbuild.Field.TEST,
         swatbuild.Field.WORKER,
+        swatbuild.Field.COMPLETED,
         swatbuild.Field.OWNER,
         swatbuild.Field.USER_STATUS,
     ]
