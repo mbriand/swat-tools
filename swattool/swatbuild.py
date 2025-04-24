@@ -253,18 +253,6 @@ class Build:
 
         return self._git_info
 
-    def _test_match_filters(self, filters: dict[str, Any]) -> bool:
-        matches = [True for r in filters['test'] if r.match(self.test)]
-        if filters['test'] and not matches:
-            return False
-
-        matches = [True for r in filters['ignore-test']
-                   if r.match(self.test)]
-        if filters['ignore-test'] and matches:
-            return False
-
-        return True
-
     def _completed_match_filters(self, filters: dict[str, Any]) -> bool:
         if filters['completed-after'] and self.completed:
             completed = datetime.fromisoformat(self.completed)
@@ -325,11 +313,27 @@ class Build:
             filtr = filters[field.name.lower()]
             return not filtr or self.get(field) in filtr
 
-        simple_filters = [Field.BUILD, Field.OWNER, Field.STATUS]
+        def regex_match(field: Field):
+            value = str(self.get(field))
+
+            select_re = filters.get(field.name.lower(), [])
+            matches = [True for r in select_re if r.match(value)]
+            if select_re and not matches:
+                return False
+
+            ignore_re = filters.get(f'ignore-{field.name.lower()}', [])
+            matches = [True for r in ignore_re if r.match(value)]
+            if ignore_re and matches:
+                return False
+
+            return True
+
+        simple_filters = [Field.STATUS]
         if not all(simple_match(field) for field in simple_filters):
             return False
 
-        if not self._test_match_filters(filters):
+        regex_filters = [Field.BUILD, Field.OWNER, Field.TEST]
+        if not all(regex_match(field) for field in regex_filters):
             return False
 
         if not self._completed_match_filters(filters):

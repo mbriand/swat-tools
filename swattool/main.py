@@ -39,11 +39,14 @@ def parse_filters(kwargs) -> dict[str, Any]:
     Parse filter values givean as program argument and generate a dictionary to
     be used with get_failure_infos().
     """
+    def regex_filter(lst):
+        # Create a regex for each entry. If it is an alphanumeric string use
+        # full match, so user can pass exact name without having to bother with
+        # regex.
+        return [re.compile(f"^{f}$" if str(f).isalnum() else f, flags=re.I)
+                for f in lst]
+
     statuses = [swatbuild.Status[s.upper()] for s in kwargs['status_filter']]
-    tests = [re.compile(f"^{f}$") for f in kwargs['test_filter']]
-    ignoretests = [re.compile(f"^{f}$") for f in kwargs['ignore_test_filter']]
-    owners = [None if str(f).lower() == "none" else f
-              for f in kwargs['owner_filter']]
     triages = [swatbotrest.TriageStatus.from_str(s)
                for s in kwargs.get('triage_filter', [])]
 
@@ -59,11 +62,11 @@ def parse_filters(kwargs) -> dict[str, Any]:
     if kwargs['completed_before']:
         completed_before = kwargs['completed_before'].astimezone()
 
-    filters = {'build': kwargs['build_filter'],
-               'test': tests,
-               'ignore-test': ignoretests,
+    filters = {'build': regex_filter(kwargs['build_filter']),
+               'test': regex_filter(kwargs['test_filter']),
+               'ignore-test': regex_filter(kwargs['ignore_test_filter']),
                'status': statuses,
-               'owner': owners,
+               'owner': regex_filter(kwargs['owner_filter']),
                'completed-after': completed_after,
                'completed-before': completed_before,
                'with-notes': kwargs['with_notes'],
@@ -137,7 +140,7 @@ failures_list_options = [
                  help="Fetch data from server instead of using cache"),
     click.option('--test-filter', '-t', multiple=True,
                  help="Only show some tests"),
-    click.option('--build-filter', '-b', type=click.INT, multiple=True,
+    click.option('--build-filter', '-b', multiple=True,
                  help="Only show some builds"),
     click.option('--owner-filter', '-o', multiple=True,
                  help='Only show some owners ("none" for no owner)'),
