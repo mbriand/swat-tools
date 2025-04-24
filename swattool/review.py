@@ -228,6 +228,11 @@ def _handle_navigation_command(builds: list[swatbuild.Build],
     if command == "n":  # Next
         entry += 1
         need_refresh = True
+    elif command == "next pending failure":
+        entry += 1
+        while entry < len(builds) and userinfos[builds[entry].id].triages:
+            entry += 1
+        need_refresh = True
     elif command == "p":  # Previous
         if entry >= 1:
             entry -= 1
@@ -353,6 +358,7 @@ def _get_commands(build: swatbuild.Build):
         "view git log" if _can_show_git_log(build) else "",
         None,
         "[n] next",
+        "next pending failure",
         "[p] previous",
         "[s] select in failures list",
         "[q] quit",
