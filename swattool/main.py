@@ -3,6 +3,7 @@
 
 """A tool helping triage of Yocto autobuilder failures."""
 
+import datetime
 import logging
 import re
 import textwrap
@@ -49,6 +50,12 @@ def parse_filters(kwargs) -> dict[str, Any]:
     completed_after = completed_before = None
     if kwargs['completed_after']:
         completed_after = kwargs['completed_after'].astimezone()
+    elif not kwargs['completed_before']:
+        after_date = datetime.datetime.now() - datetime.timedelta(days=30)
+        completed_after = after_date.astimezone()
+        logger.warning("Only considering builds after %s",
+                       after_date.strftime("%Y-%m-%d"))
+
     if kwargs['completed_before']:
         completed_before = kwargs['completed_before'].astimezone()
 
