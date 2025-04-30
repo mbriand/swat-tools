@@ -195,6 +195,7 @@ def _list_failures_menu(builds: list[swatbuild.Build],
     failures_menu = utils.tabulated_menu(entries, title="Failures",
                                          cursor_index=entry,
                                          preview_command=preview_failure,
+                                         preview_size=.5,
                                          **kwargs)
     return failures_menu.show()
 
