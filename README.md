@@ -1,5 +1,5 @@
 A python tool helping triage of Yocto autobuilder failures reported on
-https://swatbot.yoctoproject.org .
+<https://swatbot.yoctoproject.org>.
 
 # Install
 
