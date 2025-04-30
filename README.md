@@ -85,3 +85,12 @@ Progress: 1/15
 ## publish-new-reviews
 
 Publish new local triage status to swatbot Django interface.
+
+# Known issues
+
+- We use the `readline` module to have a bit fancier input() function, but
+  `simple_term_menu` does not behave well when `readline` is loaded. This has
+  been reproduced with upstream `simple_term_menu` demo code, just by
+  additionally importing `readline`. We should either investigate the root cause
+  of the issue or get rid of one of the modules.
+  <https://github.com/IngoMeyer441/simple-term-menu/issues/98>
