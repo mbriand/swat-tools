@@ -18,7 +18,7 @@ from . import utils
 
 logger = logging.getLogger(__name__)
 
-HILIGHTS_FORMAT_VERSION = 1
+HILIGHTS_FORMAT_VERSION = 2
 
 # Big log thershold in bytes
 BIG_LOG_LIMIT = 100 * 1024 * 1024
@@ -26,10 +26,11 @@ BIG_LOG_LIMIT = 100 * 1024 * 1024
 
 class _Highlight:
     # pylint: disable=too-few-public-methods
-    def __init__(self, keyword: str, color: str, in_menu: bool):
+    def __init__(self, keyword: str, color: str, in_menu: bool, text: str):
         self.keyword = keyword
         self.color = color
         self.in_menu = in_menu
+        self.text = text
 
 
 class _Filter:
@@ -53,7 +54,8 @@ class _Filter:
         if not self.color:
             return (True, None)
 
-        hilight = _Highlight(match.group("keyword"), self.color, self.in_menu)
+        hilight = _Highlight(match.group("keyword"), self.color, self.in_menu,
+                             line)
         return (True, hilight)
 
 
@@ -255,12 +257,15 @@ _cached_log_fingerprint: dict[tuple[swatbuild.Failure, str], list[str]] = {}
 
 
 def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
-                               logdata: str,
                                ) -> dict[int, _Highlight]:
     # Try to get data from memory cache
     highlights = _cached_log_highlights.get((failure, logname), None)
     if highlights:
         return highlights
+
+    logdata = failure.get_log(logname)
+    if not logdata:
+        return {}
 
     # Try to get data from disk cache
     filename = utils.CACHEDIR / 'log_hilights' / f'{failure.id}_{logname}.yaml'
@@ -299,15 +304,10 @@ def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
 def get_log_highlights(failure: swatbuild.Failure, logname: str
                        ) -> list[str]:
     """Get log highlights for a given log file."""
-    logdata = failure.get_log(logname)
-    if not logdata:
-        return []
+    highlights = _get_cached_log_highlights(failure, logname)
 
-    highlights = _get_cached_log_highlights(failure, logname, logdata)
-    loglines = logdata.splitlines()
-
-    return [loglines[line - 1] for line in highlights
-            if highlights[line].in_menu]
+    return [highlight.text for highlight in highlights.values()
+            if highlight.in_menu]
 
 
 def get_log_fingerprint(failure: swatbuild.Failure,
@@ -317,19 +317,12 @@ def get_log_fingerprint(failure: swatbuild.Failure,
     if fingerprint is not None:
         return fingerprint
 
-    logdata = failure.get_log(logname)
-    if not logdata:
-        return []
+    highlight_lines = get_log_highlights(failure, logname)
 
-    loglines = logdata.splitlines()
-
-    highlights = _get_cached_log_highlights(failure, logname, logdata)
-    highlight_lines = [line - 1 for line in highlights
-                       if highlights[line].in_menu]
     # Limit finger print to the 100 first highlights. This is way above the
     # number of hilights for most log files but allow to handle rare cases with
     # thousands of matches.
-    fingerprint = [loglines[line] for line in highlight_lines[:100]]
+    fingerprint = highlight_lines[:100]
 
     _cached_log_fingerprint[(failure, logname)] = fingerprint
 
@@ -368,7 +361,7 @@ def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
 
     utils.clear()
     loglines = logdata.splitlines()
-    highlights = _get_cached_log_highlights(failure, logname, logdata)
+    highlights = _get_cached_log_highlights(failure, logname)
 
     entries = ["View entire log file|",
                "View entire log file in default editor|",
