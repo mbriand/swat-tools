@@ -443,12 +443,13 @@ def get_similarity_score(fingerprint1: Collection[str],
                 bestsim = max(scores[i])
             else:
                 bestsim = max(s[i] for s in scores)
-            num += factor * bestsim
+            num += factor * bestsim if bestsim > .7 else 0
             denom += factor
 
-        return num / denom
+        score = num / denom
+        return score
 
-    score = half_score(fingerprint1, 0)
-    score *= half_score(fingerprint2, 1)
+    s1 = half_score(fingerprint1, 0)
+    s2 = half_score(fingerprint2, 1)
 
-    return score
+    return (s1 + s2) / 2
