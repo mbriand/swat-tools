@@ -63,9 +63,8 @@ class _Filter:
 class LogFingerprint:
     """A logfile fingerprint, allowing to compute similarity with others."""
 
-    # pylint: disable=too-few-public-methods
-
-    _similarity_scores: dict[tuple[tuple[int, str]], float] = {}
+    _similarity_scores: dict[tuple[tuple[int, str], ...], float] = {}
+    threshold = .7
 
     def __init__(self, failure: swatbuild.Failure, logname: str):
         self.failure = failure
@@ -124,16 +123,46 @@ class LogFingerprint:
 
         return (s1 + s2) / 2
 
-    def get_similarity_score(self, other: 'LogFingerprint') -> float:
-        """Get similarity score between log of this entry and another log."""
-        key = tuple(sorted([(self.failure.id, self.logname),
-                            (other.failure.id, other.logname)]))
+    def _get_cached_score(self,
+                          failure: Optional[swatbuild.Failure] = None,
+                          logname: Optional[str] = None,
+                          other: Optional['LogFingerprint'] = None,
+                          ) -> float:
+        if failure is None or logname is None:
+            assert failure is None and logname is None
+            assert other is not None
+            failure = other.failure
+            logname = other.logname
+        else:
+            assert other is None
+        key = tuple(sorted(((self.failure.id, self.logname),
+                            (failure.id, logname))))
         score = self._similarity_scores.get(key)
         if score is None:
+            if other is None:
+                other = LogFingerprint(failure, logname)
             score = self._get_similarity_score(other)
             self._similarity_scores[key] = score
 
         return score
+
+    def get_similarity_score(self, other: 'LogFingerprint') -> float:
+        """Get similarity score between log of this entry and another log."""
+        return self._get_cached_score(other=other)
+
+    def get_similarity_score_with_failure(self, failure: swatbuild.Failure,
+                                          logname: str) -> float:
+        """Get similarity score between log of this entry and another log."""
+        return self._get_cached_score(failure, logname)
+
+    def is_similar_to(self, other: 'LogFingerprint') -> bool:
+        """Check if a given log fingerprint is similar to this one."""
+        return self._get_cached_score(other=other) > self.threshold
+
+    def is_similar_to_failure(self, failure: swatbuild.Failure, logname: str
+                              ) -> bool:
+        """Check if a given log fingerprint is similar to this one."""
+        return self._get_cached_score(failure, logname) > self.threshold
 
 
 def show_logs_menu(build: swatbuild.Build) -> bool:
