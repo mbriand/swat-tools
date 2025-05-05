@@ -65,6 +65,7 @@ class LogFingerprint:
 
     # pylint: disable=too-few-public-methods
 
+    _similarity_scores: dict[tuple[tuple[int, str]], float] = {}
 
     def __init__(self, failure: swatbuild.Failure, logname: str):
         self.failure = failure
@@ -75,7 +76,7 @@ class LogFingerprint:
         # with thousands of matches.
         self.lines = get_log_highlights(failure, logname)[:100]
 
-    def get_similarity_score(self, other: 'LogFingerprint') -> float:
+    def _get_similarity_score(self, other: 'LogFingerprint') -> float:
         """Get similarity score between log of this entry and another log."""
         if not self.lines or not other.lines:
             return 1 if not self.lines and not other.lines else 0
@@ -122,6 +123,17 @@ class LogFingerprint:
         s2 = half_score(other.lines, 1)
 
         return (s1 + s2) / 2
+
+    def get_similarity_score(self, other: 'LogFingerprint') -> float:
+        """Get similarity score between log of this entry and another log."""
+        key = tuple(sorted([(self.failure.id, self.logname),
+                            (other.failure.id, other.logname)]))
+        score = self._similarity_scores.get(key)
+        if score is None:
+            score = self._get_similarity_score(other)
+            self._similarity_scores[key] = score
+
+        return score
 
 
 def show_logs_menu(build: swatbuild.Build) -> bool:
