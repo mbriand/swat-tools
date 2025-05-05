@@ -2,6 +2,7 @@
 
 """Swatbot review functions."""
 
+import gzip
 import hashlib
 import logging
 import pickle
@@ -268,12 +269,13 @@ def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
         return {}
 
     # Try to get data from disk cache
-    filename = utils.CACHEDIR / 'log_hilights' / f'{failure.id}_{logname}.yaml'
+    cachedir = utils.CACHEDIR / 'log_hilights'
+    cachefile = cachedir / f'{failure.id}_{logname}.yaml.gz'
     loghash = hashlib.sha256(logdata.encode())
     filters = _get_log_highlights_filters(len(logdata), failure)
     filtershash = hashlib.sha256(pickle.dumps(filters))
-    if filename.is_file():
-        with filename.open('rb') as file:
+    if cachefile.is_file():
+        with gzip.open(cachefile, mode='r') as file:
             try:
                 data = yaml.load(file, Loader=yaml.Loader)
                 if (data['version'] == HILIGHTS_FORMAT_VERSION
@@ -287,7 +289,7 @@ def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
     if not highlights:
         loglines = logdata.splitlines()
         highlights = _get_log_highlights(loglines, filters)
-        with filename.open('wb') as file:
+        with gzip.open(cachefile, mode='w') as file:
             data = {
                 'version': HILIGHTS_FORMAT_VERSION,
                 'hilights': highlights,
