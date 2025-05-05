@@ -182,16 +182,19 @@ def _list_failures_menu(builds: list[swatbuild.Build],
         swatbuild.Field.USER_STATUS,
     ]
 
-    def format_build(build):
-        userinfo = userinfos[build.id]
-        data = [build.format_field(userinfo, f, False) for f in shown_fields]
+    def format_build(b):
+        userinfo = userinfos[b.id]
+        data = [b.format_field(userinfo, f, False) for f in shown_fields]
 
-        bfing = logsview.get_log_fingerprint(build.get_first_failure(),
-                                             'stdio')
-        similarity = fingerprint.get_similarity_score(bfing)
-        data.insert(len(data) - 1,
-                    f"similarity: {int(similarity*100):3}%" if similarity > .7
-                    else "")
+        bfing = logsview.get_log_fingerprint(b.get_first_failure(), 'stdio')
+        similarity = ""
+        if b is build:
+            similarity = "--- selected ---"
+        elif fingerprint.is_similar_to(bfing):
+            sim = fingerprint.get_similarity_score(bfing)
+            similarity = f"similarity: {int(sim*100):3}%"
+        data.insert(len(data) - 1, similarity)
+
         return data
     entries = [format_build(b) for b in builds]
     failures_menu = utils.tabulated_menu(entries, title="Failures",
@@ -297,6 +300,16 @@ def _can_show_git_log(build: swatbuild.Build) -> bool:
             and 'tip_commit' in build.git_info)
 
 
+def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]
+                        ) -> list[swatbuild.Build]:
+    fprint = logsview.get_log_fingerprint(build.get_first_failure(), 'stdio')
+
+    def is_similar(b):
+        return fprint.is_similar_to_failure(b.get_first_failure(), 'stdio')
+
+    return [b for b in builds if is_similar(b)]
+
+
 def _handle_edit_command(builds: list[swatbuild.Build],
                          userinfos: userdata.UserInfos,
                          command: str, entry: int) -> tuple[bool, bool]:
@@ -315,7 +328,7 @@ def _handle_edit_command(builds: list[swatbuild.Build],
             userinfo.triages = [newstatus]
             return (True, True)
         return (True, False)
-    if command == "copy status":
+    if command.startswith("copy status"):
         def copy_status(status, build):
             newstatus = userdata.Triage()
             newstatus.status = status.status
@@ -327,9 +340,14 @@ def _handle_edit_command(builds: list[swatbuild.Build],
                     _format_bugzilla_comment(build)
             return newstatus
 
-        entries = _select_failures_menu(builds, userinfos, entry)
+        menubuilds = builds
+        if command.startswith("copy status (show "):
+            menubuilds = _get_similar_builds(build, builds)
+            entry = menubuilds.index(build)
+
+        entries = _select_failures_menu(menubuilds, userinfos, entry)
         if entries:
-            targetbuilds = [builds[e] for e in entries if e != entry]
+            targetbuilds = [menubuilds[e] for e in entries if e != entry]
             for tbuild in targetbuilds:
                 userinfos[tbuild.id].triages = [copy_status(s, tbuild)
                                                 for s in userinfo.triages]
@@ -341,7 +359,8 @@ def _handle_edit_command(builds: list[swatbuild.Build],
     return (False, False)
 
 
-def _get_commands(build: swatbuild.Build):
+def _get_commands(build: swatbuild.Build, builds: list[swatbuild.Build]):
+    simcount = len(_get_similar_builds(build, builds)) - 1
     commands = [
         "[a] ab-int",
         "[b] bug opened",
@@ -354,6 +373,7 @@ def _get_commands(build: swatbuild.Build):
         "[t] not for swat",
         "[r] reset status",
         "copy status",
+        f"copy status (show {simcount} similar failures)",
         None,
         "[e] edit notes",
         "[u] open autobuilder URL",
@@ -383,7 +403,7 @@ def review_menu(builds: list[swatbuild.Build],
 
     build = builds[entry]
 
-    commands = _get_commands(build)
+    commands = _get_commands(build, builds)
 
     default_action = "n"
     default_index = [c[1] if c and len(c) > 1 else None
