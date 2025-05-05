@@ -189,7 +189,9 @@ def _list_failures_menu(builds: list[swatbuild.Build],
         bfing = logsview.get_log_fingerprint(build.get_first_failure(),
                                              'stdio')
         similarity = logsview.get_similarity_score(fingerprint, bfing)
-        data.append(f"similarity: {int(similarity*100):3}%")
+        data.insert(len(data) - 1,
+                    f"similarity: {int(similarity*100):3}%" if similarity > .7
+                    else "")
         return data
     entries = [format_build(b) for b in builds]
     failures_menu = utils.tabulated_menu(entries, title="Failures",
