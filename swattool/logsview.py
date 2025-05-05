@@ -8,7 +8,7 @@ import logging
 import pickle
 import re
 import shutil
-from typing import Collection, Optional
+from typing import Optional
 
 import jellyfish
 from simple_term_menu import TerminalMenu  # type: ignore
@@ -58,6 +58,70 @@ class _Filter:
         hilight = _Highlight(match.group("keyword"), self.color, self.in_menu,
                              line)
         return (True, hilight)
+
+
+class LogFingerprint:
+    """A logfile fingerprint, allowing to compute similarity with others."""
+
+    # pylint: disable=too-few-public-methods
+
+
+    def __init__(self, failure: swatbuild.Failure, logname: str):
+        self.failure = failure
+        self.logname = logname
+
+        # Limit finger print to the 100 first highlights. This is way above the
+        # number of hilights for most log files but allow to handle rare cases
+        # with thousands of matches.
+        self.lines = get_log_highlights(failure, logname)[:100]
+
+    def get_similarity_score(self, other: 'LogFingerprint') -> float:
+        """Get similarity score between log of this entry and another log."""
+        if not self.lines or not other.lines:
+            return 1 if not self.lines and not other.lines else 0
+
+        specific_error_re = re.compile(r"^\S+error:",
+                                       flags=re.IGNORECASE | re.MULTILINE)
+
+        # Compute scores for all fingerprint fragment combinations
+        # Only consider combinations with similar positions in the files:
+        # reduce both false positives and computation time.
+        scores = [[0 for f2 in other.lines] for f1 in self.lines]
+        lendiff = len(self.lines) - len(other.lines)
+        for i, fing1 in enumerate(self.lines):
+            for j, fing2 in enumerate(other.lines):
+                maxdist = 2
+                startdist = i - j
+                enddist = lendiff - startdist
+                if min(abs(startdist), abs(enddist)) > maxdist:
+                    continue
+                scores[i][j] = jellyfish.jaro_similarity(fing1, fing2)
+
+        # Compute the final score as 2 half-scores: fingerprint A to B, then B
+        # to A, so the similarity score is commutative.
+        def half_score(fingerprint, hafnum):
+            num = 0
+            denom = 0
+            for i, fragment in enumerate(fingerprint):
+                # Lines with a specific error, such as "AssertionError" and not
+                # just "ERROR:" are more likely to be decisive: reflect this in
+                # the similarity score.
+                factor = 5 if any(specific_error_re.finditer(fragment)) else 1
+
+                if hafnum == 0:
+                    bestsim = max(scores[i])
+                else:
+                    bestsim = max(s[i] for s in scores)
+                num += factor * bestsim if bestsim > .7 else 0
+                denom += factor
+
+            score = num / denom
+            return score
+
+        s1 = half_score(self.lines, 0)
+        s2 = half_score(other.lines, 1)
+
+        return (s1 + s2) / 2
 
 
 def show_logs_menu(build: swatbuild.Build) -> bool:
@@ -254,7 +318,8 @@ def _get_log_highlights(loglines: list[str], filters: list[_Filter]
 
 _cached_log_highlights: dict[tuple[swatbuild.Failure, str],
                              dict[int, _Highlight]] = {}
-_cached_log_fingerprint: dict[tuple[swatbuild.Failure, str], list[str]] = {}
+_cached_log_fingerprint: dict[tuple[swatbuild.Failure, str],
+                              LogFingerprint] = {}
 
 
 def _get_cached_log_highlights(failure: swatbuild.Failure, logname: str,
@@ -313,19 +378,13 @@ def get_log_highlights(failure: swatbuild.Failure, logname: str
 
 
 def get_log_fingerprint(failure: swatbuild.Failure,
-                        logname: str) -> list[str]:
+                        logname: str) -> LogFingerprint:
     """Get a finger print of the log, allowing to compare it with others."""
     fingerprint = _cached_log_fingerprint.get((failure, logname), None)
     if fingerprint is not None:
         return fingerprint
 
-    highlight_lines = get_log_highlights(failure, logname)
-
-    # Limit finger print to the 100 first highlights. This is way above the
-    # number of hilights for most log files but allow to handle rare cases with
-    # thousands of matches.
-    fingerprint = highlight_lines[:100]
-
+    fingerprint = LogFingerprint(failure, logname)
     _cached_log_fingerprint[(failure, logname)] = fingerprint
 
     return fingerprint
@@ -398,53 +457,3 @@ def show_log_menu(failure: swatbuild.Failure, logname: str) -> bool:
             _, _, num = entries[entry].partition('|')
             _show_log(loglines, int(num), highlights, preview_height,
                       preview_width)
-
-
-def get_similarity_score(fingerprint1: Collection[str],
-                         fingerprint2: Collection[str]) -> float:
-    """Get similarity score between log of this entry and another log."""
-    if not fingerprint1 or not fingerprint2:
-        return 1 if not fingerprint1 and not fingerprint2 else 0
-
-    specific_error_re = re.compile(r"^\S+error:",
-                                   flags=re.IGNORECASE | re.MULTILINE)
-
-    # Compute scores for all fingerprint fragment combinations
-    # Only consider combinations with similar positions in the files:
-    # reduce both false positives and computation time.
-    scores = [[0 for f2 in fingerprint2] for f1 in fingerprint1]
-    lendiff = len(fingerprint1) - len(fingerprint2)
-    for i, fing1 in enumerate(fingerprint1):
-        for j, fing2 in enumerate(fingerprint2):
-            maxdist = 2
-            startdist = i - j
-            enddist = lendiff - startdist
-            if min(abs(startdist), abs(enddist)) > maxdist:
-                continue
-            scores[i][j] = jellyfish.jaro_similarity(fing1, fing2)
-
-    # Compute the final score as 2 half-scores: fingerprint A to B, then B
-    # to A, so the similarity score is commutative.
-    def half_score(fingerprint, hafnum):
-        num = 0
-        denom = 0
-        for i, fragment in enumerate(fingerprint):
-            # Lines with a specific error, such as "AssertionError" and not
-            # just "ERROR:" are more likely to be decisive: reflect this in
-            # the similarity score.
-            factor = 5 if any(specific_error_re.finditer(fragment)) else 1
-
-            if hafnum == 0:
-                bestsim = max(scores[i])
-            else:
-                bestsim = max(s[i] for s in scores)
-            num += factor * bestsim if bestsim > .7 else 0
-            denom += factor
-
-        score = num / denom
-        return score
-
-    s1 = half_score(fingerprint1, 0)
-    s2 = half_score(fingerprint2, 1)
-
-    return (s1 + s2) / 2
