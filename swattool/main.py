@@ -92,6 +92,7 @@ def parse_urlopens(kwargs) -> set[str]:
 def maingroup(verbose: int):
     """Handle triage of Yocto autobuilder failures."""
     utils.setup_logging(verbose)
+    utils.setup_readline()
 
 
 def main():

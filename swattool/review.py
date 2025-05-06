@@ -4,8 +4,6 @@
 
 import copy
 import logging
-# Readline modifies input() behaviour when imported
-import readline  # noqa: F401 # pylint: disable=unused-import
 import shutil
 import sys
 import textwrap

@@ -2,10 +2,12 @@
 
 """Various helpers with no better place to."""
 
+import atexit
 import concurrent.futures
 import logging
 import os
 import pathlib
+import readline
 import subprocess
 import sys
 import tempfile
@@ -119,6 +121,21 @@ def setup_logging(verbose: int):
     handlers: list[logging.StreamHandler] = [defhandler]
 
     logging.basicConfig(level=loglevel, handlers=handlers)
+
+
+def _save_readline(history_file):
+    readline.write_history_file(history_file)
+
+
+def setup_readline():
+    """Initialize readline history manager."""
+    history_file = DATADIR / 'history'
+    try:
+        readline.read_history_file(history_file)
+    except FileNotFoundError:
+        pass
+
+    atexit.register(_save_readline, history_file)
 
 
 def clear():
