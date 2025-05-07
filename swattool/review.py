@@ -25,54 +25,228 @@ from . import userdata
 logger = logging.getLogger(__name__)
 
 
-def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
-    logurl = build.get_first_failure().get_log_url()
-    if logurl:
-        testinfos = " ".join([build.test, build.worker, build.branch,
-                              f'completed at {build.completed}'])
-        bcomment = "\n".join([testinfos, logurl])
-    else:
-        bcomment = None
+class ReviewMenu:
+    """Interactive review session manager."""
 
-    return bcomment
+    def __init__(self,
+                 builds: list[swatbuild.Build],
+                 userinfos: userdata.UserInfos,
+                 urlopens: Optional[set[str]] = None):
+        if urlopens is None:
+            urlopens = set()
 
+        self.builds = builds
+        self.userinfos = userinfos
+        self.urlopens = urlopens
+        self.entry = 0
+        self.done = True
+        self.need_refresh = False
+        self.failure_menu = FailureMenu(self.builds, self.userinfos)
 
-def _print_last_bugs(userinfos: userdata.UserInfos):
-    """Print last used bug numbers."""
-    # We only look for failures with unpublished new triages, this is kind
-    # of a dumb solution but should be enough for a start.
-    lastbugs = {triage.comment
-                for userinfo in userinfos.values()
-                for triage in userinfo.triages
-                if triage.status == swatbotrest.TriageStatus.BUG}
-    if lastbugs:
-        print("Last used bugs:")
-        for lastbug in lastbugs:
-            line = f"{lastbug}: {Bugzilla.get_bug_title(lastbug)}"
-            print(textwrap.indent(line, " " * 4))
+    def show(self):
+        """Allow a user to interactively triage a list of failures."""
+        utils.clear()
+
+        prev_entry = None
+        kbinter = False
+        show_infos = True
+        self.entry = 0
+        self.done = False
+        while not self.done:
+            try:
+                build = self.builds[self.entry]
+                if prev_entry != self.entry:
+                    build.open_urls(self.urlopens)
+
+                if show_infos:
+                    self._show_infos(build)
+                    show_infos = False
+
+                prev_entry = self.entry
+                self.review_menu()
+                if self.need_refresh:
+                    self.need_refresh = False
+                    utils.clear()
+                    show_infos = True
+            except KeyboardInterrupt:
+                if kbinter:
+                    sys.exit(1)
+                else:
+                    logger.warning("^C pressed. "
+                                   "Press again to quit without saving")
+                    kbinter = True
+                    continue
+            except Exception as error:
+                filename = self.userinfos.save(suffix="-crash")
+                logging.error(
+                    "Got exception, saving userinfos in a crash file: "
+                    "You may want to retrieve data from there (%s)",
+                    filename)
+                raise error
+            kbinter = False
+
+    def _show_infos(self, build: swatbuild.Build):
+        # Reserve chars for spacing.
+        reserved = 8
+        termwidth = shutil.get_terminal_size((80, 20)).columns
+        width = termwidth - reserved
+
+        userinfo = self.userinfos.get(build.id, {})
+        print(_get_infos(build, userinfo, width))
         print()
 
+    def _get_commands(self):
+        build = self.builds[self.entry]
+        commands = [
+            "[t] triage failure",
+            "[e] edit notes",
+            "[u] open autobuilder URL",
+            "[w] open swatbot URL",
+            "[g] open stdio log of first failed step URL",
+            "[l] show stdio log of first failed step",
+            "[x] explore all logs",
+            "[v] view git log (oneline)" if _can_show_git_log(build) else "",
+            "view git log" if _can_show_git_log(build) else "",
+            None,
+            "[n] next",
+            "next pending failure",
+            "[p] previous",
+            "[s] select in failures list",
+            "[q] quit",
+        ]
 
-def _prompt_bug_infos(build: swatbuild.Build, is_abint: bool,
-                      userinfos: userdata.UserInfos):
-    """Create new status of type BUG for a given failure."""
+        return [c for c in commands if c != ""]
 
-    def preview_bug(fstr):
-        bugnum, _, _ = fstr.partition(' ')
+    def _get_triage_commands(self):
+        build = self.builds[self.entry]
+        simcount = len(_get_similar_builds(build, self.builds)) - 1
+        commands = [
+            "[a] ab-int",
+            "[b] bug opened",
+            "[c] cancelled no errors",
+            "[m] mail sent",
+            f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
+            "[o] other",
+            "[f] other: Fixed",
+            "[d] other: Patch dropped",
+            "[t] not for swat",
+            "[r] reset status",
+            "copy status",
+            f"copy status (show {simcount} similar failures)",
+        ]
+
+        return [c for c in commands if c != ""]
+
+    def _show_menu(self, commands: list[str], cursor_index: Optional[int]
+                   ) -> Optional[str]:
+        status_bar = f"Progress: {self.entry + 1}/{len(self.builds)}"
+        action_menu = TerminalMenu(commands, title="Action",
+                                   status_bar=status_bar,
+                                   cursor_index=cursor_index,
+                                   raise_error_on_interrupt=True)
+
         try:
-            bugnum = int(bugnum)
-        except ValueError:
+            command_index = action_menu.show()
+            if command_index is None:
+                return None
+            command = commands[command_index]
+            if command[0] == '[' and command[2] == ']':
+                command = command[1]
+        except EOFError:
             return None
-        return Bugzilla.get_bug_description(bugnum)
 
-    if is_abint:
+        return command
+
+    def batch_menu(self, ask_confirm: bool,
+                   status: swatbotrest.TriageStatus, status_comment: str):
+        """Allow a user batch triage a list of failures."""
+        commands = [
+            "[y] yes",
+            "[n] no",
+            "[q] quit"
+        ]
+
+        for build in self.builds:
+            userinfo = self.userinfos.get(build.id, {})
+            if ask_confirm:
+                self._show_infos(build)
+
+                command = self._show_menu(commands, None)
+                if command == 'q' or command is None:
+                    return
+                if command == 'n':
+                    continue
+
+            newstatus = userdata.Triage()
+            newstatus.status = status
+            newstatus.comment = status_comment
+            newstatus.failures = list(build.failures.keys())
+            if status == swatbotrest.TriageStatus.BUG:
+                newstatus.extra['bugzilla-comment'] = \
+                    _format_bugzilla_comment(build)
+            userinfo.triages = [newstatus]
+
+            logging.info("applying triage %s (%s) on build %s", status,
+                         status_comment, build.format_tiny_description())
+
+    def triage_menu(self):
+        """Allow a user to interactively triage a failure."""
+        commands = self._get_triage_commands()
+
+        while True:
+            command = self._show_menu(commands, None)
+            if not command:
+                break
+
+            handled = self._handle_triage_command(command)
+            if handled:
+                break
+
+    def review_menu(self):
+        """Allow a user to interactively review a failure."""
+        commands = self._get_commands()
+
+        default_action = "n"
+        default_index = [c[1] if c and len(c) > 1 else None
+                         for c in commands].index(default_action)
+
+        while True:
+            command = self._show_menu(commands, default_index)
+
+            handled = self._handle_navigation_command(command)
+            if handled:
+                break
+
+            handled = self._handle_view_command(command)
+            if handled:
+                break
+
+            handled = self._handle_edit_command(command)
+            if handled:
+                break
+
+            if command == "t":  # triage
+                self.triage_menu()
+                break
+
+    def _get_abint_num(self) -> Optional[int]:
+
+        def preview_bug(fstr):
+            bugnum, _, _ = fstr.partition(' ')
+            try:
+                bugnum = int(bugnum)
+            except ValueError:
+                return None
+            return Bugzilla.get_bug_description(bugnum)
+
         abints = Bugzilla.get_formatted_abints()
         abrefresh = "Refresh AB-INT list from server"
 
         while True:
             abint_list = [abrefresh, *abints]
 
-            abint_menu = TerminalMenu(abint_list, title="Bug", search_key=None,
+            abint_menu = TerminalMenu(abint_list, title="Bug",
+                                      search_key=None,
                                       raise_error_on_interrupt=True,
                                       preview_command=preview_bug)
             abint_index = abint_menu.show()
@@ -85,9 +259,10 @@ def _prompt_bug_infos(build: swatbuild.Build, is_abint: bool,
             else:
                 break
         bugnum, _, _ = abint_list[abint_index].partition(' ')
-    else:
-        _print_last_bugs(userinfos)
 
+        return bugnum
+
+    def _get_bug_num(self) -> Optional[int]:
         while True:
             try:
                 bugnum_str = input('Bug number:').strip()
@@ -97,79 +272,208 @@ def _prompt_bug_infos(build: swatbuild.Build, is_abint: bool,
                 return None
 
             if bugnum_str.isnumeric():
-                bugnum = int(bugnum_str)
-                break
+                return int(bugnum_str)
 
             logger.warning("Invalid issue: %s", bugnum_str)
 
-    print("Please set the comment content")
-    bcomment = _format_bugzilla_comment(build)
-    try:
-        bcomment = click.edit(bcomment, require_save=False)
-    except click.exceptions.ClickException as err:
-        logger.warning("Got exception, aborting triage: %s", err)
-        return None
+    def _print_last_bugs(self):
+        """Print last used bug numbers."""
+        # We only look for failures with unpublished new triages, this is kind
+        # of a dumb solution but should be enough for a start.
+        lastbugs = {triage.comment
+                    for userinfo in self.userinfos.values()
+                    for triage in userinfo.triages
+                    if triage.status == swatbotrest.TriageStatus.BUG}
+        if lastbugs:
+            print("Last used bugs:")
+            for lastbug in lastbugs:
+                line = f"{lastbug}: {Bugzilla.get_bug_title(lastbug)}"
+                print(textwrap.indent(line, " " * 4))
+            print()
 
-    newstatus = userdata.Triage()
-    newstatus.status = swatbotrest.TriageStatus.BUG
-    newstatus.comment = bugnum
-    newstatus.extra['bugzilla-comment'] = bcomment
-    return newstatus
+    def _prompt_bug_infos(self, build: swatbuild.Build, is_abint: bool):
+        """Create new status of type BUG for a given failure."""
+        if is_abint:
+            bugnum = self._get_abint_num()
+        else:
+            self._print_last_bugs()
+            bugnum = self._get_bug_num()
 
-
-def _create_new_status(build: swatbuild.Build, command: str,
-                       userinfos: userdata.UserInfos
-                       ) -> Optional[userdata.Triage]:
-    """Create new status for a given failure."""
-    newstatus = userdata.Triage()
-    if command in ["a", "b"]:
-        newstatus = _prompt_bug_infos(build, command == "a", userinfos)
-    elif command == "c":
-        if build.status != swatbuild.Status.CANCELLED:
-            logging.error("Only cancelled builds can be triaged as cancelled")
+        if bugnum is None:
             return None
-        newstatus.status = swatbotrest.TriageStatus.CANCELLED
-        newstatus.comment = "Cancelled"
-    elif command == "m":
-        newstatus.status = swatbotrest.TriageStatus.MAIL_SENT
-    elif command == "i" and utils.MAILNAME:
-        newstatus.status = swatbotrest.TriageStatus.MAIL_SENT
-        newstatus.comment = f"Mail sent by {utils.MAILNAME}"
-    elif command == "o":
-        newstatus.status = swatbotrest.TriageStatus.OTHER
-    elif command == "f":
-        newstatus.status = swatbotrest.TriageStatus.OTHER
-        newstatus.comment = 'Fixed'
-    elif command == "d":
-        newstatus.status = swatbotrest.TriageStatus.OTHER
-        newstatus.comment = 'Patch dropped'
-    elif command == "t":
-        newstatus.status = swatbotrest.TriageStatus.NOT_FOR_SWAT
 
-    if newstatus and not newstatus.comment:
+        print("Please set the comment content")
+        bcomment = _format_bugzilla_comment(build)
         try:
-            newstatus.comment = input('Comment:').strip()
-        except EOFError:
+            bcomment = click.edit(bcomment, require_save=False)
+        except click.exceptions.ClickException as err:
+            logger.warning("Got exception, aborting triage: %s", err)
             return None
-        if not newstatus.comment:
-            return None
 
-    return newstatus
+        newstatus = userdata.Triage()
+        newstatus.status = swatbotrest.TriageStatus.BUG
+        newstatus.comment = str(bugnum)
+        newstatus.extra['bugzilla-comment'] = bcomment
+        return newstatus
+
+    def _create_new_status(self, build: swatbuild.Build, command: str,
+                           ) -> Optional[userdata.Triage]:
+        """Create new status for a given failure."""
+        newstatus = userdata.Triage()
+        if command in ["a", "b"]:
+            newstatus = self._prompt_bug_infos(build, command == "a")
+        elif command == "c":
+            if build.status != swatbuild.Status.CANCELLED:
+                logging.error(
+                    "Only cancelled builds can be triaged as cancelled")
+                return None
+            newstatus.status = swatbotrest.TriageStatus.CANCELLED
+            newstatus.comment = "Cancelled"
+        elif command == "m":
+            newstatus.status = swatbotrest.TriageStatus.MAIL_SENT
+        elif command == "i" and utils.MAILNAME:
+            newstatus.status = swatbotrest.TriageStatus.MAIL_SENT
+            newstatus.comment = f"Mail sent by {utils.MAILNAME}"
+        elif command == "o":
+            newstatus.status = swatbotrest.TriageStatus.OTHER
+        elif command == "f":
+            newstatus.status = swatbotrest.TriageStatus.OTHER
+            newstatus.comment = 'Fixed'
+        elif command == "d":
+            newstatus.status = swatbotrest.TriageStatus.OTHER
+            newstatus.comment = 'Patch dropped'
+        elif command == "t":
+            newstatus.status = swatbotrest.TriageStatus.NOT_FOR_SWAT
+
+        if newstatus and not newstatus.comment:
+            try:
+                newstatus.comment = input('Comment:').strip()
+            except EOFError:
+                return None
+            if not newstatus.comment:
+                return None
+
+        return newstatus
+
+    def _handle_triage_command(self, command: str) -> bool:
+        build = self.builds[self.entry]
+        userinfo = self.userinfos[build.id]
+
+        if command in ["a", "b", "c", "m", "i", "o", "f", "d", "t"]:
+            # Set new status
+            newstatus = self._create_new_status(build, command)
+            if newstatus:
+                newstatus.failures = list(build.failures.keys())
+                userinfo.triages = [newstatus]
+                self.need_refresh = True
+            return True
+
+        if command.startswith("copy status"):
+            menubuilds = self.builds
+            if command.startswith("copy status (show "):
+                menubuilds = _get_similar_builds(build, self.builds)
+
+            entry = menubuilds.index(build)
+
+            failure_menu = FailureMenu(menubuilds, self.userinfos)
+            entries = failure_menu.show_multi(entry)
+            if entries:
+                targetbuilds = [menubuilds[e] for e in entries if e != entry]
+                for tbuild in targetbuilds:
+                    triages = _copy_triages_for(userinfo.triages, tbuild)
+                    self.userinfos[tbuild.id].triages = triages
+            return True
+
+        if command == "r":  # Reset status
+            userinfo.triages = []
+            self.need_refresh = True
+            return True
+
+        return False
+
+    def _handle_navigation_command(self, command: str) -> bool:
+        if command == "q":  # Quit
+            self.done = True
+            return True
+
+        if command == "n":  # Next
+            self.entry += 1
+            self.need_refresh = True
+        elif command == "next pending failure":
+            self.entry += 1
+            while (self.entry < len(self.builds)
+                   and self.userinfos[self.builds[self.entry].id].triages):
+                self.entry += 1
+            self.need_refresh = True
+        elif command == "p":  # Previous
+            if self.entry >= 1:
+                self.entry -= 1
+                self.need_refresh = True
+            else:
+                logger.warning("This is the first entry")
+        elif command == "s":  # List
+            utils.clear()
+            self.need_refresh = True
+            newentry = self.failure_menu.show(self.entry)
+            if newentry is not None:
+                self.entry = newentry
+                self.need_refresh = True
+        else:
+            return False
+
+        if self.entry >= len(self.builds):
+            self.done = True
+
+        return True
+
+    def _handle_view_command(self, command: str) -> bool:
+        # pylint: disable=too-many-return-statements
+
+        build = self.builds[self.entry]
+
+        if command == "u":  # Open autobuilder URL
+            click.launch(build.autobuilder_url)
+            return True
+        if command == "w":  # Open swatbot URL
+            click.launch(build.swat_url)
+            return True
+        if command == "g":  # Open stdio log
+            build.get_first_failure().open_log_url()
+            return True
+        if command == "l":  # View stdio log
+            failure = build.get_first_failure()
+            self.need_refresh = logsview.LogView(failure, 'stdio').show_menu()
+            return True
+        if command == "x":  # Explore logs
+            logsview.show_logs_menu(build)
+            return True
+        if command in ["v", "view git log"]:  # View git log
+            base = build.git_info['base_commit']
+            tip = build.git_info['tip_commit']
+            if command == "v":
+                options = ['--oneline']
+            else:
+                options = ["--patch", "--name-only"]
+            self.need_refresh = pokyciarchive.show_log(tip, base, options)
+            return True
+
+        return False
+
+    def _handle_edit_command(self, command: str) -> bool:
+        build = self.builds[self.entry]
+        userinfo = self.userinfos[build.id]
+
+        if command == "e":  # Edit notes
+            userinfo.set_notes(click.edit(userinfo.get_notes(),
+                                          require_save=False))
+            self.need_refresh = True
+            return True
+
+        return False
 
 
-def _list_failures_menu(builds: list[swatbuild.Build],
-                        userinfos: userdata.UserInfos,
-                        entry: int, **kwargs):
-    termsize = shutil.get_terminal_size((80, 20))
-    width = termsize.columns - 2  # Borders
-
-    build = builds[entry]
-    fingerprint = logfingerprint.get_log_fingerprint(build.get_first_failure())
-
-    def preview_failure(fstr):
-        fnum = int(fstr.split()[0])
-        build = [b for (i, b) in enumerate(builds) if b.id == fnum][0]
-        return _get_infos(build, userinfos[fnum], width, 1)
+class FailureMenu:
+    """Show menu allowing to select one or several failures."""
 
     shown_fields = [
         swatbuild.Field.BUILD,
@@ -181,116 +485,89 @@ def _list_failures_menu(builds: list[swatbuild.Build],
         swatbuild.Field.USER_STATUS,
     ]
 
-    def format_build(b):
-        userinfo = userinfos[b.id]
-        data = [b.format_field(userinfo, f, False) for f in shown_fields]
+    def __init__(self, builds: list[swatbuild.Build],
+                 userinfos: userdata.UserInfos):
+        self.builds = builds
+        self.userinfos = userinfos
 
-        bfing = logfingerprint.get_log_fingerprint(b.get_first_failure())
+    def _format_build(self, build: swatbuild.Build,
+                      cur_build: swatbuild.Build,
+                      cur_fprint: logfingerprint.LogFingerprint):
+        userinfo = self.userinfos[build.id]
+        data = [build.format_field(userinfo, f, False)
+                for f in self.shown_fields]
+
+        failure = build.get_first_failure()
+        build_fprint = logfingerprint.get_log_fingerprint(failure)
         similarity = ""
-        if b is build:
+        if build is cur_build:
             similarity = "--- selected ---"
-        elif fingerprint.is_similar_to(bfing):
-            sim = fingerprint.get_similarity_score(bfing)
+        elif cur_fprint.is_similar_to(build_fprint):
+            sim = cur_fprint.get_similarity_score(build_fprint)
             similarity = f"similarity: {int(sim*100):3}%"
         data.insert(len(data) - 1, similarity)
 
         return data
-    entries = [format_build(b) for b in builds]
-    failures_menu = utils.tabulated_menu(entries, title="Failures",
-                                         cursor_index=entry,
-                                         preview_command=preview_failure,
-                                         preview_size=.5,
-                                         **kwargs)
-    return failures_menu.show()
 
-
-def _select_failures_menu(builds: list[swatbuild.Build],
-                          userinfos: userdata.UserInfos,
-                          entry: int) -> list[int]:
-    """Allow the user to select the failure to review in a menu."""
-    return _list_failures_menu(builds, userinfos, entry, multi_select=True,
-                               show_multi_select_hint=True,
-                               multi_select_select_on_accept=False,
-                               multi_select_empty_ok=True)
-
-
-def _go_failures_menu(builds: list[swatbuild.Build],
-                      userinfos: userdata.UserInfos,
-                      entry: int) -> int:
-    """Allow the user to select the failure to review in a menu."""
-    newentry = _list_failures_menu(builds, userinfos, entry)
-    if newentry is not None:
-        entry = newentry
-
-    return entry
-
-
-def _handle_navigation_command(builds: list[swatbuild.Build],
-                               userinfos: userdata.UserInfos,
-                               command: str, entry: int
-                               ) -> tuple[bool, bool, Optional[int]]:
-    need_refresh = False
-
-    if command == "q":  # Quit
-        return (True, need_refresh, None)
-
-    if command == "n":  # Next
-        entry += 1
-        need_refresh = True
-    elif command == "next pending failure":
-        entry += 1
-        while entry < len(builds) and userinfos[builds[entry].id].triages:
-            entry += 1
-        need_refresh = True
-    elif command == "p":  # Previous
-        if entry >= 1:
-            entry -= 1
-            need_refresh = True
-        else:
-            logger.warning("This is the first entry")
-    elif command == "s":  # List
-        utils.clear()
-        need_refresh = True
-        entry = _go_failures_menu(builds, userinfos, entry)
-    else:
-        return (False, need_refresh, entry)
-
-    if entry >= len(builds):
-        return (True, need_refresh, None)
-
-    return (True, need_refresh, entry)
-
-
-def _handle_view_command(build: swatbuild.Build, command: str
-                         ) -> tuple[bool, bool]:
-    # pylint: disable=too-many-return-statements
-    if command == "u":  # Open autobuilder URL
-        click.launch(build.autobuilder_url)
-        return (True, False)
-    if command == "w":  # Open swatbot URL
-        click.launch(build.swat_url)
-        return (True, False)
-    if command == "g":  # Open stdio log
-        build.get_first_failure().open_log_url()
-        return (True, False)
-    if command == "l":  # View stdio log
+    def show(self, entry: int, **kwargs):
+        """Show the failure selection menu."""
+        build = self.builds[entry]
         failure = build.get_first_failure()
-        need_refresh = logsview.LogView(failure, 'stdio').show_menu()
-        return (True, need_refresh)
-    if command == "x":  # Explore logs
-        need_refresh = logsview.show_logs_menu(build)
-        return (True, need_refresh)
-    if command in ["v", "view git log"]:  # View git log
-        base = build.git_info['base_commit']
-        tip = build.git_info['tip_commit']
-        if command == "v":
-            options = ['--oneline']
-        else:
-            options = ["--patch", "--name-only"]
-        success = pokyciarchive.show_log(tip, base, options)
-        return (True, success)
+        fingerprint = logfingerprint.get_log_fingerprint(failure)
 
-    return (False, False)
+        def preview_failure(fstr):
+            fnum = int(fstr.split()[0])
+            build = [b for (i, b) in enumerate(self.builds) if b.id == fnum][0]
+            return _get_infos(build, self.userinfos[fnum], width, 1)
+
+        termsize = shutil.get_terminal_size((80, 20))
+        width = termsize.columns - 2  # Borders
+
+        entries = [self._format_build(b, build, fingerprint)
+                   for b in self.builds]
+        failures_menu = utils.tabulated_menu(entries, title="Failures",
+                                             cursor_index=entry,
+                                             preview_command=preview_failure,
+                                             preview_size=.5,
+                                             **kwargs)
+        return failures_menu.show()
+
+    def show_multi(self, entry: int, **kwargs):
+        """Show the failure selection menu in multi-selection mode."""
+        return self.show(entry,
+                         multi_select=True,
+                         show_multi_select_hint=True,
+                         multi_select_select_on_accept=False,
+                         multi_select_empty_ok=True,
+                         **kwargs)
+
+
+def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
+    logurl = build.get_first_failure().get_log_url()
+    if logurl:
+        testinfos = " ".join([build.test, build.worker, build.branch,
+                              f'completed at {build.completed}'])
+        bcomment = "\n".join([testinfos, logurl])
+    else:
+        bcomment = None
+
+    return bcomment
+
+
+def _copy_triages_for(source_triages: list[userdata.Triage],
+                      tbuild: swatbuild.Build) -> list[userdata.Triage]:
+    def copy_status(status, build):
+        newstatus = userdata.Triage()
+        newstatus.status = status.status
+        newstatus.comment = status.comment
+        newstatus.extra = copy.deepcopy(status.extra)
+        newstatus.failures = list(build.failures.keys())
+        if newstatus.status == swatbotrest.TriageStatus.BUG:
+            newstatus.extra['bugzilla-comment'] = \
+                _format_bugzilla_comment(build)
+        return newstatus
+
+    return [copy_status(s, tbuild) for s in source_triages]
 
 
 def _can_show_git_log(build: swatbuild.Build) -> bool:
@@ -307,191 +584,6 @@ def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]
         return fprint.is_similar_to_failure(b.get_first_failure(), 'stdio')
 
     return [b for b in builds if is_similar(b)]
-
-
-def _handle_edit_command(builds: list[swatbuild.Build],
-                         userinfos: userdata.UserInfos,
-                         command: str, entry: int) -> tuple[bool, bool]:
-    build = builds[entry]
-    userinfo = userinfos[build.id]
-
-    if command == "e":  # Edit notes
-        userinfo.set_notes(click.edit(userinfo.get_notes(),
-                                      require_save=False))
-        return (True, True)
-
-    return (False, False)
-
-
-def _handle_triage_command(build: swatbuild.Build,
-                           builds: list[swatbuild.Build],
-                           userinfos: userdata.UserInfos,
-                           command: str) -> tuple[bool, bool]:
-    userinfo = userinfos[build.id]
-
-    if command in ["a", "b", "c", "m", "i", "o", "f", "d", "t"]:
-        # Set new status
-        newstatus = _create_new_status(build, command, userinfos)
-        if newstatus:
-            newstatus.failures = list(build.failures.keys())
-            userinfo.triages = [newstatus]
-            return (True, True)
-        return (True, False)
-    if command.startswith("copy status"):
-        def copy_status(status, build):
-            newstatus = userdata.Triage()
-            newstatus.status = status.status
-            newstatus.comment = status.comment
-            newstatus.extra = copy.deepcopy(status.extra)
-            newstatus.failures = list(build.failures.keys())
-            if newstatus.status == swatbotrest.TriageStatus.BUG:
-                newstatus.extra['bugzilla-comment'] = \
-                    _format_bugzilla_comment(build)
-            return newstatus
-
-        menubuilds = builds
-        if command.startswith("copy status (show "):
-            menubuilds = _get_similar_builds(build, builds)
-
-        entry = menubuilds.index(build)
-        entries = _select_failures_menu(menubuilds, userinfos, entry)
-        if entries:
-            targetbuilds = [menubuilds[e] for e in entries if e != entry]
-            for tbuild in targetbuilds:
-                userinfos[tbuild.id].triages = [copy_status(s, tbuild)
-                                                for s in userinfo.triages]
-        return (True, False)
-    if command == "r":  # Reset status
-        userinfo.triages = []
-        return (True, True)
-
-    return (False, False)
-
-
-def _get_commands(build: swatbuild.Build):
-    commands = [
-        "[t] triage failure",
-        "[e] edit notes",
-        "[u] open autobuilder URL",
-        "[w] open swatbot URL",
-        "[g] open stdio log of first failed step URL",
-        "[l] show stdio log of first failed step",
-        "[x] explore all logs",
-        "[v] view git log (oneline)" if _can_show_git_log(build) else "",
-        "view git log" if _can_show_git_log(build) else "",
-        None,
-        "[n] next",
-        "next pending failure",
-        "[p] previous",
-        "[s] select in failures list",
-        "[q] quit",
-    ]
-
-    return [c for c in commands if c != ""]
-
-
-def _get_triage_commands(build: swatbuild.Build,
-                         builds: list[swatbuild.Build]):
-    simcount = len(_get_similar_builds(build, builds)) - 1
-    commands = [
-        "[a] ab-int",
-        "[b] bug opened",
-        "[c] cancelled no errors",
-        "[m] mail sent",
-        f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
-        "[o] other",
-        "[f] other: Fixed",
-        "[d] other: Patch dropped",
-        "[t] not for swat",
-        "[r] reset status",
-        "copy status",
-        f"copy status (show {simcount} similar failures)",
-    ]
-
-    return [c for c in commands if c != ""]
-
-
-def review_menu(builds: list[swatbuild.Build],
-                userinfos: userdata.UserInfos,
-                entry: int,
-                statusbar: str) -> tuple[Optional[int], bool]:
-    """Allow a user to interactively review a failure."""
-    need_refresh = False
-
-    build = builds[entry]
-
-    commands = _get_commands(build)
-
-    default_action = "n"
-    default_index = [c[1] if c and len(c) > 1 else None
-                     for c in commands].index(default_action)
-    action_menu = TerminalMenu(commands, title="Action",
-                               cursor_index=default_index,
-                               status_bar=statusbar,
-                               raise_error_on_interrupt=True)
-
-    while True:
-        try:
-            command_index = action_menu.show()
-            if command_index is None:
-                return (None, False)
-            command = commands[command_index]
-            if command[0] == '[' and command[2] == ']':
-                command = command[1]
-        except EOFError:
-            return (None, False)
-
-        (handled, need_refresh, new_entry) = \
-            _handle_navigation_command(builds, userinfos, command, entry)
-        if handled:
-            break
-
-        handled, need_refresh = _handle_view_command(build, command)
-        if handled:
-            break
-
-        handled, need_refresh = _handle_edit_command(builds, userinfos,
-                                                     command, entry)
-        if handled:
-            break
-
-        if command == "t":  # triage
-            need_refresh = triage_menu(build, builds, userinfos, statusbar)
-            break
-
-    return (new_entry, need_refresh)
-
-
-def triage_menu(build: swatbuild.Build,
-                builds: list[swatbuild.Build],
-                userinfos: userdata.UserInfos,
-                statusbar: str) -> bool:
-    """Allow a user to interactively triage a failure."""
-    need_refresh = False
-
-    commands = _get_triage_commands(build, builds)
-
-    action_menu = TerminalMenu(commands, title="Action",
-                               status_bar=statusbar,
-                               raise_error_on_interrupt=True)
-
-    while True:
-        try:
-            command_index = action_menu.show()
-            if command_index is None:
-                return False
-            command = commands[command_index]
-            if command[0] == '[' and command[2] == ']':
-                command = command[1]
-        except EOFError:
-            return False
-
-        handled, need_refresh = _handle_triage_command(build, builds,
-                                                       userinfos, command)
-        if handled:
-            break
-
-    return need_refresh
 
 
 def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
@@ -512,103 +604,6 @@ def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
     buf.append("\n".join(wrapped_highlights))
 
     return '\n'.join(buf)
-
-
-def _show_infos(build: swatbuild.Build, userinfo: userdata.UserInfo):
-    # Reserve chars for spacing.
-    reserved = 8
-    termwidth = shutil.get_terminal_size((80, 20)).columns
-    width = termwidth - reserved
-
-    print(_get_infos(build, userinfo, width))
-    print()
-
-
-def review_failures(builds: list[swatbuild.Build],
-                    userinfos: userdata.UserInfos,
-                    urlopens: set[str]):
-    """Allow a user to interactively triage a list of failures."""
-    utils.clear()
-
-    entry: Optional[int] = 0
-    prev_entry = None
-    kbinter = False
-    show_infos = True
-    while entry is not None:
-        try:
-            build = builds[entry]
-            userinfo = userinfos.get(build.id, {})
-
-            if prev_entry != entry:
-                build.open_urls(urlopens)
-
-            if show_infos:
-                _show_infos(build, userinfo)
-                show_infos = False
-
-            prev_entry = entry
-            statusbar = f"Progress: {entry+1}/{len(builds)}"
-            entry, need_refresh = review_menu(builds, userinfos, entry,
-                                              statusbar)
-            if need_refresh or entry != prev_entry:
-                utils.clear()
-                show_infos = True
-        except KeyboardInterrupt:
-            if kbinter:
-                sys.exit(1)
-            else:
-                logger.warning("^C pressed. "
-                               "Press again to quit without saving")
-                kbinter = True
-                continue
-        except Exception as error:
-            filename = userinfos.save(suffix="-crash")
-            logging.error("Got exception, saving userinfos in a crash file: "
-                          "You may want to retrieve data from there (%s)",
-                          filename)
-            raise error
-        kbinter = False
-
-
-def batch_review_failures(builds: list[swatbuild.Build],
-                          userinfos: userdata.UserInfos,
-                          ask_confirm: bool, status: swatbotrest.TriageStatus,
-                          status_comment: str):
-    """Allow a user batch triage a list of failures."""
-    commands = [
-        "[y] yes",
-        "[n] no",
-        "[q] quit"
-    ]
-
-    action_menu = TerminalMenu(commands, title="Apply triage on this failure?",
-                               raise_error_on_interrupt=True)
-
-    for build in builds:
-        userinfo = userinfos.get(build.id, {})
-        if ask_confirm:
-            _show_infos(build, userinfo)
-
-            command_index = action_menu.show()
-            if command_index is None:
-                return
-            command = commands[command_index][1]
-            if command == 'q':
-                return
-            if command == 'n':
-                continue
-
-        newstatus = userdata.Triage()
-        newstatus.status = status
-        newstatus.comment = status_comment
-        newstatus.failures = list(build.failures.keys())
-        if status == swatbotrest.TriageStatus.BUG:
-            newstatus.extra['bugzilla-comment'] = \
-                _format_bugzilla_comment(build)
-        userinfo.triages = [newstatus]
-
-        logging.info("applying triage %s (%s) on build %s", status,
-                     status_comment, build.format_tiny_description())
 
 
 def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],

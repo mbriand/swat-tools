@@ -171,7 +171,7 @@ class LogView:
         return "\n".join(lines[:self.preview_height])
 
 
-def show_logs_menu(build: swatbuild.Build) -> bool:
+def show_logs_menu(build: swatbuild.Build):
     """Show a menu allowing to select log file to analyze."""
     def get_failure_line(failure, logname):
         return (failure.id, failure.stepnumber, failure.stepname, logname)
@@ -191,5 +191,3 @@ def show_logs_menu(build: swatbuild.Build) -> bool:
 
         log = LogView(*logs[newentry])
         log.show_menu()
-
-    return True

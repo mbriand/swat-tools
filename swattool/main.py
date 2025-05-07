@@ -305,7 +305,8 @@ def review_pending_failures(refresh: str,
     if not builds:
         return
 
-    review.review_failures(builds, userinfos, urlopens)
+    reviewmenu = review.ReviewMenu(builds, userinfos, urlopens)
+    reviewmenu.show()
 
     userinfos.save()
 
@@ -331,10 +332,10 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
 
     builds, userinfos = _get_builds_infos(refresh, limit, sort, filters)
-    review.batch_review_failures(builds, userinfos, not yes,
-                                 swatbotrest.TriageStatus.from_str(status),
-                                 status_comment)
-    print(status, status_comment)
+    reviewmenu = review.ReviewMenu(builds, userinfos)
+    reviewmenu.batch_menu(not yes,
+                          swatbotrest.TriageStatus.from_str(status),
+                          status_comment)
 
     userinfos.save()
 
