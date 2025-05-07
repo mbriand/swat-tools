@@ -12,10 +12,12 @@ from typing import Any, Optional
 import click
 from simple_term_menu import TerminalMenu  # type: ignore
 
+from . import logfingerprint
 from . import logsview
 from . import pokyciarchive
 from . import swatbotrest
 from . import swatbuild
+from . import swatlogs
 from .bugzilla import Bugzilla
 from . import utils
 from . import userdata
@@ -162,8 +164,7 @@ def _list_failures_menu(builds: list[swatbuild.Build],
     width = termsize.columns - 2  # Borders
 
     build = builds[entry]
-    fingerprint = logsview.get_log_fingerprint(build.get_first_failure(),
-                                               'stdio')
+    fingerprint = logfingerprint.get_log_fingerprint(build.get_first_failure())
 
     def preview_failure(fstr):
         fnum = int(fstr.split()[0])
@@ -184,7 +185,7 @@ def _list_failures_menu(builds: list[swatbuild.Build],
         userinfo = userinfos[b.id]
         data = [b.format_field(userinfo, f, False) for f in shown_fields]
 
-        bfing = logsview.get_log_fingerprint(b.get_first_failure(), 'stdio')
+        bfing = logfingerprint.get_log_fingerprint(b.get_first_failure())
         similarity = ""
         if b is build:
             similarity = "--- selected ---"
@@ -274,7 +275,7 @@ def _handle_view_command(build: swatbuild.Build, command: str
         return (True, False)
     if command == "l":  # View stdio log
         failure = build.get_first_failure()
-        need_refresh = logsview.show_log_menu(failure, 'stdio')
+        need_refresh = logsview.LogView(failure, 'stdio').show_menu()
         return (True, need_refresh)
     if command == "x":  # Explore logs
         need_refresh = logsview.show_logs_menu(build)
@@ -300,7 +301,7 @@ def _can_show_git_log(build: swatbuild.Build) -> bool:
 
 def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]
                         ) -> list[swatbuild.Build]:
-    fprint = logsview.get_log_fingerprint(build.get_first_failure(), 'stdio')
+    fprint = logfingerprint.get_log_fingerprint(build.get_first_failure())
 
     def is_similar(b):
         return fprint.is_similar_to_failure(b.get_first_failure(), 'stdio')
@@ -446,7 +447,8 @@ def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
     buf.append('')
 
     failure = build.get_first_failure()
-    highlights = logsview.get_log_highlights(failure, "stdio")
+    log = swatlogs.Log(failure)
+    highlights = log.get_highlights_text()
     maxhighlights = 5
     wrapped_highlights = [textwrap.indent(line, " " * 4)
                           for highlight in highlights[:maxhighlights]

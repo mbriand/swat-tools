@@ -5,9 +5,10 @@
 import logging
 from typing import Any, Collection
 
-from . import logsview
+from . import logfingerprint
 from . import swatbotrest
 from . import swatbuild
+from . import swatlogs
 from . import userdata
 from . import utils
 
@@ -34,8 +35,8 @@ class BuildFetcher:
 
         self.__infos.append(build)
         if self.preparelogs:
-            logsview.get_log_highlights(build.get_first_failure(), "stdio")
-            logsview.get_log_fingerprint(build.get_first_failure(), "stdio")
+            swatlogs.Log(build.get_first_failure()).get_highlights()
+            logfingerprint.get_log_fingerprint(build.get_first_failure())
 
     def _create_builds(self, failures: dict[int, dict[int, dict]],
                        executor: utils.ExecutorWithProgress):

@@ -10,7 +10,7 @@ import textwrap
 from typing import Any, Collection
 
 import click
-import pygit2
+import pygit2  # type: ignore
 import tabulate
 
 from .bugzilla import Bugzilla
