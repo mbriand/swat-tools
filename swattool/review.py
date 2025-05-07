@@ -132,7 +132,7 @@ class ReviewMenu:
             "[t] not for swat",
             "[r] reset status",
             "copy status",
-            f"copy status (show {simcount} similar failures)",
+            f"[s] copy status (show {simcount} similar failures)",
         ]
 
         return [c for c in commands if c != ""]
@@ -206,9 +206,8 @@ class ReviewMenu:
         """Allow a user to interactively review a failure."""
         commands = self._get_commands()
 
-        default_action = "n"
-        default_index = [c[1] if c and len(c) > 1 else None
-                         for c in commands].index(default_action)
+        default_action = "next pending failure"
+        default_index = commands.index(default_action)
 
         while True:
             command = self._show_menu(commands, default_index)
@@ -368,9 +367,9 @@ class ReviewMenu:
                 self.need_refresh = True
             return True
 
-        if command.startswith("copy status"):
+        if command in ["s", "copy status"]:
             menubuilds = self.builds
-            if command.startswith("copy status (show "):
+            if command == "s":
                 menubuilds = _get_similar_builds(build, self.builds)
 
             entry = menubuilds.index(build)
