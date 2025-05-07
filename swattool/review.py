@@ -319,6 +319,16 @@ def _handle_edit_command(builds: list[swatbuild.Build],
         userinfo.set_notes(click.edit(userinfo.get_notes(),
                                       require_save=False))
         return (True, True)
+
+    return (False, False)
+
+
+def _handle_triage_command(build: swatbuild.Build,
+                           builds: list[swatbuild.Build],
+                           userinfos: userdata.UserInfos,
+                           command: str) -> tuple[bool, bool]:
+    userinfo = userinfos[build.id]
+
     if command in ["a", "b", "c", "m", "i", "o", "f", "d", "t"]:
         # Set new status
         newstatus = _create_new_status(build, command, userinfos)
@@ -342,8 +352,8 @@ def _handle_edit_command(builds: list[swatbuild.Build],
         menubuilds = builds
         if command.startswith("copy status (show "):
             menubuilds = _get_similar_builds(build, builds)
-            entry = menubuilds.index(build)
 
+        entry = menubuilds.index(build)
         entries = _select_failures_menu(menubuilds, userinfos, entry)
         if entries:
             targetbuilds = [menubuilds[e] for e in entries if e != entry]
@@ -358,22 +368,9 @@ def _handle_edit_command(builds: list[swatbuild.Build],
     return (False, False)
 
 
-def _get_commands(build: swatbuild.Build, builds: list[swatbuild.Build]):
-    simcount = len(_get_similar_builds(build, builds)) - 1
+def _get_commands(build: swatbuild.Build):
     commands = [
-        "[a] ab-int",
-        "[b] bug opened",
-        "[c] cancelled no errors",
-        "[m] mail sent",
-        f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
-        "[o] other",
-        "[f] other: Fixed",
-        "[d] other: Patch dropped",
-        "[t] not for swat",
-        "[r] reset status",
-        "copy status",
-        f"copy status (show {simcount} similar failures)",
-        None,
+        "[t] triage failure",
         "[e] edit notes",
         "[u] open autobuilder URL",
         "[w] open swatbot URL",
@@ -393,16 +390,37 @@ def _get_commands(build: swatbuild.Build, builds: list[swatbuild.Build]):
     return [c for c in commands if c != ""]
 
 
+def _get_triage_commands(build: swatbuild.Build,
+                         builds: list[swatbuild.Build]):
+    simcount = len(_get_similar_builds(build, builds)) - 1
+    commands = [
+        "[a] ab-int",
+        "[b] bug opened",
+        "[c] cancelled no errors",
+        "[m] mail sent",
+        f"[i] mail sent by {utils.MAILNAME}" if utils.MAILNAME else "",
+        "[o] other",
+        "[f] other: Fixed",
+        "[d] other: Patch dropped",
+        "[t] not for swat",
+        "[r] reset status",
+        "copy status",
+        f"copy status (show {simcount} similar failures)",
+    ]
+
+    return [c for c in commands if c != ""]
+
+
 def review_menu(builds: list[swatbuild.Build],
                 userinfos: userdata.UserInfos,
                 entry: int,
                 statusbar: str) -> tuple[Optional[int], bool]:
-    """Allow a user to interactively triage a failure."""
+    """Allow a user to interactively review a failure."""
     need_refresh = False
 
     build = builds[entry]
 
-    commands = _get_commands(build, builds)
+    commands = _get_commands(build)
 
     default_action = "n"
     default_index = [c[1] if c and len(c) > 1 else None
@@ -437,7 +455,43 @@ def review_menu(builds: list[swatbuild.Build],
         if handled:
             break
 
+        if command == "t":  # triage
+            need_refresh = triage_menu(build, builds, userinfos, statusbar)
+            break
+
     return (new_entry, need_refresh)
+
+
+def triage_menu(build: swatbuild.Build,
+                builds: list[swatbuild.Build],
+                userinfos: userdata.UserInfos,
+                statusbar: str) -> bool:
+    """Allow a user to interactively triage a failure."""
+    need_refresh = False
+
+    commands = _get_triage_commands(build, builds)
+
+    action_menu = TerminalMenu(commands, title="Action",
+                               status_bar=statusbar,
+                               raise_error_on_interrupt=True)
+
+    while True:
+        try:
+            command_index = action_menu.show()
+            if command_index is None:
+                return False
+            command = commands[command_index]
+            if command[0] == '[' and command[2] == ']':
+                command = command[1]
+        except EOFError:
+            return False
+
+        handled, need_refresh = _handle_triage_command(build, builds,
+                                                       userinfos, command)
+        if handled:
+            break
+
+    return need_refresh
 
 
 def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
