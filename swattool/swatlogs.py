@@ -165,7 +165,7 @@ class Log:
 
         with gzip.open(cachefile, mode='r') as file:
             try:
-                data = yaml.load(file, Loader=yaml.Loader)
+                data = yaml.load(file, Loader=yaml.SafeLoader)
                 if (data['version'] == HILIGHTS_FORMAT_VERSION
                         and data['sha256'] == loghash
                         and data['filtershash'] == filtershash):

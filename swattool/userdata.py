@@ -143,7 +143,7 @@ class UserInfos(collections.abc.MutableMapping):
         logger.info("Loading saved data...")
         if USERINFOFILE.exists():
             with USERINFOFILE.open('r') as file:
-                pretty_userinfos = yaml.load(file, Loader=yaml.Loader)
+                pretty_userinfos = yaml.load(file, Loader=yaml.SafeLoader)
                 self.infos = pretty_userinfos
                 self.infos = {bid: UserInfo(info)
                               for bid, info in pretty_userinfos.items()}
