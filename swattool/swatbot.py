@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Interraction with the swatbot Django server."""
+"""Interaction with the swatbot Django server.
+
+This module provides functionality for retrieving and processing build failures
+from the swatbot server.
+"""
 
 import logging
 from typing import Any, Collection
@@ -16,7 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 class BuildFetcher:
-    """Consolidated list of failure infos generator."""
+    """Consolidated list of failure infos generator.
+
+    Retrieves build failure information from the swatbot server and
+    processes it according to filters.
+    """
 
     def __init__(self, userinfos: userdata.UserInfos, limit: int,
                  filters: dict[str, Any], preparelogs: bool = False):
@@ -58,7 +66,13 @@ class BuildFetcher:
                             buildid, failures[buildid])
 
     def prepare_with_executor(self, executor: utils.ExecutorWithProgress):
-        """Prepare consolidated list of failure infos."""
+        """Prepare consolidated list of failure infos.
+
+        Fetches failure information using a provided executor for concurrency.
+
+        Args:
+            executor: ExecutorWithProgress instance for parallel execution
+        """
         statusfilter = None
         if len(self.filters.get('triage', [])) == 1:
             statusfilter = self.filters['triage'][0]
@@ -67,13 +81,25 @@ class BuildFetcher:
         self._create_builds(failures, executor)
 
     def prepare(self):
-        """Prepare consolidated list of failure infos."""
+        """Prepare consolidated list of failure infos.
+
+        Creates an executor and uses it to fetch failure information.
+        """
         executor = utils.ExecutorWithProgress()
         self.prepare_with_executor(executor)
         executor.run()
 
     def get_builds(self, sort: Collection[str],) -> list[swatbuild.Build]:
-        """Get consolidated list of failure infos."""
+        """Get consolidated list of failure infos.
+
+        Returns the list of builds sorted according to the specified fields.
+
+        Args:
+            sort: Collection of field names to sort by
+
+        Returns:
+            Sorted list of Build objects
+        """
 
         def sortfn(elem):
             return elem.get_sort_tuple([swatbuild.Field(k) for k in sort])

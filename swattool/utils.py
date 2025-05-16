@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-"""Various helpers with no better place to."""
+"""Various helpers with no better place to.
+
+This module contains utility functions used throughout the swattool application.
+"""
 
 import atexit
 import concurrent.futures
@@ -27,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 
 def _get_git_username() -> Optional[str]:
+    """Get the global Git username.
+
+    Returns:
+        The global Git username or None if not found.
+    """
     try:
         process = subprocess.run(["git", "config", "--global", "user.name"],
                                  capture_output=True, check=True)
@@ -40,7 +48,10 @@ MAILNAME = _get_git_username()
 
 
 class Color:
-    """Text color handling."""
+    """Text color handling.
+
+    Provides ANSI color codes and methods to colorize terminal output.
+    """
 
     # pylint: disable=too-few-public-methods
 
@@ -55,16 +66,30 @@ class Color:
 
     @classmethod
     def colorize(cls, text: str, color: str) -> str:
-        """Colorize a string."""
+        """Colorize a string.
+
+        Args:
+            text: The text to colorize
+            color: ANSI color code to use
+
+        Returns:
+            Colorized text with reset code appended
+        """
         return f"{color}{text}{cls.RESET}"
 
 
 class SwattoolException(Exception):
-    """A generic swattool error."""
+    """A generic swattool error.
+
+    Base exception class for all swattool exceptions.
+    """
 
 
 class LoginRequiredException(SwattoolException):
-    """An exception for operations requiring login."""
+    """An exception for operations requiring login.
+
+    Raised when an operation requires login but the user is not logged in.
+    """
 
     def __init__(self, message, service):
         super().__init__(message)
@@ -107,7 +132,11 @@ class _PrettyLogFormatter(_LogFormatter):
 
 
 def setup_logging(verbose: int):
-    """Create logging handlers ans setup logging configuration."""
+    """Create logging handlers and setup logging configuration.
+
+    Args:
+        verbose: Verbosity level for logging
+    """
     if verbose >= 1:
         loglevel = logging.DEBUG
     else:
@@ -128,7 +157,10 @@ def _save_readline(history_file):
 
 
 def setup_readline():
-    """Initialize readline history manager."""
+    """Initialize readline history manager.
+
+    Loads history from file and sets up saving on exit.
+    """
     history_file = DATADIR / 'history'
     try:
         readline.read_history_file(history_file)
@@ -139,7 +171,10 @@ def setup_readline():
 
 
 def clear():
-    """Clear the screen."""
+    """Clear the screen.
+
+    Does not clear screen in debug mode to preserve log messages.
+    """
     if logging.getLogger().level <= logging.DEBUG:
         # Debug logging: never clear screen, to preserve traces
         return
@@ -148,14 +183,27 @@ def clear():
 
 
 def tabulated_menu(entries: Iterable[Iterable[Any]], **kwargs) -> TerminalMenu:
-    """Generate a TerminalMenu with tabulated lines."""
+    """Generate a TerminalMenu with tabulated lines.
+
+    Args:
+        entries: List of menu entries
+        **kwargs: Additional arguments for TerminalMenu
+
+    Returns:
+        TerminalMenu: A terminal menu with formatted tabular entries
+    """
     tabulated_entries = tabulate.tabulate(entries, tablefmt="plain")
     return TerminalMenu(tabulated_entries.splitlines(),
                         raise_error_on_interrupt=True, **kwargs)
 
 
 def show_in_less(text: str, startline: Optional[int] = 0):
-    """Show a text buffer in less program."""
+    """Show a text buffer in less program.
+
+    Args:
+        text: Text content to display
+        startline: Line number to start displaying from (0 for start)
+    """
     less_cmd = ["less", "-N", "-i"]
     if startline:
         less_cmd.append(f"+G{startline}")
@@ -171,7 +219,11 @@ def show_in_less(text: str, startline: Optional[int] = 0):
 
 
 def launch_in_system_defaultshow_in_less(text: str):
-    """Show a text buffer in system default program."""
+    """Show a text buffer in system default program.
+
+    Args:
+        text: Text content to display
+    """
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as file:
         file.write(text)
         file.close()
@@ -179,7 +231,10 @@ def launch_in_system_defaultshow_in_less(text: str):
 
 
 class ExecutorWithProgress:
-    """Generate a thread pool executor with progress bar."""
+    """Generate a thread pool executor with progress bar.
+
+    Manages concurrent execution of jobs with a visual progress indicator.
+    """
 
     def __init__(self, threads: Optional[int] = None):
         if threads is None:
@@ -189,11 +244,20 @@ class ExecutorWithProgress:
         self.jobs: list[tuple[str, concurrent.futures.Future]] = []
 
     def submit(self, name, *args, **kwargs):
-        """Submit a new job to the executor."""
+        """Submit a new job to the executor.
+
+        Args:
+            name: Display name for the job
+            *args: Positional arguments for the job function
+            **kwargs: Keyword arguments for the job function
+        """
         self.jobs.append((name, self.executor.submit(*args, **kwargs)))
 
     def run(self):
-        """Run all jobs in the executor."""
+        """Run all jobs in the executor.
+
+        Displays a progress bar showing job completion status.
+        """
         with click.progressbar(length=len(self.jobs), label="Loading failures",
                                item_show_func=lambda a: a
                                ) as jobsprogress:

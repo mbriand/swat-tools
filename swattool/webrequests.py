@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Wrapper for requests module with cookies persistence and basic cache."""
+"""Wrapper for requests module with cookies persistence and basic cache.
+
+This module provides a session manager that maintains cookies across
+requests and implements a file-based cache for responses.
+"""
 
 import gzip
 import hashlib
@@ -24,7 +28,11 @@ cache_lock = threading.Lock()
 
 
 class Session:
-    """A session with persistent cookies."""
+    """A session with persistent cookies.
+
+    Singleton class that wraps requests.Session with cookie persistence
+    and response caching capabilities.
+    """
 
     _instance = None
 
@@ -51,14 +59,22 @@ class Session:
         self._instance.initialized = True
 
     def save_cookies(self):
-        """Save cookies so they can be used for later sessions."""
+        """Save cookies so they can be used for later sessions.
+
+        Writes the current session cookies to a file for persistence.
+        """
         COOKIESFILE.parent.mkdir(parents=True, exist_ok=True)
         if self.session:
             with COOKIESFILE.open('wb') as file:
                 pickle.dump(self.session.cookies, file)
 
     def invalidate_cache(self, url: str, allparams: bool = False):
-        """Invalidate cache for a given URL."""
+        """Invalidate cache for a given URL.
+
+        Args:
+            url: The URL to invalidate cache for
+            allparams: If True, invalidate all parameter variations of the URL
+        """
         with cache_lock:
             if allparams:
                 prefix = self._get_cache_file_prefix(url)
@@ -137,7 +153,22 @@ class Session:
                 file.write(data)
 
     def get(self, url: str, max_cache_age: int = -1) -> str:
-        """Do a GET request."""
+        """Do a GET request.
+
+        Attempts to load response from cache if available and not expired,
+        otherwise performs a real request and caches the result.
+
+        Args:
+            url: The URL to request
+            max_cache_age: Maximum age in seconds for cached responses,
+                          -1 for unlimited
+
+        Returns:
+            Response text content
+
+        Raises:
+            requests.exceptions.HTTPError: If the request fails
+        """
         cache_candidates = self._get_cache_file_candidates(url)
         cache_new_file = cache_candidates[0]
 
@@ -163,7 +194,18 @@ class Session:
         return req.text
 
     def post(self, url: str, data: dict[str, Any]) -> str:
-        """Do a POST request."""
+        """Do a POST request.
+
+        Args:
+            url: The URL to post to
+            data: Dictionary of data to send in the request
+
+        Returns:
+            Response text content
+
+        Raises:
+            requests.exceptions.HTTPError: If the request fails
+        """
         logger.debug("Sending POST request to %s with %s", url, data)
         req = self.session.post(url, data=data)
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Swatbot log functions."""
+"""Swatbot log functions.
+
+This module provides functionality for viewing build failure logs
+with highlighting and navigation features.
+"""
 
 import logging
 import shutil
@@ -16,7 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 class LogView:
-    """Log viewer."""
+    """Log viewer.
+
+    Provides an interactive interface for viewing and navigating build logs
+    with syntax highlighting for errors and warnings.
+    """
 
     # pylint: disable=too-few-public-methods
 
@@ -29,7 +37,14 @@ class LogView:
         self.preview_height = self.preview_width = 0
 
     def show_menu(self) -> bool:
-        """Analyze a failure log file."""
+        """Analyze a failure log file.
+
+        Displays an interactive menu for viewing the log, with options to
+        see the whole file or jump to highlighted sections.
+
+        Returns:
+            True if the viewing was successful, False if log data is not available
+        """
         logdata = self.log.get_data()
         if not logdata:
             return False
@@ -70,6 +85,15 @@ class LogView:
 
     def _get_preview_window(self, linenum: int, lines: list[str],
                             ) -> tuple[int, int]:
+        """Calculate the start and end lines for a preview window.
+
+        Args:
+            linenum: The line number to center the preview around
+            lines: The list of lines in the log file
+
+        Returns:
+            Tuple of (start_line_index, end_line_index)
+        """
         # All values below are in line index in the lines list, not line
         # numbers.
         lineidx = linenum - 1
@@ -109,6 +133,12 @@ class LogView:
         return (start, end)
 
     def _show(self, loglines: list[str], selected_line: Optional[int]):
+        """Display log content in the less pager.
+
+        Args:
+            loglines: The lines of the log file
+            selected_line: Optional line number to highlight and position at
+        """
         colorlines = [self._format_line(i, t, selected_line)
                       for i, t in enumerate(loglines, start=1)]
 
@@ -122,6 +152,16 @@ class LogView:
 
     def _format_line(self, linenum: int, text: str,
                      colorized_line: Optional[int]):
+        """Format a line with appropriate highlighting.
+
+        Args:
+            linenum: The line number
+            text: The text content of the line
+            colorized_line: Line number to highlight specially, if any
+
+        Returns:
+            Formatted line with ANSI color codes
+        """
         highlight_lines = self.log.get_highlights()
         if linenum == colorized_line:
             if linenum in highlight_lines:
@@ -136,6 +176,14 @@ class LogView:
         return text
 
     def _split_preview_line(self, text: str):
+        """Split a long line into multiple lines for preview display.
+
+        Args:
+            text: The text to split
+
+        Returns:
+            List of line segments
+        """
         preview_text = text.expandtabs(4)
         width = self.preview_width - (1 + 6 + 1)  # space + line number + space
         return [preview_text[offset:offset + width]
@@ -143,10 +191,28 @@ class LogView:
 
     @staticmethod
     def _escape_line(text):
+        """Escape special characters in a line for display.
+
+        Args:
+            text: The text to escape
+
+        Returns:
+            Escaped text
+        """
         return repr(text)[1:-1]
 
     def _format_preview_line(self, linenum: int, text: str,
                              colorized_line: int):
+        """Format a line for preview display with line numbers.
+
+        Args:
+            linenum: The line number
+            text: The text content of the line
+            colorized_line: Line number to highlight specially
+
+        Yields:
+            Formatted line segments with line numbers
+        """
         text = self._escape_line(text)
         for i, wrappedtext in enumerate(self._split_preview_line(text)):
             formatted_text = self._format_line(linenum, wrappedtext,
@@ -157,11 +223,24 @@ class LogView:
                 yield f"{' ' * 6} {formatted_text}"
 
     def _update_preview_size(self):
+        """Update the preview dimensions based on terminal size.
+
+        Updates the preview_height and preview_width attributes.
+        """
         termsize = shutil.get_terminal_size((80, 20))
         self.preview_height = int(self.preview_size * termsize.lines)
         self.preview_width = termsize.columns - 2  # Borders
 
     def _format_preview(self, linenum: int, lines: list[str]) -> str:
+        """Format a preview of the log centered around a specific line.
+
+        Args:
+            linenum: The line number to center the preview around
+            lines: The list of lines in the log file
+
+        Returns:
+            Formatted preview text with line numbers and highlighting
+        """
         self._update_preview_size()
         start, end = self._get_preview_window(linenum, lines)
         lines = [previewline
@@ -172,7 +251,14 @@ class LogView:
 
 
 def show_logs_menu(build: swatbuild.Build):
-    """Show a menu allowing to select log file to analyze."""
+    """Show a menu allowing to select log file to analyze.
+
+    Displays a list of all available log files for the build's failures
+    and allows the user to select one for viewing.
+
+    Args:
+        build: The build containing failures with logs
+    """
     def get_failure_line(failure, logname):
         return (failure.id, failure.stepnumber, failure.stepname, logname)
     logs = [(failure, logname)

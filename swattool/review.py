@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Swatbot review functions."""
+"""Swatbot review functions.
+
+This module provides functionality for interactive review and triage of
+build failures from Swatbot.
+"""
 
 import copy
 import logging
@@ -26,7 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 class ReviewMenu:
-    """Interactive review session manager."""
+    """Interactive review session manager.
+
+    Provides a menu-based interface for reviewing and triaging build failures.
+    """
 
     def __init__(self,
                  builds: list[swatbuild.Build],
@@ -44,7 +51,11 @@ class ReviewMenu:
         self.failure_menu = FailureMenu(self.builds, self.userinfos)
 
     def show(self):
-        """Allow a user to interactively triage a list of failures."""
+        """Allow a user to interactively triage a list of failures.
+
+        Presents an interactive interface for navigating through failures and
+        managing their triage status.
+        """
         utils.clear()
 
         prev_entry = None
@@ -159,7 +170,13 @@ class ReviewMenu:
 
     def batch_menu(self, ask_confirm: bool,
                    status: swatbotrest.TriageStatus, status_comment: str):
-        """Allow a user batch triage a list of failures."""
+        """Allow a user batch triage a list of failures.
+
+        Args:
+            ask_confirm: Whether to ask for confirmation for each failure
+            status: Triage status to set for all failures
+            status_comment: Comment to set for the triage status
+        """
         commands = [
             "[y] yes",
             "[n] no",
@@ -190,7 +207,10 @@ class ReviewMenu:
                          status_comment, build.format_tiny_description())
 
     def triage_menu(self):
-        """Allow a user to interactively triage a failure."""
+        """Allow a user to interactively triage a failure.
+
+        Displays a menu of triage options and handles selection.
+        """
         commands = self._get_triage_commands()
 
         while True:
@@ -203,7 +223,10 @@ class ReviewMenu:
                 break
 
     def review_menu(self):
-        """Allow a user to interactively review a failure."""
+        """Allow a user to interactively review a failure.
+
+        Displays the main menu of review options and handles user selection.
+        """
         commands = self._get_commands()
 
         default_action = "next pending failure"
@@ -276,7 +299,10 @@ class ReviewMenu:
             logger.warning("Invalid issue: %s", bugnum_str)
 
     def _print_last_bugs(self):
-        """Print last used bug numbers."""
+        """Print last used bug numbers.
+
+        Shows a list of recently used bug numbers to help with consistency.
+        """
         # We only look for failures with unpublished new triages, this is kind
         # of a dumb solution but should be enough for a start.
         lastbugs = {triage.comment
@@ -291,7 +317,15 @@ class ReviewMenu:
             print()
 
     def _prompt_bug_infos(self, build: swatbuild.Build, is_abint: bool):
-        """Create new status of type BUG for a given failure."""
+        """Create new status of type BUG for a given failure.
+
+        Args:
+            build: The build to create a bug for
+            is_abint: Whether to use the AB-INT list for bug selection
+
+        Returns:
+            A new Triage object or None if cancelled
+        """
         if is_abint:
             bugnum = self._get_abint_num()
         else:
@@ -317,7 +351,15 @@ class ReviewMenu:
 
     def _create_new_status(self, build: swatbuild.Build, command: str,
                            ) -> Optional[userdata.Triage]:
-        """Create new status for a given failure."""
+        """Create new status for a given failure.
+
+        Args:
+            build: The build to create a status for
+            command: The menu command selected by the user
+
+        Returns:
+            A new Triage object or None if cancelled
+        """
         newstatus = userdata.Triage()
         if command in ["a", "b"]:
             newstatus = self._prompt_bug_infos(build, command == "a")
@@ -472,7 +514,11 @@ class ReviewMenu:
 
 
 class FailureMenu:
-    """Show menu allowing to select one or several failures."""
+    """Show menu allowing to select one or several failures.
+
+    Provides an interface for selecting from a list of failures,
+    with optional multi-selection support.
+    """
 
     shown_fields = [
         swatbuild.Field.BUILD,
@@ -509,7 +555,15 @@ class FailureMenu:
         return data
 
     def show(self, entry: int, **kwargs):
-        """Show the failure selection menu."""
+        """Show the failure selection menu.
+
+        Args:
+            entry: The index of the initially selected entry
+            **kwargs: Additional arguments for TerminalMenu
+
+        Returns:
+            The index of the selected entry or None if cancelled
+        """
         build = self.builds[entry]
         failure = build.get_first_failure()
         fingerprint = logfingerprint.get_log_fingerprint(failure)
@@ -532,7 +586,15 @@ class FailureMenu:
         return failures_menu.show()
 
     def show_multi(self, entry: int, **kwargs):
-        """Show the failure selection menu in multi-selection mode."""
+        """Show the failure selection menu in multi-selection mode.
+
+        Args:
+            entry: The index of the initially selected entry
+            **kwargs: Additional arguments for TerminalMenu
+
+        Returns:
+            List of selected entry indices or None if cancelled
+        """
         return self.show(entry,
                          multi_select=True,
                          show_multi_select_hint=True,
@@ -542,6 +604,17 @@ class FailureMenu:
 
 
 def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
+    """Format a comment for a Bugzilla bug.
+
+    Creates a standardized comment for a bug report containing test information
+    and the log URL for the build failure.
+
+    Args:
+        build: The build to create a comment for
+
+    Returns:
+        Formatted comment string or None if log URL is not available
+    """
     logurl = build.get_first_failure().get_log_url()
     if logurl:
         testinfos = " ".join([build.test, build.worker, build.branch,
@@ -555,6 +628,18 @@ def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
 
 def _copy_triages_for(source_triages: list[userdata.Triage],
                       tbuild: swatbuild.Build) -> list[userdata.Triage]:
+    """Copy triage statuses from one build to another.
+
+    Copies all triage objects from the source to target build, adjusting
+    failure IDs and Bugzilla comments as needed.
+
+    Args:
+        source_triages: List of triage objects to copy from
+        tbuild: Target build to copy to
+
+    Returns:
+        List of new triage objects for the target build
+    """
     def copy_status(status, build):
         newstatus = userdata.Triage()
         newstatus.status = status.status
@@ -570,6 +655,14 @@ def _copy_triages_for(source_triages: list[userdata.Triage],
 
 
 def _can_show_git_log(build: swatbuild.Build) -> bool:
+    """Check if git log can be shown for a build.
+
+    Args:
+        build: The build to check
+
+    Returns:
+        True if git log can be shown, False otherwise
+    """
     return (build.git_info is not None
             and 'base_commit' in build.git_info
             and 'tip_commit' in build.git_info)
@@ -577,6 +670,17 @@ def _can_show_git_log(build: swatbuild.Build) -> bool:
 
 def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]
                         ) -> list[swatbuild.Build]:
+    """Find builds with similar log fingerprints.
+
+    Identifies builds that have similar error patterns in their logs.
+
+    Args:
+        build: The reference build to compare against
+        builds: List of builds to check for similarity
+
+    Returns:
+        List of similar builds
+    """
     fprint = logfingerprint.get_log_fingerprint(build.get_first_failure())
 
     def is_similar(b):
@@ -587,6 +691,19 @@ def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]
 
 def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
                width: int, maxfailures: Optional[int] = None) -> str:
+    """Format detailed information about a build for display.
+
+    Creates a formatted string containing build details and log highlights.
+
+    Args:
+        build: The build to display information for
+        userinfo: User information for the build
+        width: Maximum width for formatting
+        maxfailures: Maximum number of failures to include
+
+    Returns:
+        Formatted string with build information
+    """
     buf = []
     buf.append(build.format_description(userinfo, width, maxfailures))
     buf.append('')
@@ -607,7 +724,14 @@ def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
 
 def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                               list[userdata.Triage]]:
-    """Get a list of new reviews waiting to be published on swatbot server."""
+    """Get a list of new reviews waiting to be published on swatbot server.
+
+    Collects all local triage information that hasn't been published yet,
+    checking which failures are still pending on the server.
+
+    Returns:
+        Dictionary mapping (status, comment) tuples to lists of triage objects
+    """
 
     def update_userinfo(userinfo):
         for triage in userinfo.triages:
