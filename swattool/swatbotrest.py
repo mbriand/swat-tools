@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Interaction with the swatbot Django server."""
+"""Interaction with the swatbot Django server.
+
+This module provides functionality for authenticating with and retrieving data from
+the swatbot Django server via its REST API.
+"""
 
 import enum
 import json
@@ -21,7 +25,10 @@ REST_BASE_URL = f"{BASE_URL}/rest"
 
 
 class RefreshPolicy(enum.Enum):
-    """A swatbot cache refresh policy."""
+    """A swatbot cache refresh policy.
+
+    Defines how to handle cached data when making requests to the swatbot server.
+    """
 
     NO = enum.auto()
     FORCE = enum.auto()
@@ -30,7 +37,10 @@ class RefreshPolicy(enum.Enum):
 
 
 class RefreshManager:
-    """A refresh manager for the swatbot REST API."""
+    """A refresh manager for the swatbot REST API.
+
+    Singleton class that manages the refresh policy for API requests.
+    """
 
     _instance = None
 
@@ -54,11 +64,19 @@ class RefreshManager:
         self._instance.initialized = True
 
     def set_policy(self, policy: RefreshPolicy):
-        """Set the global refresh policy."""
+        """Set the global refresh policy.
+
+        Args:
+            policy: The refresh policy to set
+        """
         self.refresh_policy = policy
 
     def set_policy_by_name(self, policy_name: str):
-        """Set the global refresh policy from policy name."""
+        """Set the global refresh policy from policy name.
+
+        Args:
+            policy_name: Name of the refresh policy (case-insensitive)
+        """
         self.set_policy(RefreshPolicy[policy_name.upper()])
 
     def get_refresh_max_age(self,
@@ -66,7 +84,16 @@ class RefreshManager:
                             failures: bool = False,
                             auto: int = AUTO_REFRESH_S
                             ) -> int:
-        """Get the maximum age before refresh for a given policy."""
+        """Get the maximum age before refresh for a given policy.
+
+        Args:
+            refresh_override: Optional policy to override the global policy
+            failures: Whether this is for failures data
+            auto: Auto refresh interval in seconds
+
+        Returns:
+            Maximum age in seconds, 0 for force refresh, -1 for no refresh
+        """
         policy = refresh_override if refresh_override else self.refresh_policy
         if policy == RefreshPolicy.FORCE_FAILURES:
             policy = RefreshPolicy.FORCE if failures else RefreshPolicy.AUTO
@@ -80,11 +107,21 @@ class RefreshManager:
 
 
 class TriageStatus(enum.IntEnum):
-    """A status to set on a failure."""
+    """A status to set on a failure.
+
+    Represents the different triage statuses that can be assigned to a failure.
+    """
 
     @staticmethod
     def from_str(status: str) -> 'TriageStatus':
-        """Get TriageStatus instance from its name as a string."""
+        """Get TriageStatus instance from its name as a string.
+
+        Args:
+            status: The name of the status (case-insensitive)
+
+        Returns:
+            The corresponding TriageStatus enum value
+        """
         return TriageStatus[status.upper()]
 
     def __str__(self):
@@ -103,7 +140,15 @@ def _get_csrftoken() -> str:
 
 
 def login(user: str, password: str) -> bool:
-    """Login to the swatbot Django interface."""
+    """Login to the swatbot Django interface.
+
+    Args:
+        user: Username for authentication
+        password: Password for authentication
+
+    Returns:
+        True if login was successful, False otherwise
+    """
     session = Session()
 
     logger.info("Sending logging request...")
@@ -144,14 +189,30 @@ def _get_json(path: str, max_cache_age: int = -1):
 
 
 def get_build(buildid: int, refresh_override: Optional[RefreshPolicy] = None):
-    """Get info on a given build."""
+    """Get info on a given build.
+
+    Args:
+        buildid: The ID of the build to retrieve
+        refresh_override: Optional policy to override the global refresh policy
+
+    Returns:
+        Dictionary containing build information
+    """
     maxage = RefreshManager().get_refresh_max_age(refresh_override)
     return _get_json(f"/build/{buildid}/", maxage)['data']
 
 
 def get_build_collection(collectionid: int, refresh_override:
                          Optional[RefreshPolicy] = None):
-    """Get info on a given build collection."""
+    """Get info on a given build collection.
+
+    Args:
+        collectionid: The ID of the collection to retrieve
+        refresh_override: Optional policy to override the global refresh policy
+
+    Returns:
+        Dictionary containing collection information
+    """
     maxage = RefreshManager().get_refresh_max_age(refresh_override)
     return _get_json(f"/buildcollection/{collectionid}/", maxage)['data']
 
@@ -171,7 +232,15 @@ PENDING_FAILURES_AUTO_REFRESH_S = 60 * 10
 
 def get_stepfailures(status: Optional[TriageStatus] = None,
                      refresh_override: Optional[RefreshPolicy] = None):
-    """Get info on all failures."""
+    """Get info on all failures.
+
+    Args:
+        status: Optional status to filter failures by
+        refresh_override: Optional policy to override the global refresh policy
+
+    Returns:
+        List of failure data dictionaries
+    """
     auto_refresh_s = FAILURES_AUTO_REFRESH_S
     params: dict[str, Any] = {}
     if status is not None:
@@ -189,14 +258,31 @@ def get_stepfailures(status: Optional[TriageStatus] = None,
 
 def get_stepfailure(failureid: int,
                     refresh_override: Optional[RefreshPolicy] = None):
-    """Get info on a given failure."""
+    """Get info on a given failure.
+
+    Args:
+        failureid: The ID of the failure to retrieve
+        refresh_override: Optional policy to override the global refresh policy
+
+    Returns:
+        Dictionary containing failure information
+    """
     maxage = RefreshManager().get_refresh_max_age(refresh_override)
     return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
 
 
 def get_failures(status: Optional[TriageStatus] = None
                  ) -> dict[int, dict[int, dict]]:
-    """Get all failures on swatbot server."""
+    """Get all failures on swatbot server.
+
+    Retrieves failures and organizes them by build ID and failure ID.
+
+    Args:
+        status: Optional status to filter failures by
+
+    Returns:
+        Dictionary mapping build IDs to dictionaries of failure IDs to failure data
+    """
     failures = get_stepfailures(status)
     ids: dict[int, dict[int, dict]] = {}
     for failure_data in failures:
@@ -209,7 +295,13 @@ def get_failures(status: Optional[TriageStatus] = None
 
 def publish_status(failureid: int,
                    status: TriageStatus, comment: str):
-    """Publish new triage status to the swatbot Django server."""
+    """Publish new triage status to the swatbot Django server.
+
+    Args:
+        failureid: The ID of the failure to update
+        status: The new triage status to set
+        comment: Comment explaining the triage status
+    """
     # Here we need to send a POST request to the page of any collection, there
     # is no need to use the page of the collection corresponding the failure we
     # want to update. Just use collection 1.

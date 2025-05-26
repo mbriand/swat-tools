@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Swatbot log comparison functions."""
+"""Swatbot log comparison functions.
+
+This module provides functionality for comparing log files by generating
+fingerprints and computing similarity scores between them.
+"""
 
 import logging
 import re
@@ -15,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 class LogFingerprint:
-    """A logfile fingerprint, allowing to compute similarity with others."""
+    """A logfile fingerprint, allowing to compute similarity with others.
+
+    Creates a fingerprint of a log file based on highlighted lines and
+    provides methods to compare it with other log fingerprints.
+    """
 
     _similarity_scores: dict[tuple[tuple[int, str], ...], float] = {}
     threshold = .7
@@ -31,7 +39,17 @@ class LogFingerprint:
         self.lines = log.get_highlights_text()[:100]
 
     def _get_similarity_score(self, other: 'LogFingerprint') -> float:
-        """Get similarity score between log of this entry and another log."""
+        """Get similarity score between log of this entry and another log.
+
+        Computes a similarity score between 0.0 and 1.0 based on Jaro similarity
+        of highlighted lines in both logs.
+
+        Args:
+            other: Another LogFingerprint to compare with
+
+        Returns:
+            Similarity score between 0.0 and 1.0
+        """
         if not self.lines or not other.lines:
             return 1 if not self.lines and not other.lines else 0
 
@@ -102,21 +120,59 @@ class LogFingerprint:
         return score
 
     def get_similarity_score(self, other: 'LogFingerprint') -> float:
-        """Get similarity score between log of this entry and another log."""
+        """Get similarity score between log of this entry and another log.
+
+        Retrieves a cached similarity score or computes it if not available.
+
+        Args:
+            other: Another LogFingerprint to compare with
+
+        Returns:
+            Similarity score between 0.0 and 1.0
+        """
         return self._get_cached_score(other=other)
 
     def get_similarity_score_with_failure(self, failure: swatbuild.Failure,
                                           logname: str) -> float:
-        """Get similarity score between log of this entry and another log."""
+        """Get similarity score between log of this entry and another log.
+
+        Retrieves a cached similarity score or computes it if not available.
+
+        Args:
+            failure: The failure to compare with
+            logname: The name of the log file to compare with
+
+        Returns:
+            Similarity score between 0.0 and 1.0
+        """
         return self._get_cached_score(failure, logname)
 
     def is_similar_to(self, other: 'LogFingerprint') -> bool:
-        """Check if a given log fingerprint is similar to this one."""
+        """Check if a given log fingerprint is similar to this one.
+
+        Determines if the similarity score exceeds the threshold.
+
+        Args:
+            other: Another LogFingerprint to compare with
+
+        Returns:
+            True if logs are similar, False otherwise
+        """
         return self._get_cached_score(other=other) > self.threshold
 
     def is_similar_to_failure(self, failure: swatbuild.Failure, logname: str
                               ) -> bool:
-        """Check if a given log fingerprint is similar to this one."""
+        """Check if a given log fingerprint is similar to this one.
+
+        Determines if the similarity score exceeds the threshold.
+
+        Args:
+            failure: The failure to compare with
+            logname: The name of the log file to compare with
+
+        Returns:
+            True if logs are similar, False otherwise
+        """
         return self._get_cached_score(failure, logname) > self.threshold
 
 
@@ -126,7 +182,17 @@ _cached_log_fingerprint: dict[tuple[swatbuild.Failure, str],
 
 def get_log_fingerprint(failure: swatbuild.Failure,
                         logname: str = 'stdio') -> LogFingerprint:
-    """Get a finger print of the log, allowing to compare it with others."""
+    """Get a fingerprint of the log, allowing to compare it with others.
+
+    Creates or retrieves a cached LogFingerprint for the given failure and log.
+
+    Args:
+        failure: The failure containing the log
+        logname: The name of the log file (default: 'stdio')
+
+    Returns:
+        LogFingerprint object for the specified log
+    """
     fingerprint = _cached_log_fingerprint.get((failure, logname), None)
     if fingerprint is not None:
         return fingerprint

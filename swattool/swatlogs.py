@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Swatbot log functions."""
+"""Swatbot log functions.
+
+This module provides functionality for processing, analyzing, and highlighting
+log files from Swatbot builds and failures.
+"""
 
 import gzip
 import hashlib
@@ -41,7 +45,15 @@ class _Filter:
         self.in_menu = in_menu
 
     def match(self, line: str) -> tuple[bool, Optional[_Highlight]]:
-        """Check if the filter matches a given line."""
+        """Check if the filter matches a given line.
+
+        Args:
+            line: The log line to check against the filter pattern
+
+        Returns:
+            A tuple containing a boolean indicating if the line matched and
+            an optional highlight object.
+        """
         if not self.enabled:
             return (False, None)
 
@@ -58,7 +70,11 @@ class _Filter:
 
 
 class Log:
-    """Log handling class."""
+    """Log handling class.
+
+    Provides functionality to access, process, and highlight log files
+    from build failures.
+    """
 
     _cached_log_highlights: dict[tuple[swatbuild.Failure, str],
                                  dict[int, _Highlight]] = {}
@@ -69,7 +85,11 @@ class Log:
         self._highlights = None
 
     def get_data(self):
-        """Get logfile content."""
+        """Get logfile content.
+
+        Returns:
+            The content of the log file
+        """
         return self.failure.get_log(self.logname)
 
     def _get_log_highlights_filters(self, loglen: int) -> list[_Filter]:
@@ -216,7 +236,13 @@ class Log:
         self._cached_log_highlights[cache_key] = self._highlights
 
     def get_highlights(self) -> dict[int, _Highlight]:
-        """Get log highlights for a given log file."""
+        """Get log highlights for a given log file.
+
+        Loads or generates line-by-line highlights for the log file.
+
+        Returns:
+            Dictionary mapping line numbers to highlight objects
+        """
         if self._highlights is None:
             self._load_log_highlights()
 
@@ -224,7 +250,11 @@ class Log:
         return self._highlights
 
     def get_highlights_text(self) -> list[str]:
-        """Get log highlights for a given log file."""
+        """Get highlighted text lines from a log file.
+
+        Returns:
+            List of highlighted text lines
+        """
         highlights = self.get_highlights()
         return [highlights[line].text for line in sorted(highlights)
                 if highlights[line].in_menu]

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-"""Interaction with the swatbot Django server."""
+"""Interaction with the swatbot Django server.
+
+This module provides classes for storing and managing user-specific data
+related to build failures, such as notes and triage information.
+"""
 
 import collections
 import logging
@@ -21,7 +25,10 @@ USERINFOFILE = utils.DATADIR / "userinfos.yaml"
 
 
 class Triage:
-    """A failure new triage entry."""
+    """A failure new triage entry.
+
+    Represents a triage decision for one or more failures.
+    """
 
     def __init__(self, values: Optional[dict] = None):
         self.failures: list[int] = []
@@ -45,7 +52,11 @@ class Triage:
                 self.extra = extra
 
     def as_dict(self) -> dict:
-        """Export data as a dictionary."""
+        """Export data as a dictionary.
+
+        Returns:
+            Dictionary representation of the triage entry
+        """
         return {'failures': self.failures,
                 'status': self.status.name,
                 'comment': self.comment,
@@ -56,7 +67,11 @@ class Triage:
         return f"{str(self.status)}: {self.comment}"
 
     def format_description(self) -> str:
-        """Get info on one given Triage in a pretty way."""
+        """Get info on one given Triage in a pretty way.
+
+        Returns:
+            Formatted description of the triage status
+        """
         statusfrags = []
 
         statusname = self.status.name.title()
@@ -79,7 +94,10 @@ class Triage:
 
 
 class UserInfo:
-    """A failure user data."""
+    """A failure user data.
+
+    Stores user-specific data about a build, including notes and triage decisions.
+    """
 
     def __init__(self, values: Optional[dict] = None):
         if values:
@@ -90,11 +108,23 @@ class UserInfo:
             self.triages = []
 
     def get_notes(self) -> str:
-        """Get formatted user notes."""
+        """Get formatted user notes.
+
+        Returns:
+            All notes joined with double newlines
+        """
         return "\n\n".join(self.notes)
 
     def get_wrapped_notes(self, width: int, indent: str):
-        """Get formatted and wrapped user notes."""
+        """Get formatted and wrapped user notes.
+
+        Args:
+            width: Maximum width for wrapped text
+            indent: String to use for indentation
+
+        Returns:
+            Formatted and wrapped notes
+        """
         wrapped_lns = ["\n".join([textwrap.indent(li, indent)
                                   for line in note.split("\n")
                                   for li in textwrap.wrap(line, width)
@@ -103,14 +133,22 @@ class UserInfo:
         return "\n\n".join(wrapped_lns)
 
     def set_notes(self, notes: Optional[str]):
-        """Set user notes."""
+        """Set user notes.
+
+        Args:
+            notes: String containing notes, with paragraphs separated by double newlines
+        """
         if not notes:
             self.notes = []
         else:
             self.notes = [n.strip() for n in notes.split("\n\n")]
 
     def as_dict(self) -> dict:
-        """Export data as a dictionary."""
+        """Export data as a dictionary.
+
+        Returns:
+            Dictionary representation of user info, including notes and triages
+        """
         data = {}
         if self.notes:
             data['notes'] = self.notes
@@ -120,7 +158,14 @@ class UserInfo:
         return data
 
     def get_failure_triage(self, failureid: int) -> Optional[Triage]:
-        """Get the Triage corresponding to a given failure id."""
+        """Get the Triage corresponding to a given failure id.
+
+        Args:
+            failureid: ID of the failure to find triage for
+
+        Returns:
+            Triage object for the failure or None if not found
+        """
         for triage in self.triages:
             if failureid in triage.failures:
                 return triage
@@ -132,14 +177,20 @@ class UserInfo:
 
 
 class UserInfos(collections.abc.MutableMapping):
-    """A collection of failure user data."""
+    """A collection of failure user data.
+
+    Maps build IDs to UserInfo objects and provides persistence.
+    """
 
     def __init__(self):
         self.infos = {}
         self.load()
 
     def load(self):
-        """Load user infos stored during previous review session."""
+        """Load user infos stored during previous review session.
+
+        Reads user information from the YAML file if it exists.
+        """
         logger.info("Loading saved data...")
         if USERINFOFILE.exists():
             with USERINFOFILE.open('r') as file:
@@ -149,7 +200,16 @@ class UserInfos(collections.abc.MutableMapping):
                               for bid, info in pretty_userinfos.items()}
 
     def save(self, suffix="") -> pathlib.Path:
-        """Store user infos for later runs."""
+        """Store user infos for later runs.
+
+        Saves user information to a YAML file and creates a backup.
+
+        Args:
+            suffix: Optional suffix to append to the filename
+
+        Returns:
+            Path to the saved file
+        """
         # Cleaning old reviews
         for info in self.infos.values():
             info.triages = [t for t in info.triages if t.failures]

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
 
-"""A tool helping triage of Yocto autobuilder failures."""
+"""A tool helping triage of Yocto autobuilder failures.
+
+This module provides the main entry point and CLI interface for the swattool application,
+which helps with the triage of Yocto autobuilder failures.
+"""
 
 import datetime
 import logging
@@ -36,8 +40,14 @@ def _add_options(options):
 def parse_filters(kwargs) -> dict[str, Any]:
     """Parse filter arguments.
 
-    Parse filter values givean as program argument and generate a dictionary to
+    Parse filter values given as program arguments and generate a dictionary to
     be used with get_failure_infos().
+
+    Args:
+        kwargs: Dictionary of filter arguments from CLI options
+
+    Returns:
+        Dictionary of parsed filters ready for use with get_failure_infos()
     """
     def regex_filter(lst):
         # Create a regex for each entry. If it is an alphanumeric string use
@@ -78,7 +88,14 @@ def parse_filters(kwargs) -> dict[str, Any]:
 
 
 def parse_urlopens(kwargs) -> set[str]:
-    """Parse url open arguments."""
+    """Parse url open arguments.
+
+    Args:
+        kwargs: Dictionary of URL open arguments from CLI options
+
+    Returns:
+        Set of URL types to open
+    """
     opens = set()
     for urltype in ['autobuilder', 'swatbot', 'stdio']:
         if kwargs.get(f'open_{urltype}_url'):
@@ -90,13 +107,20 @@ def parse_urlopens(kwargs) -> set[str]:
 @click.group()
 @click.option('-v', '--verbose', count=True, help="Increase verbosity")
 def maingroup(verbose: int):
-    """Handle triage of Yocto autobuilder failures."""
+    """Handle triage of Yocto autobuilder failures.
+
+    Args:
+        verbose: Verbosity level for logging
+    """
     utils.setup_logging(verbose)
     utils.setup_readline()
 
 
 def main():
-    """Handle triage of Yocto autobuilder failures."""
+    """Handle triage of Yocto autobuilder failures.
+
+    Main entry point for the application. Sets up logging and handles login if needed.
+    """
     try:
         maingroup()  # pylint: disable=no-value-for-parameter
     except utils.LoginRequiredException as err:
@@ -115,7 +139,12 @@ def main():
 @click.option('--user', '-u', prompt=True)
 @click.option('--password', '-p', prompt=True, hide_input=True)
 def login(user: str, password: str):
-    """Login to the swatbot Django interface."""
+    """Login to the swatbot Django interface.
+
+    Args:
+        user: Username for swatbot login
+        password: Password for swatbot login
+    """
     swatbotrest.login(user, password)
 
 
@@ -123,7 +152,12 @@ def login(user: str, password: str):
 @click.option('--user', '-u', prompt=True)
 @click.option('--password', '-p', prompt=True, hide_input=True)
 def bugzilla_login(user: str, password: str):
-    """Login to Yocto Project Bugzilla."""
+    """Login to Yocto Project Bugzilla.
+
+    Args:
+        user: Username for Bugzilla login
+        password: Password for Bugzilla login
+    """
     Bugzilla.login(user, password)
 
 
@@ -224,7 +258,15 @@ def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
 
 def _show_failures(refresh: str, urlopens: set[str], limit: int,
                    sort: Collection[str], filters: dict[str, Any]):
-    """Show all failures waiting for triage."""
+    """Show all failures waiting for triage.
+
+    Args:
+        refresh: Refresh policy name for data fetching
+        urlopens: Set of URL types to open
+        limit: Maximum number of failures to show
+        sort: Collection of field names to sort by
+        filters: Dictionary of filters to apply
+    """
     builds, userinfos = _get_builds_infos(refresh, limit, sort, filters)
 
     for build in builds:
@@ -270,7 +312,14 @@ def _show_failures(refresh: str, urlopens: set[str], limit: int,
               help="Only show some triage statuses")
 def show_failures(refresh: str, limit: int, sort: list[str],
                   **kwargs):
-    """Show all failures, including the old ones."""
+    """Show all failures, including the old ones.
+
+    Args:
+        refresh: Refresh policy name for data fetching
+        limit: Maximum number of failures to show
+        sort: List of field names to sort by
+        **kwargs: Additional filter arguments from CLI options
+    """
     urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
     _show_failures(refresh, urlopens, limit, sort, filters)
@@ -281,7 +330,14 @@ def show_failures(refresh: str, limit: int, sort: list[str],
 @_add_options(url_open_options)
 def show_pending_failures(refresh: str, limit: int, sort: list[str],
                           **kwargs):
-    """Show all failures waiting for triage."""
+    """Show all failures waiting for triage.
+
+    Args:
+        refresh: Refresh policy name for data fetching
+        limit: Maximum number of failures to show
+        sort: List of field names to sort by
+        **kwargs: Additional filter arguments from CLI options
+    """
     urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
@@ -294,7 +350,14 @@ def show_pending_failures(refresh: str, limit: int, sort: list[str],
 def review_pending_failures(refresh: str,
                             limit: int, sort: list[str],
                             **kwargs):
-    """Review failures waiting for triage."""
+    """Review failures waiting for triage.
+
+    Args:
+        refresh: Refresh policy name for data fetching
+        limit: Maximum number of failures to show
+        sort: List of field names to sort by
+        **kwargs: Additional filter arguments from CLI options
+    """
     urlopens = parse_urlopens(kwargs)
     filters = parse_filters(kwargs)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
@@ -324,7 +387,14 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
                           **kwargs):
     """Triage pending failures matching given criteria.
 
-    STATUS_COMMENT: free format string or bug number for 'Bug' status.
+    Args:
+        refresh: Refresh policy name for data fetching
+        limit: Maximum number of failures to show
+        sort: List of field names to sort by
+        yes: Skip confirmation for each failure if True
+        status: Triage status to set for matching failures
+        status_comment: Comment for the triage status (or bug number for 'Bug' status)
+        **kwargs: Additional filter arguments from CLI options
     """
     # pylint: disable=too-many-arguments,too-many-positional-arguments
 
@@ -344,7 +414,11 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
 @click.option('--dry-run', '-n', is_flag=True,
               help="Only shows what would be done")
 def publish_new_reviews(dry_run: bool):
-    """Publish new local triage status to swatbot Django interface."""
+    """Publish new local triage status to swatbot Django interface.
+
+    Args:
+        dry_run: Only show what would be done without making changes if True
+    """
     reviews = review.get_new_reviews()
 
     logger.info("Publishing new reviews...")
