@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
-"""Interaction with the swatbot Django server.
+"""Classes for representing builds and failures.
 
 This module provides classes for representing and interacting with
-build and failure information from the swatbot system.
+build and failure information, sourced from the local SQLite database.
 """
 
 import enum
+import json
 import logging
-from datetime import datetime
+import sqlite3
 import textwrap
-from typing import Any, Iterable, Optional
 import urllib
+from datetime import datetime
+from typing import Any, Iterable, Optional
 
 import click
 import requests
@@ -112,17 +114,16 @@ class Failure:
 
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, failure_id: int, failure_data: dict, build: 'Build'):
-        self.id = failure_id
+    def __init__(self, row: sqlite3.Row, build: 'Build'):
+        self.id = row['failure_id']
         self.build = build
-        self.stepnumber = int(failure_data['attributes']['stepnumber'])
-        self.status = Status.from_int(failure_data['attributes']['status'])
-        self.stepname = failure_data['attributes']['stepname']
-        self.urls = {u.split()[0].rsplit('/')[-1]: u
-                     for u in failure_data['attributes']['urls'].split()}
-        triage = failure_data['attributes']['triage']
+        self.stepnumber = int(row['step_number'])
+        self.status = Status.from_int(row['status'])
+        self.stepname = row['step_name']
+        self.urls = json.loads(row['urls'])
+        triage = row['remote_triage']
         self.triage = swatbotrest.TriageStatus(triage)
-        self.triagenotes = failure_data['attributes']['triagenotes']
+        self.triagenotes = row['remote_triage_notes']
 
     def get_log_url(self, logname: str = "stdio") -> Optional[str]:
         """Get the URL of a given log webpage.
@@ -213,47 +214,47 @@ class Build:
     """A Swatbot build.
 
     Represents a build with its failures and provides filtering and formatting.
+    Initialized from SQLite database rows containing build, collection, and
+    failure data.
     """
 
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, buildid: int,
-                 failures: dict[int, dict]):
-        build = swatbotrest.get_build(buildid)
-        attributes = build['attributes']
-        relationships = build['relationships']
-        collectionid = relationships['buildcollection']['data']['id']
-        collection = swatbotrest.get_build_collection(collectionid)
+    def __init__(self, sql_rows: list[sqlite3.Row]):
+        """Initialize a Build from database rows.
 
-        swat_url = f"{swatbotrest.BASE_URL}/collection/{collection['id']}/"
+        Args:
+            sql_rows: List of SQLite Row objects containing build, collection,
+                      and failure data joined together.
+        """
+        collection_id = sql_rows[0]['collection_id']
+        swat_url = f"{swatbotrest.BASE_URL}/collection/{collection_id}/"
 
-        self.id = attributes['buildid']
-        self.status = Status.from_int(attributes['status'])
-        self.test = attributes['targetname']
-        self.worker = attributes['workername']
-        self.completed = datetime.fromisoformat(attributes['completed'])
+        self.id = sql_rows[0]['buildbot_build_id']
+        self.status = Status.from_int(sql_rows[0]['status'])
+        self.test = sql_rows[0]['target_name']
+        self.worker = sql_rows[0]['worker']
+        self.completed = datetime.fromisoformat(sql_rows[0]['completed'])
         self.swat_url = swat_url
-        self.autobuilder_url = attributes['url']
-        self.owner = collection['attributes']['owner']
-        self.branch = collection['attributes']['branch']
+        self.autobuilder_url = sql_rows[0]['ab_url']
+        self.owner = sql_rows[0]['owner']
+        self.branch = sql_rows[0]['branch']
 
+        self.parent_build_id = None
         self.parent_builder_name = None
         self.parent_builder = self.parent_build_number = None
 
-        if collection['attributes']['buildid'] != self.id:
-            pbid = collection['attributes']['buildid']
-            buildboturl = Build._rest_api_url(self.autobuilder_url)
-            parent_build = buildbotrest.get_build(buildboturl, pbid)
-            self.parent_builder_name = collection['attributes']["targetname"]
-            self.parent_builder = self.parent_build_number = None
-            if parent_build:
-                self.parent_builder = parent_build['builds'][0]['builderid']
-                self.parent_build_number = parent_build['builds'][0]['number']
+        self.collection_build_id = sql_rows[0]['collection_build_id']
+        if self.collection_build_id != self.id:
+            self.parent_build_id = self.collection_build_id
+            self.parent_builder_name = sql_rows[0]["target_name"]
+            self.parent_builder = sql_rows[0]['parent_builder']
+            self.parent_build_number = sql_rows[0]['parent_build_number']
 
         self._git_info: Optional[dict[str, Any]] = None
 
-        self.failures = {fid: Failure(fid, fdata, self)
-                         for fid, fdata in failures.items()}
+        self.failures = {row['failure_id']: Failure(row, self)
+                         for row in sql_rows}
 
     def _get_git_tag(self) -> Optional[str]:
         if self.parent_builder_name and self.parent_build_number:
@@ -301,7 +302,7 @@ class Build:
                     self._git_info['description'] = desc
 
             if self._git_info is None:
-                buildboturl = Build._rest_api_url(self.autobuilder_url)
+                buildboturl = buildbotrest.rest_api_url(self.autobuilder_url)
                 buildbot_build = buildbotrest.get_build(buildboturl, self.id)
                 if buildbot_build:
                     try:
@@ -527,7 +528,7 @@ class Build:
 
     def _format_parent_description(self) -> str:
         pbldr, pnmbr = self.parent_builder, self.parent_build_number
-        ab_url = Build._autobuilder_base_url(self.autobuilder_url)
+        ab_url = buildbotrest.autobuilder_base_url(self.autobuilder_url)
         parent_url = f"{ab_url}/#/builders/{pbldr}/builds/{pnmbr}"
         return f"{parent_url} ({self.parent_builder_name})"
 
@@ -622,18 +623,14 @@ class Build:
         url, _, _ = autobuilder_url.partition('/#/builders')
         return url
 
-    @staticmethod
-    def _rest_api_url(autobuilder_url) -> str:
-        base_url = Build._autobuilder_base_url(autobuilder_url)
-        return buildbotrest.rest_api_url(base_url)
-
     def rest_api_url(self) -> str:
         """Get the REST API URL prefix for this build.
 
         Returns:
             REST API URL prefix for this build
         """
-        return self._rest_api_url(self.autobuilder_url)
+        base_url = buildbotrest.autobuilder_base_url(self.autobuilder_url)
+        return buildbotrest.rest_api_url(base_url)
 
     def open_urls(self, urlopens: set[str]) -> None:
         """Open requested URLs in default browser.

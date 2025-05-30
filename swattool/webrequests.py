@@ -172,6 +172,9 @@ class Session:
         Raises:
             requests.exceptions.HTTPError: If the request fails
         """
+        # TODO: only large files (logs) and maybe files with only few occurences
+        # (bugzilla AB-INT list) shoud use cache, everyhting else should be
+        # stored in DB
         cache_candidates = self._get_cache_file_candidates(url)
         cache_new_file = cache_candidates[0]
 
