@@ -9,6 +9,7 @@ build and failure information from the swatbot system.
 import enum
 import logging
 from datetime import datetime
+import sqlite3
 import textwrap
 from typing import Any, Iterable, Optional
 import urllib
@@ -222,8 +223,8 @@ class Build:
         build = swatbotrest.get_build(buildid)
         attributes = build['attributes']
         relationships = build['relationships']
-        collectionid = relationships['buildcollection']['data']['id']
-        collection = swatbotrest.get_build_collection(collectionid)
+        self.collectionid = relationships['buildcollection']['data']['id']
+        collection = swatbotrest.get_build_collection(self.collectionid)
 
         swat_url = f"{swatbotrest.BASE_URL}/collection/{collection['id']}/"
 
@@ -237,13 +238,16 @@ class Build:
         self.owner = collection['attributes']['owner']
         self.branch = collection['attributes']['branch']
 
+        self.parent_build_id = None
         self.parent_builder_name = None
         self.parent_builder = self.parent_build_number = None
 
-        if collection['attributes']['buildid'] != self.id:
-            pbid = collection['attributes']['buildid']
+        self.buildid = collection['attributes']['buildid']
+        if self.buildid != self.id:
+            self.parent_build_id = self.buildid
             buildboturl = Build._rest_api_url(self.autobuilder_url)
-            parent_build = buildbotrest.get_build(buildboturl, pbid)
+            parent_build = buildbotrest.get_build(buildboturl,
+                                                  self.parent_build_id)
             self.parent_builder_name = collection['attributes']["targetname"]
             self.parent_builder = self.parent_build_number = None
             if parent_build:

@@ -272,3 +272,4 @@ class ExecutorWithProgress:
             except Exception:
                 self.executor.shutdown(cancel_futures=True)
                 raise
+
