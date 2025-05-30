@@ -2,7 +2,8 @@
 
 """Various helpers with no better place to.
 
-This module contains utility functions used throughout the swattool application.
+This module contains utility functions used throughout the swattool
+application.
 """
 
 import atexit
@@ -17,7 +18,6 @@ import tempfile
 from typing import Any, Iterable, Optional
 
 from simple_term_menu import TerminalMenu  # type: ignore
-
 import click
 import tabulate
 import xdg  # type: ignore

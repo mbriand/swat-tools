@@ -197,7 +197,6 @@ class UserInfos(collections.abc.MutableMapping):
 
         Reads user information from the YAML file if it exists.
         """
-        logger.info("Loading saved data...")
         if USERINFOFILE.exists():
             with USERINFOFILE.open('r') as file:
                 pretty_userinfos = yaml.load(file, Loader=yaml.SafeLoader)

@@ -2,8 +2,8 @@
 
 """Interaction with the swatbot Django server.
 
-This module provides functionality for authenticating with and retrieving data from
-the swatbot Django server via its REST API.
+This module provides functionality for authenticating with and retrieving data
+from the swatbot Django server via its REST API.
 """
 
 import enum
@@ -27,7 +27,8 @@ REST_BASE_URL = f"{BASE_URL}/rest"
 class RefreshPolicy(enum.Enum):
     """A swatbot cache refresh policy.
 
-    Defines how to handle cached data when making requests to the swatbot server.
+    Defines how to handle cached data when making requests to the swatbot
+    server.
     """
 
     NO = enum.auto()
@@ -176,9 +177,12 @@ def login(user: str, password: str) -> bool:
 
 
 def _get_json(path: str, max_cache_age: int = -1):
-    data = Session().get(f"{REST_BASE_URL}{path}", max_cache_age)
+    url = f"{REST_BASE_URL}{path}"
+    data = Session().get(url, max_cache_age)
     try:
         json_data = json.loads(data)
+    except requests.exceptions.ConnectionError as err:
+        raise utils.SwattoolException(f"Failed to fetch {url}") from err
     except json.decoder.JSONDecodeError as err:
         Session().invalidate_cache(f"{REST_BASE_URL}{path}")
         if "Please login to see this page." in data:
@@ -231,7 +235,8 @@ PENDING_FAILURES_AUTO_REFRESH_S = 60 * 10
 
 
 def get_stepfailures(status: Optional[TriageStatus] = None,
-                     refresh_override: Optional[RefreshPolicy] = None):
+                     refresh_override: Optional[RefreshPolicy] = None
+                     ) -> list[dict]:
     """Get info on all failures.
 
     Args:
@@ -281,7 +286,8 @@ def get_failures(status: Optional[TriageStatus] = None
         status: Optional status to filter failures by
 
     Returns:
-        Dictionary mapping build IDs to dictionaries of failure IDs to failure data
+        Dictionary mapping build IDs to dictionaries of failure IDs to failure
+        data
     """
     failures = get_stepfailures(status)
     ids: dict[int, dict[int, dict]] = {}

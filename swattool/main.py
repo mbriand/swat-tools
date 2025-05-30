@@ -14,13 +14,11 @@ import textwrap
 from typing import Any, Collection
 
 import click
-import pygit2  # type: ignore
 import tabulate
 
 from .bugzilla import Bugzilla
-from . import pokyciarchive
+from . import initmanager
 from . import review
-from . import swatbot
 from . import swatbotrest
 from . import swatbuild
 from . import userdata
@@ -237,28 +235,14 @@ def _format_pending_failures(builds: list[swatbuild.Build],
 def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
                       filters: dict[str, Any], for_review: bool = False,
                       ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
-    def update_git():
-        try:
-            pokyciarchive.update(min_age=10 * 60)
-        except pygit2.GitError:
-            logger.warning("Failed to update poky-ci-archive")
-
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
     userinfos = userdata.UserInfos()
-    buildsfetcher = swatbot.BuildFetcher(userinfos, limit=limit,
-                                         filters=filters,
-                                         preparelogs=for_review)
+    init = initmanager.InitManager(userinfos, limit=limit, filters=filters,
+                                   for_review=for_review)
+    init.run()
 
-    executor = utils.ExecutorWithProgress()
-    if for_review:
-        executor.submit("Fetching poky-ci-archive", update_git)
-        executor.submit("Updating AB-INT lists", Bugzilla.get_abints)
-
-    buildsfetcher.prepare_with_executor(executor)
-    executor.run()
-
-    builds = buildsfetcher.get_builds(sort)
+    builds = init.get_builds(sort)
 
     return (builds, userinfos)
 

@@ -13,6 +13,7 @@ from typing import Any, Optional
 import requests
 
 from .webrequests import Session
+from . import utils
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +30,27 @@ def rest_api_url(base_url: str) -> str:
     return f"{base_url}/api/v2"
 
 
+def autobuilder_base_url(autobuilder_url) -> str:
+    """Retrieve the autobuilder base URL from a full URL.
+
+    Extracts the base URL by removing the UI-specific path components.
+
+    Args:
+        autobuilder_url: A full autobuilder URL, possibly including UI path
+
+    Returns:
+        The base URL without UI-specific components
+    """
+    url, _, _ = autobuilder_url.partition('/#/builders')
+    return url
+
+
 def _get_json(url) -> Optional[dict[str, Any]]:
     try:
         data = Session().get(url)
-    except requests.exceptions.HTTPError:
-        return None
+    except (requests.exceptions.ConnectionError,
+            requests.exceptions.HTTPError) as err:
+        raise utils.SwattoolException(f"Failed to fetch {url}") from err
 
     try:
         json_data = json.loads(data)
@@ -76,6 +93,7 @@ def get_log_raw_url(rest_url: str, buildid: int, stepnumber: int,
     Returns:
         URL to the raw log file or None if request fails
     """
+    # TODO: store this in DB
     info_url = f"{rest_url}/builds/{buildid}/steps/{stepnumber}/logs/{logname}"
     logger.debug("Log info URL: %s", info_url)
 
