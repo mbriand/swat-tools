@@ -231,7 +231,8 @@ PENDING_FAILURES_AUTO_REFRESH_S = 60 * 10
 
 
 def get_stepfailures(status: Optional[TriageStatus] = None,
-                     refresh_override: Optional[RefreshPolicy] = None):
+                     refresh_override: Optional[RefreshPolicy] = None
+                     ) -> list[dict]:
     """Get info on all failures.
 
     Args:

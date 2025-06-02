@@ -10,6 +10,7 @@ from typing import Iterable, Optional
 import pygit2  # type: ignore
 
 from .bugzilla import Bugzilla
+from . import database
 from . import logfingerprint
 from . import pokyciarchive
 from . import swatbotrest
@@ -28,9 +29,9 @@ class InitExecutor:
             cpus = os.cpu_count()
             threads = min(16, cpus) if cpus else 16
         self.executor = concurrent.futures.ThreadPoolExecutor(threads)
-        self.jobs: list[tuple[str, concurrent.futures.Future]] = []
+        self.jobs: dict[concurrent.futures.Future, str] = {}
 
-    def submit(self, name, *args, **kwargs):
+    def submit(self, name, fn, *args, **kwargs):
         """Submit a new job to the executor.
 
         Args:
@@ -38,13 +39,20 @@ class InitExecutor:
             *args: Positional arguments for the job function
             **kwargs: Keyword arguments for the job function
         """
-        self.jobs.append((name, self.executor.submit(*args, **kwargs)))
+        self.jobs[self.executor.submit(fn, *args, **kwargs)] = name
 
     def run(self):
         try:
-            alljobs = [job[1] for job in self.jobs]
-            for _ in concurrent.futures.as_completed(alljobs):
-                pass
+            while self.jobs.keys():
+                for fut in concurrent.futures.as_completed(self.jobs.keys()):
+                    err = fut.exception()
+                    if err:
+                        raise err
+                    res = fut.result()
+                    if res:
+                        fn, *args = res
+                        fn(*args)
+                    del self.jobs[fut]
         except KeyboardInterrupt:
             self.executor.shutdown(cancel_futures=True)
         except Exception:
@@ -57,15 +65,8 @@ class InitManager:
         self.filters = filters
         self.for_review = for_review
 
+        self._db = database.Database()
         self._executor = InitExecutor()
-
-        self._db = sqlite3.connect(utils.DATADIR / "swattool.db")
-        cur = self._db.cursor()
-        cur.execute("CREATE TABLE build(id PRIMARY KEY, status, test, worker, "
-                    "completed, collection_id, ab_url, owner, branch, "
-                    "parent_id)")
-        cur.execute("CREATE TABLE collection(id PRIMARY KEY, "
-                    "owner, branch, build_id)")
 
     def _update_gits(self):
         try:
@@ -78,21 +79,28 @@ class InitManager:
         if len(self.filters.get('triage', [])) == 1:
             statusfilter = self.filters['triage'][0]
         failures = swatbotrest.get_stepfailures(statusfilter)
+        if failures is None:
+            return
 
-        cur = self._db.cursor()
+        return self._update_failures_done_cb, failures
+
+    def _update_failures_done_cb(self, failures):
         for failure_data in failures:
             buildid = int(failure_data['relationships']['build']['data']['id'])
             failureid = int(failure_data['id'])
-            cur.execute("INSERT INTO failures(id, build_id)"
-                        "VALUES(?, ?) ON CONFLICT(id)"
-                        "DO NOTHING", (failureid, buildid))
+            self._db.add_failure(failureid, buildid)
 
-        self._create_db_update_jobs()
+        self._create_db_update_jobs(failures)
 
-    def _create_db_update_jobs(self):
+    def _create_db_update_jobs(self, failures: list[dict[str, Any]]):
         # TODO: save failures in DB
+        build_failures: dict[int, dict[int, dict]] = {}
+        for failure_data in failures:
+            buildid = int(failure_data['relationships']['build']['data']['id'])
+            failureid = int(failure_data['id'])
+            build_failures.setdefault(buildid, {})[failureid] = failure_data
 
-        limited_pending_ids = sorted(failures.keys(),
+        limited_pending_ids = sorted(build_failures.keys(),
                                      reverse=True)[:self.limit]
         # Generate a list of all pending failures, fetching details from the
         # remote server as needed.
@@ -102,23 +110,46 @@ class InitManager:
             # to download from the server.
             if self.filters['triage']:
                 triages = {f['attributes']['triage']
-                           for f in failures[buildid].values()}
+                           for f in build_failures[buildid].values()}
 
                 if triages.isdisjoint(self.filters['triage']):
                     continue
 
             cur = self._db.cursor()
-            build_res = cur.execute("Select * from build WHERE buildid=?",
+            build_res = cur.execute("Select * from build WHERE id=?",
                                     (buildid,))
-            if build_res.rowcount:
-                print(f"Found build {buildid}")
+            if build_res.fetchone():
                 continue
+            cur.close()
 
             self._executor.submit("Fetching build data", self._fetch_build,
-                                  buildid, failures[buildid])
+                                  buildid, build_failures[buildid])
 
-    def _fetch_build(self):
-        pass
+    def _fetch_build(self, buildid, failures):
+        build = swatbotrest.get_build(buildid)
+        attributes = build['attributes']
+        relationships = build['relationships']
+
+        collectionid = relationships['buildcollection']['data']['id']
+        collection = swatbotrest.get_build_collection(collectionid)
+        # TODO: add collection in db
+
+        data = {}
+        data['id'] = attributes['buildid']
+        data['status'] = int(attributes['status'])
+        data['test'] = attributes['targetname']
+        data['worker'] = attributes['workername']
+        data['completed'] = attributes['completed']
+        data['collection_id'] = collectionid
+        data['ab_url'] = attributes['url']
+        data['owner'] = collection['attributes']['owner']
+        data['branch'] = collection['attributes']['branch']
+        data['parent_id'] = None
+
+        return self._fetch_build_done_cb, data
+
+    def _fetch_build_done_cb(self, data):
+        self._db.add_build(data)
 
     def run(self):
         if self.for_review:
@@ -129,5 +160,6 @@ class InitManager:
         self._executor.submit("Fetching failures", self._update_failures)
 
         self._executor.run()
+        self._db.commit()
 
 
