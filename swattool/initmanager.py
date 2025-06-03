@@ -44,7 +44,9 @@ class InitExecutor:
     def run(self):
         try:
             while self.jobs.keys():
-                for fut in concurrent.futures.as_completed(self.jobs.keys()):
+                done, _ = concurrent.futures.wait(self.jobs.keys(),
+                                                  return_when=concurrent.futures.FIRST_COMPLETED)
+                for fut in done:
                     err = fut.exception()
                     if err:
                         raise err
@@ -68,6 +70,10 @@ class InitManager:
         self._db = database.Database()
         self._executor = InitExecutor()
 
+        self._builds_ids = self._db.get_builds_ids()
+        self._collections_ids = self._db.get_collections_ids()
+        self._collections_fetch = set()
+
     def _update_gits(self):
         try:
             pokyciarchive.update(min_age=10 * 60)
@@ -85,27 +91,26 @@ class InitManager:
         return self._update_failures_done_cb, failures
 
     def _update_failures_done_cb(self, failures):
-        for failure_data in failures:
-            buildid = int(failure_data['relationships']['build']['data']['id'])
-            failureid = int(failure_data['id'])
-            self._db.add_failure(failureid, buildid)
+        data = [{'id': int(data['id']),
+                 'build_id': int(data['relationships']['build']['data']['id'])
+                 }
+                for data in failures]
+        self._db.add_failures(data)
 
         self._create_db_update_jobs(failures)
 
     def _create_db_update_jobs(self, failures: list[dict[str, Any]]):
-        # TODO: save failures in DB
         build_failures: dict[int, dict[int, dict]] = {}
         for failure_data in failures:
             buildid = int(failure_data['relationships']['build']['data']['id'])
             failureid = int(failure_data['id'])
             build_failures.setdefault(buildid, {})[failureid] = failure_data
 
-        limited_pending_ids = sorted(build_failures.keys(),
-                                     reverse=True)[:self.limit]
+        limited_pending_ids = set(sorted(build_failures.keys(),
+                                         reverse=True)[:self.limit])
         # Generate a list of all pending failures, fetching details from the
         # remote server as needed.
-        # TODO: remove ids already in db from the set to fetch
-        for buildid in limited_pending_ids:
+        for buildid in limited_pending_ids.difference(self._builds_ids):
             # Filter on status now, limiting the size of data we will have
             # to download from the server.
             if self.filters['triage']:
@@ -131,25 +136,46 @@ class InitManager:
         relationships = build['relationships']
 
         collectionid = relationships['buildcollection']['data']['id']
-        collection = swatbotrest.get_build_collection(collectionid)
-        # TODO: add collection in db
 
         data = {}
-        data['id'] = attributes['buildid']
+        data['id'] = buildid
+        data['buildid'] = attributes['buildid']
         data['status'] = int(attributes['status'])
         data['test'] = attributes['targetname']
         data['worker'] = attributes['workername']
         data['completed'] = attributes['completed']
         data['collection_id'] = collectionid
         data['ab_url'] = attributes['url']
-        data['owner'] = collection['attributes']['owner']
-        data['branch'] = collection['attributes']['branch']
         data['parent_id'] = None
+
+        # collection = swatbotrest.get_build_collection(collectionid)
+        # data['owner'] = collection['attributes']['owner']
+        # data['branch'] = collection['attributes']['branch']
 
         return self._fetch_build_done_cb, data
 
     def _fetch_build_done_cb(self, data):
         self._db.add_build(data)
+        collectionid = int(data['collection_id'])
+        if (collectionid not in self._collections_ids and
+                collectionid not in self._collections_fetch):
+            self._executor.submit("Fetching collection data",
+                                  self._fetch_collection, collectionid)
+            self._collections_fetch.add(collectionid)
+
+    def _fetch_collection(self, collectionid: int):
+        collection = swatbotrest.get_build_collection(collectionid)
+
+        data = {}
+        data['id'] = collectionid
+        data['owner'] = collection['attributes']['owner']
+        data['branch'] = collection['attributes']['branch']
+        data['build_id'] = collection['attributes']['buildid']
+
+        return self._fetch_collection_done_cb, data
+
+    def _fetch_collection_done_cb(self, data):
+        self._db.add_collection(data)
 
     def run(self):
         if self.for_review:
