@@ -233,17 +233,18 @@ def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
                       ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
-    # userinfos = userdata.UserInfos()
     init = initmanager.InitManager(limit=limit, filters=filters,
                                    for_review=for_review)
     init.run()
 
-    import sys
-    sys.exit(1)
+    userinfos = userdata.UserInfos()
+    buildsfetcher = swatbot.BuildFetcher(userinfos, limit=limit,
+                                         filters=filters,
+                                         preparelogs=for_review)
+    buildsfetcher.prepare()
+    builds = buildsfetcher.get_builds(sort)
 
-    # builds = buildsfetcher.get_builds(sort)
-
-    # return (builds, userinfos)
+    return (builds, userinfos)
 
 
 def _show_failures(refresh: str, urlopens: set[str], limit: int,

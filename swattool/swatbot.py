@@ -9,6 +9,9 @@ from the swatbot server.
 import logging
 from typing import Any, Collection
 
+import sqlite3
+
+from . import database
 from . import logfingerprint
 from . import swatbotrest
 from . import swatbuild
@@ -19,6 +22,8 @@ from . import utils
 logger = logging.getLogger(__name__)
 
 
+# TODO: no longer fetches anything: rename to something else
+# TODO: parallelism is probably not needed anymore
 class BuildFetcher:
     """Consolidated list of failure infos generator.
 
@@ -33,37 +38,27 @@ class BuildFetcher:
         self.filters = filters
         self.preparelogs = preparelogs
         self.__infos: list[swatbuild.Build] = []
+        self._db = database.Database()
 
-    def _create_build(self, buildid: int, failures: dict[int, dict]) -> None:
-        build = swatbuild.Build(buildid, failures)
+    def _create_builds(self, executor: utils.ExecutorWithProgress):
+        failures = self._db.get_failures(self.filters['triage'],
+                                         with_data=True)
 
-        userinfo = self.userinfos[build.id]
-        if not build.match_filters(self.filters, userinfo):
-            return
+        builds: dict[int, list[sqlite3.Row]] = {}
+        for failure in failures.values():
+            builds.setdefault(failure['build_id'], []).append(failure)
 
-        self.__infos.append(build)
-        if self.preparelogs:
-            swatlogs.Log(build.get_first_failure()).get_highlights()
-            logfingerprint.get_log_fingerprint(build.get_first_failure())
+        for build_data in builds.values():
+            build = swatbuild.Build(build_data)
 
-    def _create_builds(self, failures: dict[int, dict[int, dict]],
-                       executor: utils.ExecutorWithProgress):
-        limited_pending_ids = sorted(failures.keys(),
-                                     reverse=True)[:self.limit]
-        # Generate a list of all pending failures, fetching details from the
-        # remote server as needed.
-        for buildid in limited_pending_ids:
-            # Filter on status now, limiting the size of data we will have
-            # to download from the server.
-            if self.filters['triage']:
-                triages = {f['attributes']['triage']
-                           for f in failures[buildid].values()}
+            userinfo = self.userinfos[build.id]
+            if not build.match_filters(self.filters, userinfo):
+                continue
 
-                if triages.isdisjoint(self.filters['triage']):
-                    continue
-
-            executor.submit("Fetching builds data", self._create_build,
-                            buildid, failures[buildid])
+            self.__infos.append(build)
+            if self.preparelogs:
+                swatlogs.Log(build.get_first_failure()).get_highlights()
+                logfingerprint.get_log_fingerprint(build.get_first_failure())
 
     def prepare_with_executor(self, executor: utils.ExecutorWithProgress):
         """Prepare consolidated list of failure infos.
@@ -73,12 +68,7 @@ class BuildFetcher:
         Args:
             executor: ExecutorWithProgress instance for parallel execution
         """
-        statusfilter = None
-        if len(self.filters.get('triage', [])) == 1:
-            statusfilter = self.filters['triage'][0]
-        failures = swatbotrest.get_failures(statusfilter)
-
-        self._create_builds(failures, executor)
+        self._create_builds(executor)
 
     def prepare(self):
         """Prepare consolidated list of failure infos.

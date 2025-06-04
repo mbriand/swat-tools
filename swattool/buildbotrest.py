@@ -29,6 +29,11 @@ def rest_api_url(base_url: str) -> str:
     return f"{base_url}/api/v2"
 
 
+def autobuilder_base_url(autobuilder_url) -> str:
+    url, _, _ = autobuilder_url.partition('/#/builders')
+    return url
+
+
 def _get_json(url) -> Optional[dict[str, Any]]:
     try:
         data = Session().get(url)

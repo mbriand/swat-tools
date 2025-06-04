@@ -7,9 +7,11 @@ import sqlite3
 from typing import Any, Collection
 from typing import Iterable, Optional
 
+import json
 import pygit2  # type: ignore
 
 from .bugzilla import Bugzilla
+from . import buildbotrest
 from . import database
 from . import logfingerprint
 from . import pokyciarchive
@@ -90,16 +92,20 @@ class InitManager:
 
         return self._update_failures_done_cb, failures
 
-    def _update_failures_done_cb(self, failures):
-        data = [{'id': int(data['id']),
-                 'build_id': int(data['relationships']['build']['data']['id'])
+    def _update_failures_done_cb(self, failures: list[dict[str, Any]]):
+        data = [{'failure_id': int(f['id']),
+                 'build_id': int(f['relationships']['build']['data']['id']),
+                 'step_number': f['attributes']['stepnumber'],
+                 'step_name': f['attributes']['stepname'],
+                 'urls': json.dumps({u.split()[0].rsplit('/')[-1]: u
+                                     for u in
+                                     f['attributes']['urls'].split()}),
+                 'remote_triage': f['attributes']['triage'],
+                 'remote_triage_notes': f['attributes']['triagenotes']
                  }
-                for data in failures]
+                for f in failures]
         self._db.add_failures(data)
 
-        self._create_db_update_jobs(failures)
-
-    def _create_db_update_jobs(self, failures: list[dict[str, Any]]):
         build_failures: dict[int, dict[int, dict]] = {}
         for failure_data in failures:
             buildid = int(failure_data['relationships']['build']['data']['id'])
@@ -120,13 +126,6 @@ class InitManager:
                 if triages.isdisjoint(self.filters['triage']):
                     continue
 
-            cur = self._db.cursor()
-            build_res = cur.execute("Select * from build WHERE id=?",
-                                    (buildid,))
-            if build_res.fetchone():
-                continue
-            cur.close()
-
             self._executor.submit("Fetching build data", self._fetch_build,
                                   buildid, build_failures[buildid])
 
@@ -139,18 +138,14 @@ class InitManager:
 
         data = {}
         data['id'] = buildid
-        data['buildid'] = attributes['buildid']
+        data['build_id'] = attributes['buildid']
         data['status'] = int(attributes['status'])
         data['test'] = attributes['targetname']
         data['worker'] = attributes['workername']
         data['completed'] = attributes['completed']
-        data['collection_id'] = collectionid
+        data['collection_id'] = int(collectionid)
         data['ab_url'] = attributes['url']
         data['parent_id'] = None
-
-        # collection = swatbotrest.get_build_collection(collectionid)
-        # data['owner'] = collection['attributes']['owner']
-        # data['branch'] = collection['attributes']['branch']
 
         return self._fetch_build_done_cb, data
 
@@ -159,18 +154,28 @@ class InitManager:
         collectionid = int(data['collection_id'])
         if (collectionid not in self._collections_ids and
                 collectionid not in self._collections_fetch):
+            aburl = buildbotrest.autobuilder_base_url(data['ab_url'])
+            buildboturl = buildbotrest.rest_api_url(aburl)
             self._executor.submit("Fetching collection data",
-                                  self._fetch_collection, collectionid)
+                                  self._fetch_collection, collectionid,
+                                  buildboturl)
             self._collections_fetch.add(collectionid)
 
-    def _fetch_collection(self, collectionid: int):
+    def _fetch_collection(self, collectionid: int, buildboturl: str):
         collection = swatbotrest.get_build_collection(collectionid)
 
+        build_id = collection['attributes']['buildid']
+        parent_build = buildbotrest.get_build(buildboturl, build_id)
+
         data = {}
-        data['id'] = collectionid
+        data['collection_id'] = collectionid
         data['owner'] = collection['attributes']['owner']
         data['branch'] = collection['attributes']['branch']
-        data['build_id'] = collection['attributes']['buildid']
+        data['collection_build_id'] = collection['attributes']['buildid']
+        data['target_name'] = collection['attributes']['targetname']
+        if parent_build:
+            data['parent_builder'] = parent_build['builds'][0]['builderid']
+            data['parent_build_number'] = parent_build['builds'][0]['number']
 
         return self._fetch_collection_done_cb, data
 
