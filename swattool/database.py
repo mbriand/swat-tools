@@ -30,7 +30,7 @@ class Database:
 
         if 'build' not in tables:
             cur.execute("CREATE TABLE build(build_id PRIMARY KEY, "
-                        "swatbot_build_id, status, test, worker, completed, "
+                        "buildbot_build_id, status, test, worker, completed, "
                         "collection_id, ab_url, parent_id)")
         if 'collection' not in tables:
             cur.execute("CREATE TABLE collection(collection_id PRIMARY KEY, "

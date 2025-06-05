@@ -228,7 +228,7 @@ class Build:
         collection_id = sql_rows[0]['collection_id']
         swat_url = f"{swatbotrest.BASE_URL}/collection/{collection_id}/"
 
-        self.id = sql_rows[0]['swatbot_build_id']
+        self.id = sql_rows[0]['buildbot_build_id']
         self.status = Status.from_int(sql_rows[0]['status'])
         self.test = sql_rows[0]['target_name']
         self.worker = sql_rows[0]['worker']
@@ -256,7 +256,7 @@ class Build:
 
         self._git_info: Optional[dict[str, Any]] = None
 
-        self.failures = {row['build_id']: Failure(row, self)
+        self.failures = {row['failure_id']: Failure(row, self)
                          for row in sql_rows}
 
     def _get_git_tag(self) -> Optional[str]:
