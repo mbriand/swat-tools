@@ -182,11 +182,15 @@ class InitManager:
     def _fetch_collection_done_cb(self, data):
         self._db.add_collection(data)
 
+    def _update_bugzilla(self):
+        Bugzilla.get_abints()
+
     def run(self):
         if self.for_review:
             self._executor.submit("Fetching poky-ci-archive",
                                   self._update_gits)
-            self._executor.submit("Updating AB-INT lists", Bugzilla.get_abints)
+            self._executor.submit("Updating AB-INT lists",
+                                  self._update_bugzilla)
 
         self._executor.submit("Fetching failures", self._update_failures)
 
