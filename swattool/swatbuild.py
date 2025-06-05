@@ -245,7 +245,7 @@ class Build:
         self.collection_build_id = sql_rows[0]['collection_build_id']
         if self.collection_build_id != self.id:
             self.parent_build_id = self.collection_build_id
-            buildboturl = Build._rest_api_url(self.autobuilder_url)
+            buildboturl = buildbotrest.rest_api_url(self.autobuilder_url)
             parent_build = buildbotrest.get_build(buildboturl,
                                                   self.parent_build_id)
             self.parent_builder_name = sql_rows[0]["target_name"]
@@ -304,7 +304,7 @@ class Build:
                     self._git_info['description'] = desc
 
             if self._git_info is None:
-                buildboturl = Build._rest_api_url(self.autobuilder_url)
+                buildboturl = buildbotrest.rest_api_url(self.autobuilder_url)
                 buildbot_build = buildbotrest.get_build(buildboturl, self.id)
                 if buildbot_build:
                     try:
@@ -625,18 +625,14 @@ class Build:
         url, _, _ = autobuilder_url.partition('/#/builders')
         return url
 
-    @staticmethod
-    def _rest_api_url(autobuilder_url) -> str:
-        base_url = Build._autobuilder_base_url(autobuilder_url)
-        return buildbotrest.rest_api_url(base_url)
-
     def rest_api_url(self) -> str:
         """Get the REST API URL prefix for this build.
 
         Returns:
             REST API URL prefix for this build
         """
-        return buildbotrest.rest_api_url(self.autobuilder_url)
+        base_url = buildbotrest.autobuilder_base_url(self.autobuilder_url)
+        return buildbotrest.rest_api_url(base_url)
 
     def open_urls(self, urlopens: set[str]) -> None:
         """Open requested URLs in default browser.

@@ -21,7 +21,6 @@ from .bugzilla import Bugzilla
 from . import initmanager
 from . import pokyciarchive
 from . import review
-from . import swatbot
 from . import swatbotrest
 from . import swatbuild
 from . import userdata
@@ -233,16 +232,12 @@ def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
                       ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
-    init = initmanager.InitManager(limit=limit, filters=filters,
+    userinfos = userdata.UserInfos()
+    init = initmanager.InitManager(userinfos, limit=limit, filters=filters,
                                    for_review=for_review)
     init.run()
 
-    userinfos = userdata.UserInfos()
-    buildsfetcher = swatbot.BuildFetcher(userinfos, limit=limit,
-                                         filters=filters,
-                                         preparelogs=for_review)
-    buildsfetcher.prepare()
-    builds = buildsfetcher.get_builds(sort)
+    builds = init.get_builds(sort)
 
     return (builds, userinfos)
 

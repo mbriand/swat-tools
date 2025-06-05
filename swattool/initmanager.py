@@ -64,7 +64,9 @@ class InitExecutor:
             raise
 
 class InitManager:
-    def __init__(self, limit: int, filters: dict[str, Any], for_review: bool):
+    def __init__(self, userinfos: userdata.UserInfos, limit: int,
+                 filters: dict[str, Any], for_review: bool):
+        self.userinfos = userinfos
         self.limit = limit
         self.filters = filters
         self.for_review = for_review
@@ -75,6 +77,8 @@ class InitManager:
         self._builds_ids = self._db.get_builds_ids()
         self._collections_ids = self._db.get_collections_ids()
         self._collections_fetch = set()
+
+        self._builds: list[swatbuild.Build] = []
 
     def _update_gits(self):
         try:
@@ -182,8 +186,33 @@ class InitManager:
     def _fetch_collection_done_cb(self, data):
         self._db.add_collection(data)
 
-    def _update_bugzilla(self):
+    def _update_bugzilla(self) -> None:
         Bugzilla.get_abints()
+
+    def _create_builds(self) -> None:
+        failures = self._db.get_failures(self.filters['triage'],
+                                         with_data=True)
+
+        builds: dict[int, list[sqlite3.Row]] = {}
+        for failure in failures.values():
+            builds.setdefault(failure['build_id'], []).append(failure)
+
+        for build_data in builds.values():
+            build = swatbuild.Build(build_data)
+
+            userinfo = self.userinfos[build.id]
+            if not build.match_filters(self.filters, userinfo):
+                continue
+
+            self._builds.append(build)
+            if self.for_review:
+                self._executor.submit("Fetching logs",
+                                      self._prepare_for_review, build)
+
+    def _prepare_for_review(self, build: swatbuild.Build) -> None:
+        swatlogs.Log(build.get_first_failure()).get_highlights()
+        logfingerprint.get_log_fingerprint(build.get_first_failure())
+
 
     def run(self):
         if self.for_review:
@@ -197,4 +226,25 @@ class InitManager:
         self._executor.run()
         self._db.commit()
 
+        # TODO: below must run after all swatbot/buildbot fetches are done, but
+        # can be concurrent with ab-int/git fetches
 
+        self._create_builds()
+        self._executor.run()
+
+    def get_builds(self, sort: Collection[str]) -> list[swatbuild.Build]:
+        """Get consolidated list of failure infos.
+
+        Returns the list of builds sorted according to the specified fields.
+
+        Args:
+            sort: Collection of field names to sort by
+
+        Returns:
+            Sorted list of Build objects
+        """
+
+        def sortfn(elem):
+            return elem.get_sort_tuple([swatbuild.Field(k) for k in sort])
+
+        return sorted(self._builds, key=sortfn)
