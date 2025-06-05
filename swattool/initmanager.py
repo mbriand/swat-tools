@@ -141,8 +141,8 @@ class InitManager:
         collectionid = relationships['buildcollection']['data']['id']
 
         data = {}
-        data['id'] = buildid
-        data['build_id'] = attributes['buildid']
+        data['build_id'] = buildid
+        data['buildbot_build_id'] = attributes['buildid']
         data['status'] = int(attributes['status'])
         data['test'] = attributes['targetname']
         data['worker'] = attributes['workername']

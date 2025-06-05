@@ -115,7 +115,7 @@ class Failure:
     # pylint: disable=too-many-instance-attributes
 
     def __init__(self, row: sqlite3.Row, build: 'Build'):
-        self.id = row['id']
+        self.id = row['failure_id']
         self.build = build
         self.stepnumber = int(row['step_number'])
         self.status = Status.from_int(row['status'])
@@ -228,7 +228,7 @@ class Build:
         collection_id = sql_rows[0]['collection_id']
         swat_url = f"{swatbotrest.BASE_URL}/collection/{collection_id}/"
 
-        self.id = sql_rows[0]['build_id']
+        self.id = sql_rows[0]['swatbot_build_id']
         self.status = Status.from_int(sql_rows[0]['status'])
         self.test = sql_rows[0]['target_name']
         self.worker = sql_rows[0]['worker']
@@ -256,7 +256,8 @@ class Build:
 
         self._git_info: Optional[dict[str, Any]] = None
 
-        self.failures = {row['id']: Failure(row, self) for row in sql_rows}
+        self.failures = {row['build_id']: Failure(row, self)
+                         for row in sql_rows}
 
     def _get_git_tag(self) -> Optional[str]:
         if self.parent_builder_name and self.parent_build_number:

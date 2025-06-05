@@ -29,9 +29,9 @@ class Database:
         tables = [row[0] for row in cur.fetchall()]
 
         if 'build' not in tables:
-            cur.execute("CREATE TABLE build(id PRIMARY KEY, build_id, status, "
-                        "test, worker, completed, collection_id, ab_url, "
-                        "parent_id)")
+            cur.execute("CREATE TABLE build(build_id PRIMARY KEY, "
+                        "swatbot_build_id, status, test, worker, completed, "
+                        "collection_id, ab_url, parent_id)")
         if 'collection' not in tables:
             cur.execute("CREATE TABLE collection(collection_id PRIMARY KEY, "
                         "owner, branch, collection_build_id, target_name, "
@@ -65,7 +65,7 @@ class Database:
         data = {'limit': limit}
         req = "Select * FROM failure "
         if with_data:
-            req += "INNER JOIN build ON failure.build_id = build.id " \
+            req += "INNER JOIN build ON failure.build_id = build.build_id " \
                 "INNER JOIN collection " \
                 "ON build.collection_id = collection.collection_id "
         if triage is not None:
@@ -75,13 +75,13 @@ class Database:
             req += "LIMIT ':limit' "
 
         build_res = cur.execute(req, data)
-        return {row['id']: row for row in build_res.fetchall()}
+        return {row['build_id']: row for row in build_res.fetchall()}
 
     def add_build(self, data):
         cur = self._db.cursor()
-        cur.execute("INSERT INTO build VALUES(:id, :build_id, :status, :test, "
-                    ":worker, :completed, :collection_id, :ab_url, "
-                    ":parent_id);", data)
+        cur.execute("INSERT INTO build VALUES(:build_id, :buildbot_build_id, "
+                    ":status, :test, :worker, :completed, :collection_id, "
+                    ":ab_url, :parent_id);", data)
         cur.close()
 
     def get_builds(self):
@@ -91,8 +91,8 @@ class Database:
 
     def get_builds_ids(self):
         cur = self._db.cursor()
-        build_res = cur.execute("Select id from build")
-        return {row['id'] for row in build_res.fetchall()}
+        build_res = cur.execute("Select build_id from build")
+        return {row['build_id'] for row in build_res.fetchall()}
 
     def add_collection(self, data):
         cur = self._db.cursor()
