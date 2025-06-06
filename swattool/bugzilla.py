@@ -87,7 +87,12 @@ class Bugzilla:
             fparams = urllib.parse.urlencode(params, doseq=True)
             req = f"{REST_BASE_URL}bug?{fparams}"
             cache_timeout = 0 if force_refresh else cls.CACHE_TIMEOUT_S
-            data = Session().get(req, cache_timeout)
+
+            try:
+                data = Session().get(req, cache_timeout)
+            except requests.exceptions.HTTPError:
+                logger.error("Failed to get AB-INT list")
+                return {}
 
             cls.known_abints = {bug['id']: Bug(bug)
                                 for bug in json.loads(data)['bugs']}
