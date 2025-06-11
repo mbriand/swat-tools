@@ -82,6 +82,9 @@ class Triage:
             bugtitle = Bugzilla.get_bug_title(bugid)
             if bugtitle:
                 statusfrags.append(f", {bugtitle}")
+            else:
+                nf = utils.Color.colorize("NOT FOUND", utils.Color.RED)
+                statusfrags.append(f", {nf}")
 
         bzcomment = self.extra.get('bugzilla-comment')
         if bzcomment:
