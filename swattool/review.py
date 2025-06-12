@@ -752,10 +752,13 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                 return failure['attributes']['triage'] == 0
 
             # Make sure failures are still pending
+            old_failures = triage.failures
             triage.failures = {f for f in triage.failures if is_pending(f)}
 
             if triage.failures:
                 reviews.setdefault((status, comment), []).append(triage)
+            elif old_failures:
+                userinfo.clear()
 
     userinfos = userdata.UserInfos()
 
