@@ -231,7 +231,7 @@ class Build:
         self.status = Status.from_int(attributes['status'])
         self.test = attributes['targetname']
         self.worker = attributes['workername']
-        self.completed = attributes['completed']
+        self.completed = datetime.fromisoformat(attributes['completed'])
         self.swat_url = swat_url
         self.autobuilder_url = attributes['url']
         self.owner = collection['attributes']['owner']
@@ -319,13 +319,11 @@ class Build:
 
     def _completed_match_filters(self, filters: dict[str, Any]) -> bool:
         if filters['completed-after'] and self.completed:
-            completed = datetime.fromisoformat(self.completed)
-            if completed < filters['completed-after']:
+            if self.completed < filters['completed-after']:
                 return False
 
         if filters['completed-before'] and self.completed:
-            completed = datetime.fromisoformat(self.completed)
-            if completed > filters['completed-before']:
+            if self.completed > filters['completed-before']:
                 return False
 
         return True
@@ -436,6 +434,8 @@ class Build:
         """
         if field == Field.BUILD:
             return self.id
+        if field == Field.COMPLETED:
+            return self.completed.astimezone().isoformat(timespec='minutes')
         if field.name.lower() in self.__dict__:
             return self.__dict__[field.name.lower()]
 
