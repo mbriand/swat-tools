@@ -10,7 +10,6 @@ import atexit
 import concurrent.futures
 import logging
 import os
-import pathlib
 import readline
 import subprocess
 import sys
@@ -22,7 +21,6 @@ import click
 import tabulate
 import xdg  # type: ignore
 
-BINDIR = pathlib.Path(__file__).parent.parent.resolve()
 DATADIR = xdg.xdg_cache_home() / "swattool"
 CACHEDIR = DATADIR / "cache"
 
