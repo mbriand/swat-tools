@@ -59,7 +59,7 @@ class LogFingerprint:
         # Compute scores for all fingerprint fragment combinations
         # Only consider combinations with similar positions in the files:
         # reduce both false positives and computation time.
-        scores = [[0 for f2 in other.lines] for f1 in self.lines]
+        scores = [[0 for _ in other.lines] for _ in self.lines]
         lendiff = len(self.lines) - len(other.lines)
         for i, fing1 in enumerate(self.lines):
             for j, fing2 in enumerate(other.lines):
@@ -131,21 +131,6 @@ class LogFingerprint:
             Similarity score between 0.0 and 1.0
         """
         return self._get_cached_score(other=other)
-
-    def get_similarity_score_with_failure(self, failure: swatbuild.Failure,
-                                          logname: str) -> float:
-        """Get similarity score between log of this entry and another log.
-
-        Retrieves a cached similarity score or computes it if not available.
-
-        Args:
-            failure: The failure to compare with
-            logname: The name of the log file to compare with
-
-        Returns:
-            Similarity score between 0.0 and 1.0
-        """
-        return self._get_cached_score(failure, logname)
 
     def is_similar_to(self, other: 'LogFingerprint') -> bool:
         """Check if a given log fingerprint is similar to this one.
