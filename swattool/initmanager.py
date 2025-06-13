@@ -86,7 +86,7 @@ class InitExecutor:
         self.stopping = False
 
         self.phase_weight = {
-            InitPhase.WARM_UP: 2,
+            InitPhase.WARM_UP: 1,
             InitPhase.FAILURES_LIST: 100,
             InitPhase.FAILURES_DATA: 200,
             InitPhase.COLLECTIONS_DATA: 100,
@@ -103,6 +103,7 @@ class InitExecutor:
         self.progress = 0
 
         self._update_progress(InitPhase.WARM_UP)
+        self.progress_bar.render_progress()
 
     def submit(self, phase: InitPhase, fn, *args, **kwargs) -> None:
         """Submit a new job to the executor.
@@ -128,6 +129,8 @@ class InitExecutor:
         if not self.stopping:
             assert sum(len(j) for j in self._jobs.values()) == 0
             self.done = True
+
+        self.progress_bar.render_finish()
 
     def _wait_next_done(self, phase: InitPhase) -> None:
         wait_return = concurrent.futures.FIRST_COMPLETED
@@ -178,9 +181,6 @@ class InitExecutor:
 
         progress = int(sum(w * done_ratio(p)
                            for p, w in self.phase_weight.items()))
-
-        # Progress bar is oly shown with values > 0
-        progress = max(1, progress)
 
         self.progress_bar.update(progress - self.progress, current_phase)
         self.progress = progress
