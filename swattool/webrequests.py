@@ -76,13 +76,16 @@ class Session:
             allparams: If True, invalidate all parameter variations of the URL
         """
         with cache_lock:
+            for file in self._get_cache_file_candidates(url):
+                file.unlink(missing_ok=True)
             if allparams:
                 prefix = self._get_cache_file_prefix(url)
-                for file in prefix.parent.glob(f"{prefix.name}*"):
+                for file in prefix.parent.glob(f"{prefix.name}\\?*"):
                     file.unlink()
-            else:
-                for file in self._get_cache_file_candidates(url):
-                    file.unlink(missing_ok=True)
+                if prefix.name.endswith('_'):
+                    subdir = prefix.parent / f"{prefix.name[:-1]}/"
+                    for file in subdir.glob("[?]*"):
+                        file.unlink()
 
     def _get_old_cache_file_prefix(self, url: str) -> pathlib.Path:
         filestem = url.split('://', 1)[1].replace('/', '_').replace(':', '_')
