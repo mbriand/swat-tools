@@ -65,6 +65,17 @@ class Database:
                         "ON CONFLICT(failure_id) DO NOTHING;", data)
         cur.close()
 
+    def drop_failures(self,
+                      triage: Optional[swatbotrest.TriageStatus]) -> None:
+        """Drop failure entries from the database. """
+        cur = self._db.cursor()
+        req = "DELETE FROM failure "
+        if triage:
+            remote_triage = str(int(triage))
+            req += f"WHERE failure.remote_triage = {remote_triage} "
+
+        cur.execute(req)
+
     def get_failures(self,
                      triage: Optional[set[swatbotrest.TriageStatus]],
                      with_data: Optional[bool] = False,
