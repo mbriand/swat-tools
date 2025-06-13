@@ -222,7 +222,7 @@ def show_in_less(text: str, startline: Optional[int] = 0):
         os.unlink(file.name)
 
 
-def launch_in_system_defaultshow_in_less(text: str):
+def launch_in_system_default(text: str):
     """Show a text buffer in system default program.
 
     Args:
