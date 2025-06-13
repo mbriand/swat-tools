@@ -222,7 +222,10 @@ class InitManager:
             logger.warning("Failed to update poky-ci-archive")
 
     def _update_failures(self
-                         ) -> Optional[tuple[Callable, list[dict[str, Any]]]]:
+                         ) -> Optional[tuple[Callable,
+                                             list[dict[str, Any]],
+                                             Optional[swatbotrest.TriageStatus]
+                                             ]]:
         statusfilter = None
         if len(self.filters.get('triage', [])) == 1:
             statusfilter = self.filters['triage'][0]
@@ -230,9 +233,11 @@ class InitManager:
         if failures is None:
             return None
 
-        return self._update_failures_done_cb, failures
+        return self._update_failures_done_cb, failures, statusfilter
 
-    def _update_failures_done_cb(self, failures: list[dict[str, Any]]) -> None:
+    def _update_failures_done_cb(self, failures: list[dict[str, Any]],
+                                 status: Optional[swatbotrest.TriageStatus]
+                                 ) -> None:
         data = [{'failure_id': int(f['id']),
                  'build_id': int(f['relationships']['build']['data']['id']),
                  'step_number': f['attributes']['stepnumber'],
@@ -244,6 +249,7 @@ class InitManager:
                  'remote_triage_notes': f['attributes']['triagenotes']
                  }
                 for f in failures]
+        self._db.drop_failures(status)
         self._db.add_failures(data)
 
         build_failures: dict[int, dict[int, dict]] = {}
