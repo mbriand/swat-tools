@@ -232,7 +232,7 @@ class Build:
 
         self.id = sql_rows[0]['buildbot_build_id']
         self.status = Status.from_int(sql_rows[0]['status'])
-        self.test = sql_rows[0]['target_name']
+        self.test = sql_rows[0]['test']
         self.worker = sql_rows[0]['worker']
         self.completed = datetime.fromisoformat(sql_rows[0]['completed'])
         self.swat_url = swat_url
