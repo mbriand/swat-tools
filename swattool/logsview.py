@@ -78,7 +78,7 @@ class LogView:
             if entry == 0:
                 self._show(loglines, None)
             elif entry == 1:
-                utils.launch_in_system_defaultshow_in_less(logdata)
+                utils.launch_in_system_default(logdata)
             else:
                 _, _, num = entries[entry].partition('|')
                 self._show(loglines, int(num))
