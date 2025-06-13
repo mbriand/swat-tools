@@ -240,13 +240,11 @@ class Build:
         self.owner = sql_rows[0]['owner']
         self.branch = sql_rows[0]['branch']
 
-        self.parent_build_id = None
         self.parent_builder_name = None
         self.parent_builder = self.parent_build_number = None
 
         self.collection_build_id = sql_rows[0]['collection_build_id']
         if self.collection_build_id != self.id:
-            self.parent_build_id = self.collection_build_id
             self.parent_builder_name = sql_rows[0]["target_name"]
             self.parent_builder = sql_rows[0]['parent_builder']
             self.parent_build_number = sql_rows[0]['parent_build_number']
@@ -617,11 +615,6 @@ class Build:
             Minimal formatted description of the build
         """
         return f"{self.id} {self.test} ({self.branch})"
-
-    @staticmethod
-    def _autobuilder_base_url(autobuilder_url) -> str:
-        url, _, _ = autobuilder_url.partition('/#/builders')
-        return url
 
     def rest_api_url(self) -> str:
         """Get the REST API URL prefix for this build.

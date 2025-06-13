@@ -37,7 +37,6 @@ class Bug:
     def __init__(self, bugdata):
         self.id = bugdata['id']
         self.summary = bugdata['summary']
-        self.classification = bugdata['classification']
         self.status = bugdata['status']
         self.resolution = bugdata['resolution']
 
