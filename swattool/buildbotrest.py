@@ -8,6 +8,7 @@ to retrieve build information and log files.
 
 import json
 import logging
+import sqlite3
 from typing import Any, Optional
 
 import requests
@@ -78,6 +79,32 @@ def get_build(rest_url: str, buildid: int) -> Optional[dict[str, Any]]:
     return _get_json(build_url)
 
 
+_log_data_cache: dict[tuple[int, int, str], dict[str, Any]] = {}
+_log_data_cache_new: set[tuple[int, int, str]] = set()
+
+
+def populate_log_data_cache(data: list[sqlite3.Row]):
+    """Load cache from database rows."""
+    for row in data:
+        key = (row["build_id"], row["step_number"], row["logname"])
+        _log_data_cache[key] = {
+            "logid": row["logid"],
+            "num_lines": row["num_lines"],
+            "name": row["logname"],
+        }
+
+
+def save_log_data_cache() -> list[dict[str, Any]]:
+    """Get new cache entries."""
+    new_data = [{"build_id": k[0],
+                 "step_number": k[1],
+                 "logname": _log_data_cache[k]["name"],
+                 **_log_data_cache[k],
+                 } for k in _log_data_cache_new]
+    _log_data_cache_new.clear()
+    return new_data
+
+
 def get_log_data(rest_url: str, buildid: int, stepnumber: int,
                  logname: str = "stdio") -> Optional[dict[str, Any]]:
     """Get the metadata of a log file.
@@ -91,7 +118,11 @@ def get_log_data(rest_url: str, buildid: int, stepnumber: int,
     Returns:
         Dictionary containing log metadata or None if request fails
     """
-    # TODO: store this in DB
+    cache_key = (buildid, stepnumber, logname)
+    metadata = _log_data_cache.get(cache_key)
+    if metadata:
+        return metadata
+
     info_url = f"{rest_url}/builds/{buildid}/steps/{stepnumber}/logs/{logname}"
     logger.debug("Log info URL: %s", info_url)
 
@@ -99,4 +130,6 @@ def get_log_data(rest_url: str, buildid: int, stepnumber: int,
     if not info_data:
         return None
 
+    _log_data_cache[cache_key] = info_data['logs'][0]
+    _log_data_cache_new.add(cache_key)
     return info_data['logs'][0]
