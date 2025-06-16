@@ -44,6 +44,10 @@ class Database:
                         "failure(failure_id PRIMARY KEY, build_id, "
                         "step_number, step_name, urls, remote_triage, "
                         "remote_triage_notes)")
+        if 'logs_data' not in tables:
+            cur.execute("CREATE TABLE "
+                        "logs_data(logid PRIMARY KEY, build_id, step_number, "
+                        "logname, num_lines)")
         cur.close()
 
     def __del__(self):
@@ -67,7 +71,7 @@ class Database:
 
     def drop_failures(self,
                       triage: Optional[swatbotrest.TriageStatus]) -> None:
-        """Drop failure entries from the database. """
+        """Drop failure entries from the database."""
         cur = self._db.cursor()
         req = "DELETE FROM failure "
         if triage:
@@ -202,6 +206,24 @@ class Database:
         cur = self._db.cursor()
         build_res = cur.execute("Select collection_id from collection")
         return {row['collection_id'] for row in build_res.fetchall()}
+
+    def get_logs_data(self, build_ids: set[int]) -> list[sqlite3.Row]:
+        """Get logs metadata entries from the database."""
+        ids = ", ".join({str(int(f)) for f in build_ids})
+
+        cur = self._db.cursor()
+        req = f"Select * FROM logs_data WHERE logs_data.build_id IN ({ids})"
+
+        build_res = cur.execute(req)
+        return build_res.fetchall()
+
+    def add_logs_data(self, data: list[dict[str, Any]]) -> None:
+        """Add logs metadata entries in the database."""
+        cur = self._db.cursor()
+        cur.executemany("INSERT OR REPLACE INTO logs_data "
+                        "VALUES(:logid, :build_id, :step_number, "
+                        ":logname, :num_lines);", data)
+        cur.close()
 
     def commit(self) -> None:
         """Commit database changes.

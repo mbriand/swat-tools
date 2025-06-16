@@ -343,6 +343,11 @@ class InitManager:
         failures = self._db.get_failures(self.filters['triage'],
                                          with_data=True)
 
+        if self.for_review:
+            build_ids = {f['buildbot_build_id'] for f in failures}
+            logs_data = self._db.get_logs_data(build_ids)
+            buildbotrest.populate_log_data_cache(logs_data)
+
         builds: dict[int, list[sqlite3.Row]] = {}
         for failure in failures:
             builds.setdefault(failure['build_id'], []).append(failure)
@@ -413,6 +418,9 @@ class InitManager:
         if miss_collections:
             logger.warning("Some collections were not fetched correctly: %s",
                            miss_collections_ids)
+
+        self._db.add_logs_data(buildbotrest.save_log_data_cache())
+        self._db.commit()
 
     def get_builds(self, sort: Collection[str]) -> list[swatbuild.Build]:
         """Get consolidated list of failure infos.
