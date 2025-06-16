@@ -229,6 +229,7 @@ class UserInfos(collections.abc.MutableMapping):
         # Create backup files. We might remove this once the code becomes more
         # stable
         backupfile = filename.parent / 'backups' / filename.name
+        backupfile.mkdir(parents=True, exist_ok=True)
         i = 0
         while backupfile.with_stem(f'{filename.stem}-backup-{i}').exists():
             i += 1
