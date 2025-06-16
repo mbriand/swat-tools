@@ -78,11 +78,9 @@ def get_build(rest_url: str, buildid: int) -> Optional[dict[str, Any]]:
     return _get_json(build_url)
 
 
-def get_log_raw_url(rest_url: str, buildid: int, stepnumber: int,
-                    logname: str = "stdio") -> Optional[str]:
-    """Get the URL of a raw log file.
-
-    Retrieves the URL for a build step's log file.
+def get_log_data(rest_url: str, buildid: int, stepnumber: int,
+                 logname: str = "stdio") -> Optional[dict[str, Any]]:
+    """Get the metadata of a log file.
 
     Args:
         rest_url: The REST API URL prefix
@@ -91,7 +89,7 @@ def get_log_raw_url(rest_url: str, buildid: int, stepnumber: int,
         logname: The name of the log file (default: "stdio")
 
     Returns:
-        URL to the raw log file or None if request fails
+        Dictionary containing log metadata or None if request fails
     """
     # TODO: store this in DB
     info_url = f"{rest_url}/builds/{buildid}/steps/{stepnumber}/logs/{logname}"
@@ -101,5 +99,4 @@ def get_log_raw_url(rest_url: str, buildid: int, stepnumber: int,
     if not info_data:
         return None
 
-    logid = info_data['logs'][0]['logid']
-    return f"{rest_url}/logs/{logid}/raw"
+    return info_data['logs'][0]
