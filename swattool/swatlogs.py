@@ -189,13 +189,14 @@ class Log:
 
         with gzip.open(cachefile, mode='r') as file:
             try:
-                data = yaml.load(file, Loader=yaml.SafeLoader)
+                data = yaml.load(file, Loader=yaml.Loader)
                 if (data['version'] == HILIGHTS_FORMAT_VERSION
                         and data['sha256'] == loghash
                         and data['filtershash'] == filtershash):
                     return data['hilights']
-            except (TypeError, KeyError, yaml.constructor.ConstructorError):
-                pass
+            except (TypeError, KeyError,
+                    yaml.constructor.ConstructorError) as err:
+                logging.warning("Failed to load highlights cache: %s", err)
 
         return None
 
