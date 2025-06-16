@@ -20,10 +20,10 @@ from . import utils
 
 logger = logging.getLogger(__name__)
 
-HILIGHTS_FORMAT_VERSION = 2
+HILIGHTS_FORMAT_VERSION = 3
 
-# Big log thershold in bytes
-BIG_LOG_LIMIT = 100 * 1024 * 1024
+# Big log thershold in lines
+BIG_LOG_LIMIT = 1000 * 1000
 
 
 class _Highlight:
@@ -180,7 +180,7 @@ class Log:
 
         return highlight_lines
 
-    def _load_cache_file(self, loghash: str, filtershash: str
+    def _load_cache_file(self, num_lines: int, filtershash: str
                          ) -> Optional[dict[int, _Highlight]]:
         cachedir = utils.CACHEDIR / 'log_hilights'
         cachefile = cachedir / f'{self.failure.id}_{self.logname}.yaml.gz'
@@ -191,7 +191,7 @@ class Log:
             try:
                 data = yaml.load(file, Loader=yaml.Loader)
                 if (data['version'] == HILIGHTS_FORMAT_VERSION
-                        and data['sha256'] == loghash
+                        and data['numlines'] == num_lines
                         and data['filtershash'] == filtershash):
                     return data['hilights']
             except (TypeError, KeyError,
@@ -200,14 +200,14 @@ class Log:
 
         return None
 
-    def _write_cache_file(self, loghash: str, filtershash: str):
+    def _write_cache_file(self, num_lines: int, filtershash: str):
         cachedir = utils.CACHEDIR / 'log_hilights'
         cachefile = cachedir / f'{self.failure.id}_{self.logname}.yaml.gz'
         with gzip.open(cachefile, mode='w') as file:
             data = {
                 'version': HILIGHTS_FORMAT_VERSION,
                 'hilights': self._highlights,
-                'sha256': loghash,
+                'numlines': num_lines,
                 'filtershash': filtershash,
             }
             yaml.dump(data, file, encoding='utf-8')
@@ -219,23 +219,26 @@ class Log:
         if self._highlights:
             return
 
-        logdata = self.failure.get_log(self.logname)
-        if not logdata:
+        logmetadata = self.failure.get_log_data(self.logname)
+        if not logmetadata:
             self._highlights = {}
             return
-
         # Try to get data from disk cache
-        loghash = hashlib.sha256(logdata.encode())
-        filters = self._get_log_highlights_filters(len(logdata))
+        filters = self._get_log_highlights_filters(logmetadata['num_lines'])
         filtershash = hashlib.sha256(pickle.dumps(filters))
-        self._highlights = self._load_cache_file(loghash.hexdigest(),
+        self._highlights = self._load_cache_file(logmetadata['num_lines'],
                                                  filtershash.hexdigest())
 
         # Generate hilights data
         if not self._highlights:
+            logdata = self.failure.get_log(self.logname)
+            if not logdata:
+                self._highlights = {}
+                return
+
             loglines = logdata.splitlines()
             self._highlights = self._build_log_highlights(loglines, filters)
-            self._write_cache_file(loghash.hexdigest(),
+            self._write_cache_file(logmetadata['num_lines'],
                                    filtershash.hexdigest())
 
         self._cached_log_highlights[cache_key] = self._highlights

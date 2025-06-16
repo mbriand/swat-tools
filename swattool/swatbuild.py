@@ -150,19 +150,18 @@ class Failure:
         else:
             logger.error("Failed to find %s log", logname)
 
-    def get_log_raw_url(self, logname: str = "stdio"
-                        ) -> Optional[str]:
-        """Get the URL of a raw log file.
+    def get_log_data(self, logname: str = "stdio") -> Optional[dict[str, Any]]:
+        """Get the metadata of a log file.
 
         Args:
             logname: The name of the log to get URL for (default: "stdio")
 
         Returns:
-            URL to the raw log file or None if not found
+            Dictionary containing log metadata or None if request fails
         """
         rest_url = self.build.rest_api_url()
-        return buildbotrest.get_log_raw_url(rest_url, self.build.id,
-                                            self.stepnumber, logname)
+        return buildbotrest.get_log_data(rest_url, self.build.id,
+                                         self.stepnumber, logname)
 
     def get_log(self, logname: str) -> Optional[str]:
         """Get content of a given log file.
@@ -173,18 +172,21 @@ class Failure:
         Returns:
             Content of the log file or None if retrieval fails
         """
-        logurl = self.get_log_raw_url(logname)
-        if not logurl:
+        rest_url = self.build.rest_api_url()
+        logdata = buildbotrest.get_log_data(rest_url, self.build.id,
+                                            self.stepnumber, logname)
+        if not logdata:
             logging.error("Failed to find log")
             return None
 
+        url = f"{rest_url}/logs/{logdata['logid']}/raw"
         try:
-            logdata = Session().get(logurl)
+            data = Session().get(url)
         except requests.exceptions.ConnectionError:
             logger.warning("Failed to download stdio log")
             return None
 
-        return logdata
+        return data
 
     def get_triage_with_notes(self) -> str:
         """Get triage description string, including notes.
