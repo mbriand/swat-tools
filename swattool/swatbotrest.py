@@ -33,7 +33,6 @@ class RefreshPolicy(enum.Enum):
 
     NO = enum.auto()
     FORCE = enum.auto()
-    FORCE_FAILURES = enum.auto()
     AUTO = enum.auto()
 
 
@@ -82,23 +81,18 @@ class RefreshManager:
 
     def get_refresh_max_age(self,
                             refresh_override: Optional[RefreshPolicy] = None,
-                            failures: bool = False,
                             auto: int = AUTO_REFRESH_S
                             ) -> int:
         """Get the maximum age before refresh for a given policy.
 
         Args:
             refresh_override: Optional policy to override the global policy
-            failures: Whether this is for failures data
             auto: Auto refresh interval in seconds
 
         Returns:
             Maximum age in seconds, 0 for force refresh, -1 for no refresh
         """
         policy = refresh_override if refresh_override else self.refresh_policy
-        if policy == RefreshPolicy.FORCE_FAILURES:
-            policy = RefreshPolicy.FORCE if failures else RefreshPolicy.AUTO
-
         if policy == RefreshPolicy.FORCE:
             return 0
         if policy == RefreshPolicy.NO:
@@ -153,7 +147,7 @@ def login(user: str, password: str) -> bool:
     session = Session()
 
     logger.info("Sending logging request...")
-    session.get(LOGIN_URL, 0)
+    session.get(LOGIN_URL)
 
     data = {
         "csrfmiddlewaretoken": _get_csrftoken(),
@@ -176,9 +170,9 @@ def login(user: str, password: str) -> bool:
     return True
 
 
-def _get_json(path: str, max_cache_age: int = -1):
+def _get_json(path: str, max_cache_age: int = 0):
     url = f"{REST_BASE_URL}{path}"
-    data = Session().get(url, max_cache_age)
+    data = Session().get(url, max_cache_age != 0, max_cache_age)
     try:
         json_data = json.loads(data)
     except requests.exceptions.ConnectionError as err:
@@ -192,7 +186,7 @@ def _get_json(path: str, max_cache_age: int = -1):
     return json_data
 
 
-def get_build(buildid: int, refresh_override: Optional[RefreshPolicy] = None):
+def get_build(buildid: int) -> dict:
     """Get info on a given build.
 
     Args:
@@ -202,12 +196,10 @@ def get_build(buildid: int, refresh_override: Optional[RefreshPolicy] = None):
     Returns:
         Dictionary containing build information
     """
-    maxage = RefreshManager().get_refresh_max_age(refresh_override)
-    return _get_json(f"/build/{buildid}/", maxage)['data']
+    return _get_json(f"/build/{buildid}/")['data']
 
 
-def get_build_collection(collectionid: int, refresh_override:
-                         Optional[RefreshPolicy] = None):
+def get_build_collection(collectionid: int) -> dict:
     """Get info on a given build collection.
 
     Args:
@@ -217,8 +209,7 @@ def get_build_collection(collectionid: int, refresh_override:
     Returns:
         Dictionary containing collection information
     """
-    maxage = RefreshManager().get_refresh_max_age(refresh_override)
-    return _get_json(f"/buildcollection/{collectionid}/", maxage)['data']
+    return _get_json(f"/buildcollection/{collectionid}/")['data']
 
 
 def invalidate_stepfailures_cache():
@@ -255,14 +246,12 @@ def get_stepfailures(status: Optional[TriageStatus] = None,
 
     request = f"/stepfailure/?{urllib.parse.urlencode(params)}"
     maxage = RefreshManager().get_refresh_max_age(refresh_override,
-                                                  failures=True,
                                                   auto=auto_refresh_s)
 
     return _get_json(request, maxage)['data']
 
 
-def get_stepfailure(failureid: int,
-                    refresh_override: Optional[RefreshPolicy] = None):
+def get_stepfailure(failureid: int):
     """Get info on a given failure.
 
     Args:
@@ -272,8 +261,7 @@ def get_stepfailure(failureid: int,
     Returns:
         Dictionary containing failure information
     """
-    maxage = RefreshManager().get_refresh_max_age(refresh_override)
-    return _get_json(f"/stepfailure/{failureid}/", maxage)['data']
+    return _get_json(f"/stepfailure/{failureid}/")['data']
 
 
 def get_failures(status: Optional[TriageStatus] = None

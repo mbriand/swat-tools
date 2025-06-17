@@ -155,7 +155,8 @@ class Session:
             with cachefile.open('w') as file:
                 file.write(data)
 
-    def get(self, url: str, max_cache_age: int = -1) -> str:
+    def get(self, url: str, cache_store: bool = False, max_cache_age: int = 0
+            ) -> str:
         """Do a GET request.
 
         Attempts to load response from cache if available and not expired,
@@ -172,30 +173,35 @@ class Session:
         Raises:
             requests.exceptions.HTTPError: If the request fails
         """
-        # TODO: only large files (logs) and maybe files with only few occurences
-        # (bugzilla AB-INT list) shoud use cache, everyhting else should be
-        # stored in DB
-        cache_candidates = self._get_cache_file_candidates(url)
-        cache_new_file = cache_candidates[0]
+        if cache_store or max_cache_age != 0:
+            cache_candidates = self._get_cache_file_candidates(url)
+            cache_new_file = cache_candidates[0]
 
-        with cache_lock:
-            cache_olds = [file for file in cache_candidates if file.is_file()]
-            for cachefile in cache_olds:
-                data = self._try_load_cache(cachefile, max_cache_age)
-                if data:
-                    logger.debug("Loaded cache file for %s: %s", url,
-                                 cachefile)
-                    return data
+            with cache_lock:
+                cache_olds = [file for file in cache_candidates
+                              if file.is_file()]
+                for cachefile in cache_olds:
+                    data = self._try_load_cache(cachefile, max_cache_age)
+                    if data:
+                        logger.debug("Loaded cache file for %s: %s", url,
+                                     cachefile)
+                        return data
 
-        logger.debug("Fetching %s, cache file will be %s", url, cache_new_file)
+            logger.debug("Fetching %s, cache file will be %s", url,
+                         cache_new_file)
+        else:
+            logger.debug("Fetching %s", url)
+
         req = self.session.get(url)
         req.raise_for_status()
 
-        with cache_lock:
-            cache_olds = [file for file in cache_candidates if file.is_file()]
-            for cachefile in cache_olds:
-                cachefile.unlink()
-            self._create_cache_file(cache_new_file, req.text)
+        if cache_store:
+            with cache_lock:
+                cache_olds = [file for file in cache_candidates
+                              if file.is_file()]
+                for cachefile in cache_olds:
+                    cachefile.unlink()
+                self._create_cache_file(cache_new_file, req.text)
 
         return req.text
 

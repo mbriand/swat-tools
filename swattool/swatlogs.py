@@ -202,6 +202,7 @@ class Log:
 
     def _write_cache_file(self, num_lines: int, filtershash: str):
         cachedir = utils.CACHEDIR / 'log_hilights'
+        cachedir.mkdir(parents=True, exist_ok=True)
         cachefile = cachedir / f'{self.failure.id}_{self.logname}.yaml.gz'
         with gzip.open(cachefile, mode='w') as file:
             data = {
