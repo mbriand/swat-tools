@@ -88,7 +88,7 @@ class Bugzilla:
             cache_timeout = 0 if force_refresh else cls.CACHE_TIMEOUT_S
 
             try:
-                data = Session().get(req, cache_timeout)
+                data = Session().get(req, True, cache_timeout)
             except requests.exceptions.HTTPError:
                 logger.error("Failed to get AB-INT list")
                 return {}
@@ -175,7 +175,7 @@ class Bugzilla:
 
         fparams = urllib.parse.urlencode(params, doseq=True)
         req = f"{REST_BASE_URL}bug?{fparams}"
-        data = Session().get(req, cls.CACHE_TIMEOUT_S)
+        data = Session().get(req, True, cls.CACHE_TIMEOUT_S)
 
         jsondata = json.loads(data)['bugs']
         if len(jsondata) != 1:
@@ -240,7 +240,7 @@ class Bugzilla:
         req = f"{REST_BASE_URL}login?{fparams}"
 
         try:
-            data = session.get(req, 0)
+            data = session.get(req)
         except requests.exceptions.HTTPError:
             logger.error("Login failed")
             return False

@@ -181,7 +181,7 @@ class Failure:
 
         url = f"{rest_url}/logs/{logdata['logid']}/raw"
         try:
-            data = Session().get(url)
+            data = Session().get(url, True, -1)
         except requests.exceptions.ConnectionError:
             logger.warning("Failed to download stdio log")
             return None

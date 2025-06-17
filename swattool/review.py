@@ -784,9 +784,7 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                 continue
 
             def is_pending(failure_id):
-                pol = swatbotrest.RefreshPolicy.FORCE
-                failure = swatbotrest.get_stepfailure(failure_id,
-                                                      refresh_override=pol)
+                failure = swatbotrest.get_stepfailure(failure_id)
                 return failure['attributes']['triage'] == 0
 
             # Make sure failures are still pending
