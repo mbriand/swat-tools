@@ -264,6 +264,9 @@ class Bugzilla:
             bugid: Bugzilla issue ID
             comment: Text content of the comment to add
         """
+        if not TOKENFILE.exists():
+            raise utils.LoginRequiredException("Not logged in bugzilla",
+                                               "bugzilla")
         with TOKENFILE.open('r') as file:
             token = file.read()
 
@@ -275,6 +278,7 @@ class Bugzilla:
         url = f"{REST_BASE_URL}bug/{bugid}/comment"
         try:
             Session().post(url, data)
-        except requests.exceptions.HTTPError:
+        except requests.exceptions.HTTPError as err:
             logging.error("Failed to post comment on Bugzilla, please login")
-            raise
+            raise utils.LoginRequiredException("Not logged in bugzilla",
+                                               "bugzilla") from err
