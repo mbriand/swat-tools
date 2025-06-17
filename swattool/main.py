@@ -131,6 +131,13 @@ def main():
             success = swatbotrest.login(user, password)
             if success:
                 maingroup()  # pylint: disable=no-value-for-parameter
+        if err.service == "bugzilla":
+            logger.warning("Login required to bugzilla server")
+            user = click.prompt('bugzilla user')
+            password = click.prompt('bugzilla password', hide_input=True)
+            success = Bugzilla.login(user, password)
+            if success:
+                maingroup()  # pylint: disable=no-value-for-parameter
         else:
             raise
 
