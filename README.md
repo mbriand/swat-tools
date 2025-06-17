@@ -94,3 +94,22 @@ Publish new local triage status to swatbot Django interface.
   additionally importing `readline`. We should either investigate the root cause
   of the issue or get rid of one of the modules.
   <https://github.com/IngoMeyer441/simple-term-menu/issues/98>
+
+# Contributing
+
+Please refer to our contributor guide here: https://docs.yoctoproject.org/contributor-guide/
+for full details on how to submit changes.
+
+As a quick guide, patches should be sent to yocto-patches@lists.yoctoproject.org
+The git command to do that would be:
+
+```
+git send-email -M -1 --subject-prefix='swat-tools][PATCH' --to yocto-patches@lists.yoctoproject.org
+```
+
+The 'To' header and prefix can be set as default for this repository:
+
+```
+git config sendemail.to yocto-patches@lists.yoctoproject.org
+git config format.subjectPrefix 'swat-tools][PATCH'
+```
