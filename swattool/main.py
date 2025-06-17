@@ -383,7 +383,7 @@ def review_pending_failures(refresh: str,
 
 @maingroup.command()
 @_add_options(failures_list_options)
-@click.option('--yes', '-n', is_flag=True,
+@click.option('--yes', '-y', is_flag=True,
               help="Do not ask for confirmation for each failure")
 @click.argument('status',
                 type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
