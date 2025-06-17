@@ -45,7 +45,7 @@ def update(min_age: Optional[int] = None) -> None:
         repo.remotes.create("archive", ARCHIVE_GITURL)
 
     for remote in repo.remotes:
-        remote.fetch(remote.fetch_refspecs + ['refs/tags/*:refs/tags/*'])
+        remote.fetch(remote.fetch_refspecs + ['--tags'])
 
 
 def get_build_commits(buildname: str, basebranch: str = "master",
