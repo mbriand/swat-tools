@@ -317,7 +317,7 @@ class InitManager:
         collection = swatbotrest.get_build_collection(collectionid)
 
         build_id = collection['attributes']['buildid']
-        parent_build = buildbotrest.get_build(buildboturl, build_id)
+        build_data = buildbotrest.get_build(buildboturl, build_id)
 
         data: dict[str, Any] = {}
         data['collection_id'] = collectionid
@@ -325,11 +325,16 @@ class InitManager:
         data['branch'] = collection['attributes']['branch']
         data['collection_build_id'] = collection['attributes']['buildid']
         data['target_name'] = collection['attributes']['targetname']
-        if parent_build:
-            data['parent_builder'] = parent_build['builds'][0]['builderid']
-            data['parent_build_number'] = parent_build['builds'][0]['number']
-        else:
-            data['parent_builder'] = data['parent_build_number'] = None
+        data['parent_builder'] = \
+            data['parent_build_number'] = \
+            data['yp_build_revision'] = None
+        if build_data:
+            build = build_data['builds'][0]
+            data['parent_builder'] = build['builderid']
+            data['parent_build_number'] = build['number']
+            rev = build['properties'].get('yp_build_revision')
+            if rev:
+                data['yp_build_revision'] = rev[0]
 
         return self._fetch_collection_done_cb, data
 
