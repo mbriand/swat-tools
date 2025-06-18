@@ -151,6 +151,10 @@ def setup_logging(verbose: int):
 
     logging.basicConfig(level=loglevel, handlers=handlers)
 
+    if verbose < 2:
+        logging.getLogger("charset_normalizer").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 
 def _save_readline(history_file):
     readline.write_history_file(history_file)
