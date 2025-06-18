@@ -241,6 +241,7 @@ class Build:
         self.autobuilder_url = sql_rows[0]['ab_url']
         self.owner = sql_rows[0]['owner']
         self.branch = sql_rows[0]['branch']
+        self.yp_build_revision = sql_rows[0]['yp_build_revision']
 
         self.parent_builder_name = None
         self.parent_builder = self.parent_build_number = None
@@ -301,20 +302,12 @@ class Build:
                     desc = f"{commitcount}{plus} commits ahead of {basebranch}"
                     self._git_info['description'] = desc
 
+            if self._git_info is None and self.yp_build_revision:
+                self._git_info = {'description':
+                                  f"On commit {self.yp_build_revision}"}
+
             if self._git_info is None:
-                buildboturl = buildbotrest.rest_api_url(self.autobuilder_url)
-                buildbot_build = buildbotrest.get_build(buildboturl, self.id)
-                if buildbot_build:
-                    try:
-                        properties = buildbot_build['builds'][0]['properties']
-                        rev = properties['yp_build_revision'][0]
-
-                        self._git_info = {'description': f"On commit {rev}"}
-                    except (KeyError, IndexError):
-                        pass
-
-                if self._git_info is None:
-                    self._git_info = {'description': "On unknown revision"}
+                self._git_info = {'description': "On unknown revision"}
 
         return self._git_info
 

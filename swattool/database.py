@@ -38,7 +38,8 @@ class Database:
         if 'collection' not in tables:
             cur.execute("CREATE TABLE collection(collection_id PRIMARY KEY, "
                         "owner, branch, collection_build_id, target_name, "
-                        "parent_builder, parent_build_number)")
+                        "parent_builder, parent_build_number, "
+                        "yp_build_revision)")
         if 'failure' not in tables:
             cur.execute("CREATE TABLE "
                         "failure(failure_id PRIMARY KEY, build_id, "
@@ -193,7 +194,7 @@ class Database:
         cur.execute("INSERT INTO collection "
                     "VALUES(:collection_id, :owner, :branch, "
                     ":collection_build_id, :target_name, :parent_builder, "
-                    ":parent_build_number)",
+                    ":parent_build_number, :yp_build_revision)",
                     data)
         cur.close()
 
