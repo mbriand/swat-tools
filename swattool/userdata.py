@@ -7,6 +7,7 @@ related to build failures, such as notes and triage information.
 """
 
 import collections
+import datetime
 import logging
 import pathlib
 import shutil
@@ -35,6 +36,7 @@ class Triage:
         self.status = swatbotrest.TriageStatus.PENDING
         self.comment = ""
         self.extra: dict[str, Any] = {}
+        self.change_date = datetime.datetime.now()
 
         if values:
             try:
@@ -60,6 +62,7 @@ class Triage:
         return {'failures': self.failures,
                 'status': self.status.name,
                 'comment': self.comment,
+                'change_date': self.change_date,
                 **self.extra
                 }
 

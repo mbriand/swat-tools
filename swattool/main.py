@@ -400,7 +400,8 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
         sort: List of field names to sort by
         yes: Skip confirmation for each failure if True
         status: Triage status to set for matching failures
-        status_comment: Comment for the triage status (or bug number for 'Bug' status)
+        status_comment: Comment for the triage status (or bug number for 'Bug'
+                        status)
         **kwargs: Additional filter arguments from CLI options
     """
     # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -435,7 +436,8 @@ def publish_new_reviews(dry_run: bool):
         # Bug entry: need to also publish a new comment on bugzilla.
         if status == swatbotrest.TriageStatus.BUG:
             bugid = int(comment)
-            logs = [triage.extra['bugzilla-comment'] for triage in triages
+            logs = [triage.extra['bugzilla-comment']
+                    for triage in sorted(triages, key=lambda d: d.change_date)
                     if triage.failures]
 
             if any(logs):
