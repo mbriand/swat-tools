@@ -56,7 +56,7 @@ def get_build(rest_url: str, buildid: int) -> Optional[dict[str, Any]]:
         Dictionary containing build information or None if request fails
     """
     build_url = f"{rest_url}/builds/{buildid}?property=*"
-    logging.debug("Build info URL: %s", build_url)
+    logger.debug("Build info URL: %s", build_url)
 
     return _get_json(build_url)
 
@@ -77,7 +77,7 @@ def get_log_raw_url(rest_url: str, buildid: int, stepnumber: int,
         URL to the raw log file or None if request fails
     """
     info_url = f"{rest_url}/builds/{buildid}/steps/{stepnumber}/logs/{logname}"
-    logging.debug("Log info URL: %s", info_url)
+    logger.debug("Log info URL: %s", info_url)
 
     info_data = _get_json(info_url)
     if not info_data:
