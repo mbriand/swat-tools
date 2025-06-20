@@ -63,6 +63,7 @@ class ReviewMenu:
         show_infos = True
         self.entry = 0
         self.done = False
+        self.almost_done = False
         while not self.done:
             try:
                 build = self.builds[self.entry]
@@ -75,6 +76,8 @@ class ReviewMenu:
 
                 prev_entry = self.entry
                 self.review_menu()
+                if self.almost_done:
+                    self.exit_menu()
                 if self.need_refresh:
                     self.need_refresh = False
                     utils.clear()
@@ -128,6 +131,14 @@ class ReviewMenu:
 
         return [c for c in commands if c != ""]
 
+    def _get_exit_commands(self):
+        commands = [
+            "[y] yes",
+            "[q] no",
+        ]
+
+        return [c for c in commands if c != ""]
+
     def _get_triage_commands(self):
         build = self.builds[self.entry]
         simcount = len(_get_similar_builds(build, self.builds)) - 1
@@ -148,9 +159,10 @@ class ReviewMenu:
 
         return [c for c in commands if c != ""]
 
-    def _show_menu(self, commands: list[str], cursor_index: Optional[int]
-                   ) -> Optional[str]:
-        status_bar = f"Progress: {self.entry + 1}/{len(self.builds)}"
+    def _show_menu(self, commands: list[str], cursor_index: Optional[int],
+                   status_bar: str = "") -> Optional[str]:
+        if not status_bar:
+            status_bar = f"Progress: {self.entry + 1}/{len(self.builds)}"
         action_menu = TerminalMenu(commands, title="Action",
                                    status_bar=status_bar,
                                    cursor_index=cursor_index,
@@ -249,6 +261,22 @@ class ReviewMenu:
 
             if command == "t":  # triage
                 self.triage_menu()
+                break
+
+    def exit_menu(self):
+        """
+        Exit menu before really leaving.
+        """
+
+        commands = self._get_exit_commands()
+        default_index = commands.index("[q] no")
+
+        while True:
+            command = self._show_menu(commands, default_index,
+                                      status_bar="Sure you want to exit?")
+
+            handled = self._handle_navigation_command(command)
+            if handled:
                 break
 
     def _get_abint_num(self) -> Optional[int]:
@@ -434,6 +462,16 @@ class ReviewMenu:
 
     def _handle_navigation_command(self, command: str) -> bool:
         if command == "q":  # Quit
+
+            if self.almost_done:
+                # Go back to the review menu
+                self.almost_done = False
+                return True
+
+            self.almost_done = True
+            return True
+
+        if command == "y":  # "yes", acting as Quit on exit menu
             self.done = True
             return True
 
