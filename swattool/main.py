@@ -71,6 +71,7 @@ def parse_filters(kwargs) -> dict[str, Any]:
         completed_before = kwargs['completed_before'].astimezone()
 
     filters = {'build': regex_filter(kwargs['build_filter']),
+               'parent_build': regex_filter(kwargs['parent_build_filter']),
                'test': regex_filter(kwargs['test_filter']),
                'ignore-test': regex_filter(kwargs['ignore_test_filter']),
                'status': statuses,
@@ -182,6 +183,8 @@ failures_list_options = [
                  help="Only show some tests"),
     click.option('--build-filter', '-b', multiple=True,
                  help="Only show some builds"),
+    click.option('--parent-build-filter', '-p', multiple=True,
+                 help="Only show some builds with parent build id"),
     click.option('--owner-filter', '-o', multiple=True,
                  help='Only show some owners ("none" for no owner)'),
     click.option('--ignore-test-filter', '-T', multiple=True,
@@ -221,6 +224,8 @@ def _format_pending_failures(builds: list[swatbuild.Build],
                              ) -> tuple[list[list[str]], list[str]]:
     # Generate a list of formatted builds on failures.
     def format_header(field):
+        if field == swatbuild.Field.PARENT_BUILD:
+            return "Parent"
         if field == swatbuild.Field.STATUS:
             return "Sts"
         return str(field)
@@ -268,6 +273,7 @@ def _show_failures(refresh: str, urlopens: set[str], limit: int,
 
     shown_fields_all = [
         swatbuild.Field.BUILD,
+        swatbuild.Field.PARENT_BUILD,
         swatbuild.Field.STATUS,
         swatbuild.Field.TEST,
         swatbuild.Field.OWNER,

@@ -104,6 +104,7 @@ class Field(enum.StrEnum):
     USER_NOTES = 'Notes'
     USER_STATUS = 'New Triage'
     TRIAGE = 'Triage'
+    PARENT_BUILD = 'Parent Build'
 
 
 class Failure:
@@ -245,12 +246,16 @@ class Build:
 
         self.parent_builder_name = None
         self.parent_builder = self.parent_build_number = None
+        self.parent_build = ""
 
         self.collection_build_id = sql_rows[0]['collection_build_id']
         if self.collection_build_id != self.id:
             self.parent_builder_name = sql_rows[0]["target_name"]
             self.parent_builder = sql_rows[0]['parent_builder']
             self.parent_build_number = sql_rows[0]['parent_build_number']
+            ab = buildbotrest.autobuilder_short_name(self.autobuilder_url)
+            self.parent_build = \
+                f'{ab}/{self.parent_builder_name}/{self.parent_build_number}'
 
         self._git_info: Optional[dict[str, Any]] = None
 
@@ -396,7 +401,8 @@ class Build:
         if not all(simple_match(field) for field in simple_filters):
             return False
 
-        regex_filters = [Field.BUILD, Field.OWNER, Field.TEST]
+        regex_filters = [Field.BUILD, Field.OWNER, Field.TEST,
+                         Field.PARENT_BUILD]
         if not all(regex_match(field) for field in regex_filters):
             return False
 

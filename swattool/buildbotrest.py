@@ -10,6 +10,7 @@ import json
 import logging
 import sqlite3
 from typing import Any, Optional
+import urllib
 
 import requests
 
@@ -44,6 +45,26 @@ def autobuilder_base_url(autobuilder_url) -> str:
     """
     url, _, _ = autobuilder_url.partition('/#/builders')
     return url
+
+
+ab_short_names = {
+    'autobuilder.yoctoproject.org/typhoon': 'ty',
+    'autobuilder.yoctoproject.org/valkyrie': 'vk',
+}
+
+
+def autobuilder_short_name(autobuilder_url) -> str:
+    """Retrieve the autobuilder short name from an URL.
+
+    Args:
+        autobuilder_url: A full autobuilder URL, possibly including UI path
+
+    Returns:
+        The autobuilder instance short name
+    """
+    url = urllib.parse.urlparse(autobuilder_base_url(autobuilder_url))
+    ab_name = f'{url.netloc}{url.path}'
+    return ab_short_names.get(ab_name, ab_name)
 
 
 def _get_json(url) -> Optional[dict[str, Any]]:
