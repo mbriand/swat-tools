@@ -43,8 +43,11 @@ def autobuilder_base_url(autobuilder_url) -> str:
     Returns:
         The base URL without UI-specific components
     """
-    url, _, _ = autobuilder_url.partition('/#/builders')
-    return url
+    for sep in ['/#/builders', '/#builders']:
+        if sep in autobuilder_url:
+            autobuilder_url, _, _ = autobuilder_url.partition(sep)
+            break
+    return autobuilder_url
 
 
 ab_short_names = {
