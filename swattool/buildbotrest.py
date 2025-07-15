@@ -150,7 +150,11 @@ def get_log_data(rest_url: str, buildid: int, stepnumber: int,
     info_url = f"{rest_url}/builds/{buildid}/steps/{stepnumber}/logs/{logname}"
     logger.debug("Log info URL: %s", info_url)
 
-    info_data = _get_json(info_url)
+    try:
+        info_data = _get_json(info_url)
+    except utils.SwattoolException as err:
+        logger.warning("Got exception while trying to load logs: %s", err)
+        return None
     if not info_data:
         return None
 
