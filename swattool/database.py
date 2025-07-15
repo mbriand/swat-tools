@@ -100,8 +100,8 @@ class Database:
         data = {'limit': limit}
         req = "Select * FROM failure "
         if with_data:
-            req += "INNER JOIN build ON failure.build_id = build.build_id " \
-                "INNER JOIN collection " \
+            req += "LEFT JOIN build ON failure.build_id = build.build_id " \
+                "LEFT JOIN collection " \
                 "ON build.collection_id = collection.collection_id "
         if triage:
             remote_triage = ", ".join({str(int(t)) for t in triage})
