@@ -11,7 +11,7 @@ import datetime
 import logging
 import re
 import textwrap
-from typing import Any, Collection
+from typing import Any, Callable, Collection
 
 import click
 import tabulate
@@ -115,30 +115,54 @@ def maingroup(verbose: int):
     utils.setup_readline()
 
 
+def handle_login_exception(err: utils.LoginRequiredException) -> bool:
+    """Handle a login exception by authenticating on remote service.
+
+    Args:
+        err: The login exception containing service information
+
+    Returns:
+        True if login was successful, raises exception otherwise
+    """
+    if err.service == "swatbot":
+        logger.warning("Login required to swatbot server")
+        user = click.prompt('swatbot user')
+        password = click.prompt('swatbot password', hide_input=True)
+        return swatbotrest.login(user, password)
+
+    if err.service == "bugzilla":
+        logger.warning("Login required to bugzilla server")
+        user = click.prompt('bugzilla user')
+        password = click.prompt('bugzilla password', hide_input=True)
+        return Bugzilla.login(user, password)
+
+    raise err
+
+
+def shared_main(fn: Callable):
+    """Shared entry point for swattool applications.
+
+    Provides common initialization and error handling for swattool applications.
+    Handles login exceptions by prompting for credentials when needed.
+
+    Args:
+        fn: The main function to execute
+    """
+    try:
+        fn()
+    except utils.LoginRequiredException as err:
+        success = handle_login_exception(err)
+        if success:
+            fn()
+
+
 def main():
     """Handle triage of Yocto autobuilder failures.
 
-    Main entry point for the application. Sets up logging and handles login if needed.
+    Main entry point for the application. Sets up logging and handles login if
+    needed.
     """
-    try:
-        maingroup()  # pylint: disable=no-value-for-parameter
-    except utils.LoginRequiredException as err:
-        if err.service == "swatbot":
-            logger.warning("Login required to swatbot server")
-            user = click.prompt('swatbot user')
-            password = click.prompt('swatbot password', hide_input=True)
-            success = swatbotrest.login(user, password)
-            if success:
-                maingroup()  # pylint: disable=no-value-for-parameter
-        if err.service == "bugzilla":
-            logger.warning("Login required to bugzilla server")
-            user = click.prompt('bugzilla user')
-            password = click.prompt('bugzilla password', hide_input=True)
-            success = Bugzilla.login(user, password)
-            if success:
-                maingroup()  # pylint: disable=no-value-for-parameter
-        else:
-            raise
+    shared_main(maingroup)
 
 
 @maingroup.command()

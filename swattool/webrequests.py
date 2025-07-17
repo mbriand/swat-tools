@@ -68,6 +68,14 @@ class Session:
             with COOKIESFILE.open('wb') as file:
                 pickle.dump(self.session.cookies, file)
 
+    def get_cookies(self) -> dict:
+        """Get session cookies as a dictionary.
+
+        Returns:
+            Dictionary of cookies from the current session
+        """
+        return dict(self.session.cookies) if self.session else {}
+
     def invalidate_cache(self, url: str, allparams: bool = False):
         """Invalidate cache for a given URL.
 
@@ -155,7 +163,8 @@ class Session:
             with cachefile.open('w') as file:
                 file.write(data)
 
-    def get(self, url: str, cache_store: bool = False, max_cache_age: int = 0
+    def get(self, url: str, cache_store: bool = False, max_cache_age: int = 0,
+            headers=None
             ) -> str:
         """Do a GET request.
 
@@ -192,7 +201,7 @@ class Session:
         else:
             logger.debug("Fetching %s", url)
 
-        req = self.session.get(url)
+        req = self.session.get(url, headers=headers)
         req.raise_for_status()
 
         if cache_store:
@@ -205,12 +214,15 @@ class Session:
 
         return req.text
 
-    def post(self, url: str, data: dict[str, Any]) -> str:
+    def post(self, url: str, data: Optional[dict[str, Any]] = None,
+             json: Optional[dict[str, Any]] = None, headers=None) -> str:
         """Do a POST request.
 
         Args:
             url: The URL to post to
-            data: Dictionary of data to send in the request
+            data: Optional dictionary of form data to send in the request
+            json: Optional dictionary of JSON data to send in the request
+            headers: Optional headers to include in the request
 
         Returns:
             Response text content
@@ -219,7 +231,30 @@ class Session:
             requests.exceptions.HTTPError: If the request fails
         """
         logger.debug("Sending POST request to %s with %s", url, data)
-        req = self.session.post(url, data=data)
+        req = self.session.post(url, data=data, json=json, headers=headers)
+
+        req.raise_for_status()
+
+        return req.text
+
+    def put(self, url: str, data: Optional[dict[str, Any]] = None,
+            json: Optional[dict[str, Any]] = None, headers=None) -> str:
+        """Do a PUT request.
+
+        Args:
+            url: The URL to send the PUT request to
+            data: Optional dictionary of form data to send in the request
+            json: Optional dictionary of JSON data to send in the request
+            headers: Optional headers to include in the request
+
+        Returns:
+            Response text content
+
+        Raises:
+            requests.exceptions.HTTPError: If the request fails
+        """
+        logger.debug("Sending PUT request to %s with %s", url, data)
+        req = self.session.put(url, data=data, json=json, headers=headers)
 
         req.raise_for_status()
         return req.text

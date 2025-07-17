@@ -276,7 +276,7 @@ class Bugzilla:
 
         url = f"{REST_BASE_URL}bug/{bugid}/comment"
         try:
-            Session().post(url, data)
+            Session().post(url, data=data)
         except requests.exceptions.HTTPError as err:
             logging.error("Failed to post comment on Bugzilla, please login")
             raise utils.LoginRequiredException("Not logged in bugzilla",

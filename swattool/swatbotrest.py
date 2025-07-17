@@ -170,20 +170,77 @@ def login(user: str, password: str) -> bool:
     return True
 
 
-def _get_json(path: str, max_cache_age: int = 0):
-    url = f"{REST_BASE_URL}{path}"
-    data = Session().get(url, max_cache_age != 0, max_cache_age)
+def _handle_server_request(fn, url: str, *args, **kwargs) -> dict:
     try:
-        json_data = json.loads(data)
-    except requests.exceptions.ConnectionError as err:
-        raise utils.SwattoolException(f"Failed to fetch {url}") from err
+        reply = fn(url, *args, **kwargs)
+        json_data = json.loads(reply)
+    except requests.exceptions.RequestException as err:
+        errdetail = ""
+        if 'json' in kwargs:
+            errdetail += f" with data {kwargs['json']}"
+        try:
+            errjson = json.loads(err.response.text)
+            errdetail += f": {errjson['errors']}"
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+        errstr = f"Failed to fetch {url}{errdetail}"
+        raise utils.SwattoolException(errstr) from err
     except json.decoder.JSONDecodeError as err:
-        Session().invalidate_cache(f"{REST_BASE_URL}{path}")
-        if "Please login to see this page." in data:
+        Session().invalidate_cache(url)
+        if "Please login to see this page." in reply:
             raise utils.LoginRequiredException("Not logged in swatbot",
                                                "swatbot") from err
         raise utils.SwattoolException("Failed to parse server reply") from err
     return json_data
+
+
+def get_json(path: str, max_cache_age: int = 0):
+    """Do a GET request on swat server and parse JSON reply.
+
+    Args:
+        path: The API path to request
+        max_cache_age: Maximum age in seconds for cached responses (0 = no cache)
+
+    Returns:
+        Parsed JSON response as dictionary
+    """
+    url = f"{REST_BASE_URL}{path}"
+    use_cache = max_cache_age != 0
+    return _handle_server_request(Session().get, url, use_cache, max_cache_age)
+
+
+def post_json(path: str, data: dict) -> dict:
+    """Do a POST request on swat server with JSON data and parse reply.
+
+    Args:
+        path: The API path to request
+        data: Dictionary containing JSON data to send
+
+    Returns:
+        Parsed JSON response as dictionary
+    """
+    url = f"{REST_BASE_URL}{path}"
+    headers = {'Content-type': 'application/vnd.api+json',
+               'X-CSRFToken': Session().get_cookies().get('csrftoken')}
+    return _handle_server_request(Session().post, url, json=data,
+                                  headers=headers)
+
+
+def put_json(path: str, data: dict) -> dict:
+    """Do a PUT request on swat server with JSON data and parse reply.
+
+    Args:
+        path: The API path to request
+        data: Dictionary containing JSON data to send
+
+    Returns:
+        Parsed JSON response as dictionary
+    """
+    url = f"{REST_BASE_URL}{path}"
+    headers = {'Content-type': 'application/vnd.api+json',
+               'X-CSRFToken': Session().get_cookies().get('csrftoken')}
+    return _handle_server_request(Session().put, url, json=data,
+                                  headers=headers)
 
 
 def get_build(buildid: int) -> dict:
@@ -196,7 +253,7 @@ def get_build(buildid: int) -> dict:
     Returns:
         Dictionary containing build information
     """
-    return _get_json(f"/build/{buildid}/")['data']
+    return get_json(f"/build/{buildid}/")['data']
 
 
 def get_build_collection(collectionid: int) -> dict:
@@ -209,7 +266,7 @@ def get_build_collection(collectionid: int) -> dict:
     Returns:
         Dictionary containing collection information
     """
-    return _get_json(f"/buildcollection/{collectionid}/")['data']
+    return get_json(f"/buildcollection/{collectionid}/")['data']
 
 
 def invalidate_stepfailures_cache():
@@ -248,7 +305,7 @@ def get_stepfailures(status: Optional[TriageStatus] = None,
     maxage = RefreshManager().get_refresh_max_age(refresh_override,
                                                   auto=auto_refresh_s)
 
-    return _get_json(request, maxage)['data']
+    return get_json(request, maxage)['data']
 
 
 def get_stepfailure(failureid: int):
@@ -261,7 +318,7 @@ def get_stepfailure(failureid: int):
     Returns:
         Dictionary containing failure information
     """
-    return _get_json(f"/stepfailure/{failureid}/")['data']
+    return get_json(f"/stepfailure/{failureid}/")['data']
 
 
 def get_failures(status: Optional[TriageStatus] = None

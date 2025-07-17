@@ -29,7 +29,7 @@ from . import userdata
 logger = logging.getLogger(__name__)
 
 
-class ReviewMenu:
+class ReviewMenu:  # pylint: disable=too-many-instance-attributes
     """Interactive review session manager.
 
     Provides a menu-based interface for reviewing and triaging build failures.
@@ -47,6 +47,7 @@ class ReviewMenu:
         self.urlopens = urlopens
         self.entry = 0
         self.done = True
+        self.almost_done = False
         self.need_refresh = False
         self.failure_menu = FailureMenu(self.builds, self.userinfos)
 
@@ -62,8 +63,7 @@ class ReviewMenu:
         kbinter = False
         show_infos = True
         self.entry = 0
-        self.done = False
-        self.almost_done = False
+        self.almost_done = self.done = False
         while not self.done:
             try:
                 build = self.builds[self.entry]
@@ -264,10 +264,7 @@ class ReviewMenu:
                 break
 
     def exit_menu(self):
-        """
-        Exit menu before really leaving.
-        """
-
+        """Exit menu before really leaving."""
         commands = self._get_exit_commands()
         default_index = commands.index("[q] no")
 
@@ -460,6 +457,7 @@ class ReviewMenu:
 
         return False
 
+    # pylint: disable=too-many-branches
     def _handle_navigation_command(self, command: str) -> bool:
         if command == "q":  # Quit
 
