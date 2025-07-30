@@ -47,7 +47,7 @@ class Database:
                         "remote_triage_notes)")
         if 'logs_data' not in tables:
             cur.execute("CREATE TABLE "
-                        "logs_data(logid PRIMARY KEY, build_id, step_number, "
+                        "logs_data(ab_instance, logid, build_id, step_number, "
                         "logname, num_lines)")
         cur.close()
 
@@ -222,8 +222,8 @@ class Database:
         """Add logs metadata entries in the database."""
         cur = self._db.cursor()
         cur.executemany("INSERT OR REPLACE INTO logs_data "
-                        "VALUES(:logid, :build_id, :step_number, "
-                        ":logname, :num_lines);", data)
+                        "VALUES(:ab_instance, :logid, :build_id, "
+                        ":step_number, :logname, :num_lines);", data)
         cur.close()
 
     def commit(self) -> None:

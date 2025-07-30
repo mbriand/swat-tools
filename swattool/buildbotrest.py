@@ -103,14 +103,15 @@ def get_build(rest_url: str, buildid: int) -> Optional[dict[str, Any]]:
     return _get_json(build_url)
 
 
-_log_data_cache: dict[tuple[int, int, str], dict[str, Any]] = {}
-_log_data_cache_new: set[tuple[int, int, str]] = set()
+_log_data_cache: dict[tuple[str, int, int, str], dict[str, Any]] = {}
+_log_data_cache_new: set[tuple[str, int, int, str]] = set()
 
 
 def populate_log_data_cache(data: list[sqlite3.Row]):
     """Load cache from database rows."""
     for row in data:
-        key = (row["build_id"], row["step_number"], row["logname"])
+        key = (row["ab_instance"], row["build_id"], row["step_number"],
+               row["logname"])
         _log_data_cache[key] = {
             "logid": row["logid"],
             "num_lines": row["num_lines"],
@@ -120,8 +121,9 @@ def populate_log_data_cache(data: list[sqlite3.Row]):
 
 def save_log_data_cache() -> list[dict[str, Any]]:
     """Get new cache entries."""
-    new_data = [{"build_id": k[0],
-                 "step_number": k[1],
+    new_data = [{"ab_instance": k[0],
+                 "build_id": k[1],
+                 "step_number": k[2],
                  "logname": _log_data_cache[k]["name"],
                  **_log_data_cache[k],
                  } for k in _log_data_cache_new]
@@ -142,7 +144,8 @@ def get_log_data(rest_url: str, buildid: int, stepnumber: int,
     Returns:
         Dictionary containing log metadata or None if request fails
     """
-    cache_key = (buildid, stepnumber, logname)
+    ab_instance = autobuilder_short_name(rest_url)
+    cache_key = (ab_instance, buildid, stepnumber, logname)
     metadata = _log_data_cache.get(cache_key)
     if metadata:
         return metadata
