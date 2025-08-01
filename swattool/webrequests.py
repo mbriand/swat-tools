@@ -173,8 +173,10 @@ class Session:
 
         Args:
             url: The URL to request
+            cache_store: Whether to store the response in cache
             max_cache_age: Maximum age in seconds for cached responses,
-                          -1 for unlimited
+                          0 for no cache, -1 for unlimited
+            headers: Optional headers to include in the request
 
         Returns:
             Response text content

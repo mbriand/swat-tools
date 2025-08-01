@@ -72,7 +72,12 @@ class Database:
 
     def drop_failures(self,
                       triage: Optional[swatbotrest.TriageStatus]) -> None:
-        """Drop failure entries from the database."""
+        """Drop failure entries from the database.
+
+        Args:
+            triage: Optional triage status to filter which failures to drop.
+                   If None, all failures are dropped.
+        """
         cur = self._db.cursor()
         req = "DELETE FROM failure "
         if triage:
@@ -209,7 +214,14 @@ class Database:
         return {row['collection_id'] for row in build_res.fetchall()}
 
     def get_logs_data(self, build_ids: set[int]) -> list[sqlite3.Row]:
-        """Get logs metadata entries from the database."""
+        """Get logs metadata entries from the database.
+
+        Args:
+            build_ids: Set of build IDs to retrieve log data for
+
+        Returns:
+            List of database rows containing log metadata
+        """
         ids = ", ".join({str(int(f)) for f in build_ids})
 
         cur = self._db.cursor()
@@ -219,7 +231,11 @@ class Database:
         return build_res.fetchall()
 
     def add_logs_data(self, data: list[dict[str, Any]]) -> None:
-        """Add logs metadata entries in the database."""
+        """Add logs metadata entries in the database.
+
+        Args:
+            data: List of dictionaries containing log metadata to insert
+        """
         cur = self._db.cursor()
         cur.executemany("INSERT OR REPLACE INTO logs_data "
                         "VALUES(:ab_instance, :logid, :build_id, "

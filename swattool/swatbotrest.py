@@ -248,7 +248,6 @@ def get_build(buildid: int) -> dict:
 
     Args:
         buildid: The ID of the build to retrieve
-        refresh_override: Optional policy to override the global refresh policy
 
     Returns:
         Dictionary containing build information
