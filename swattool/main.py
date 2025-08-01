@@ -3,8 +3,8 @@
 
 """A tool helping triage of Yocto autobuilder failures.
 
-This module provides the main entry point and CLI interface for the swattool application,
-which helps with the triage of Yocto autobuilder failures.
+This module provides the main entry point and CLI interface for the swattool
+application, which helps with the triage of Yocto autobuilder failures.
 """
 
 import datetime
@@ -35,14 +35,15 @@ def _add_options(options):
     return _add_options
 
 
-def parse_filters(kwargs) -> dict[str, Any]:
+def parse_filters(filters_cmd, config: dict) -> dict[str, Any]:
     """Parse filter arguments.
 
-    Parse filter values given as program arguments and generate a dictionary to
-    be used with get_failure_infos().
+    Parse filter values given as program arguments and configuration file,
+    merging them to generate a dictionary to be used with get_failure_infos().
 
     Args:
-        kwargs: Dictionary of filter arguments from CLI options
+        filters_cmd: Dictionary of filter arguments from CLI options
+        config: Configuration dictionary loaded from config file
 
     Returns:
         Dictionary of parsed filters ready for use with get_failure_infos()
@@ -54,36 +55,71 @@ def parse_filters(kwargs) -> dict[str, Any]:
         return [re.compile(f"^{f}$" if str(f).isalnum() else f, flags=re.I)
                 for f in lst]
 
-    statuses = [swatbuild.Status[s.upper()] for s in kwargs['status_filter']]
+    def bool_filter(val):
+        if val in ["yes", True, "true"]:
+            return True
+        if val in ["no", False, "false"]:
+            return False
+        return None
+
+    filters_in = filters_cmd.copy()
+    for k, v in config.get('swattool-filters', {}).items():
+        if not filters_cmd[k] and not isinstance(filters_cmd[k], bool):
+            filters_in[k] = v
+
+    statuses = [swatbuild.Status[s.upper()]
+                for s in filters_in['status_filter']]
     triages = [swatbotrest.TriageStatus.from_str(s)
-               for s in kwargs.get('triage_filter', [])]
+               for s in filters_in.get('triage_filter', [])]
 
     completed_after = completed_before = None
-    if kwargs['completed_after']:
-        completed_after = kwargs['completed_after'].astimezone()
-    elif not kwargs['completed_before']:
+    if filters_in['completed_after']:
+        completed_after = filters_in['completed_after'].astimezone()
+    elif not filters_in['completed_before']:
         after_date = datetime.datetime.now() - datetime.timedelta(days=30)
         completed_after = after_date.astimezone()
         logger.warning("Only considering builds after %s",
                        after_date.strftime("%Y-%m-%d"))
 
-    if kwargs['completed_before']:
-        completed_before = kwargs['completed_before'].astimezone()
+    if filters_in['completed_before']:
+        completed_before = filters_in['completed_before'].astimezone()
 
-    filters = {'build': regex_filter(kwargs['build_filter']),
-               'parent_build': regex_filter(kwargs['parent_build_filter']),
-               'test': regex_filter(kwargs['test_filter']),
-               'ignore-test': regex_filter(kwargs['ignore_test_filter']),
+    filters = {'build': regex_filter(filters_in['build_filter']),
+               'parent_build': regex_filter(filters_in['parent_build_filter']),
+               'test': regex_filter(filters_in['test_filter']),
+               'ignore-test': regex_filter(filters_in['ignore_test_filter']),
                'status': statuses,
-               'owner': regex_filter(kwargs['owner_filter']),
+               'owner': regex_filter(filters_in['owner_filter']),
                'completed-after': completed_after,
                'completed-before': completed_before,
-               'with-notes': kwargs['with_notes'],
-               'with-new-status': kwargs['with_new_status'],
+               'with-notes': bool_filter(filters_in['with_notes']),
+               'with-new-status': bool_filter(filters_in['with_new_status']),
                'triage': triages,
-               'log-matches': [re.compile(r) for r in kwargs['log_matches']],
+               'log-matches': [re.compile(r)
+                               for r in filters_in['log_matches']],
                }
     return filters
+
+
+def parse_sort(kwargs, config: dict) -> list[swatbuild.Field]:
+    """Parse sort arguments.
+
+    Parse sort values given as program arguments and configuration file,
+    merging them to generate a list of Field objects for sorting builds.
+
+    Args:
+        kwargs: Dictionary of arguments from CLI options
+        config: Configuration dictionary loaded from config file
+
+    Returns:
+        List of Field objects for sorting builds
+    """
+    sort_cmd = kwargs.get('sort')
+    sort_config = config.get('swattool', {}).get('sort', [])
+    sort_in = sort_cmd if sort_cmd else sort_config
+    if not sort_in:
+        sort_in = ["Build"]
+    return [swatbuild.Field(k) for k in sort_in]
 
 
 def parse_urlopens(kwargs) -> set[str]:
@@ -140,15 +176,20 @@ def handle_login_exception(err: utils.LoginRequiredException) -> bool:
     Returns:
         True if login was successful, raises exception otherwise
     """
+    config = utils.load_config()
     if err.service == "swatbot":
         logger.warning("Login required to swatbot server")
-        user = click.prompt('swatbot user')
+        user = config.get('credentials', {}).get('swatbot_login')
+        if not user:
+            user = click.prompt('swatbot user')
         password = click.prompt('swatbot password', hide_input=True)
         return swatbotrest.login(user, password)
 
     if err.service == "bugzilla":
         logger.warning("Login required to bugzilla server")
-        user = click.prompt('bugzilla user')
+        user = config.get('credentials', {}).get('bugzilla_login')
+        if not user:
+            user = click.prompt('bugzilla user')
         password = click.prompt('bugzilla password', hide_input=True)
         return Bugzilla.login(user, password)
 
@@ -158,8 +199,9 @@ def handle_login_exception(err: utils.LoginRequiredException) -> bool:
 def shared_main(fn: Callable):
     """Shared entry point for swattool applications.
 
-    Provides common initialization and error handling for swattool applications.
-    Handles login exceptions by prompting for credentials when needed.
+    Provides common initialization and error handling for swattool
+    applications. Handles login exceptions by prompting for credentials when
+    needed.
 
     Args:
         fn: The main function to execute
@@ -210,7 +252,7 @@ def bugzilla_login(user: str, password: str):
 failures_list_options = [
     click.option('--limit', '-l', type=click.INT, default=None,
                  help="Only parse the n last failures"),
-    click.option('--sort', '-s', multiple=True, default=["Build"],
+    click.option('--sort', '-s', multiple=True, default=[],
                  type=click.Choice([str(f) for f in swatbuild.Field],
                                    case_sensitive=False),
                  help="Specify sort order"),
@@ -218,7 +260,8 @@ failures_list_options = [
                  type=click.Choice([p.name for p in swatbotrest.RefreshPolicy],
                                    case_sensitive=False),
                  default="auto",
-                 help="Fetch failures list from server instead of using cache"),
+                 help="Fetch failures list from server instead of using cache"
+                 ),
     click.option('--test-filter', '-t', multiple=True,
                  help="Only show some tests"),
     click.option('--build-filter', '-b', multiple=True,
@@ -239,9 +282,13 @@ failures_list_options = [
     click.option('--completed-before', '-B',
                  type=click.DateTime(),
                  help="Only show failures before a given date"),
-    click.option('--with-notes', '-N', type=click.BOOL, default=None,
+    click.option('--with-notes', '-N', default="both",
+                 type=click.Choice(["yes", "no", "both", "true", "false"],
+                                   case_sensitive=False),
                  help="Only show failures with or without attached note"),
-    click.option('--with-new-status', type=click.BOOL, default=None,
+    click.option('--with-new-status', default=None,
+                 type=click.Choice(["yes", "no", "both", "true", "false"],
+                                   case_sensitive=False),
                  help="Only show failures with or without new (local) status"),
     click.option('--log-matches', multiple=True, default=None,
                  help="Only show failures with logs matching a given regex. "
@@ -277,7 +324,8 @@ def _format_pending_failures(builds: list[swatbuild.Build],
     return (table, headers)
 
 
-def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
+def _get_builds_infos(refresh: str, limit: int,
+                      sort: Collection[swatbuild.Field],
                       filters: dict[str, Any], for_review: bool = False,
                       ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
@@ -293,7 +341,7 @@ def _get_builds_infos(refresh: str, limit: int, sort: Collection[str],
 
 
 def _show_failures(refresh: str, urlopens: set[str], limit: int,
-                   sort: Collection[str], filters: dict[str, Any]):
+                   sort: Collection[swatbuild.Field], filters: dict[str, Any]):
     """Show all failures waiting for triage.
 
     Args:
@@ -347,8 +395,7 @@ def _show_failures(refresh: str, urlopens: set[str], limit: int,
               type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
                                 case_sensitive=False),
               help="Only show some triage statuses")
-def show_failures(refresh: str, limit: int, sort: list[str],
-                  **kwargs):
+def show_failures(refresh: str, limit: int, **kwargs):
     """Show all failures, including the old ones.
 
     Args:
@@ -358,15 +405,16 @@ def show_failures(refresh: str, limit: int, sort: list[str],
         **kwargs: Additional filter arguments from CLI options
     """
     urlopens = parse_urlopens(kwargs)
-    filters = parse_filters(kwargs)
+    config = utils.load_config()
+    filters = parse_filters(kwargs, config)
+    sort = parse_sort(kwargs, config)
     _show_failures(refresh, urlopens, limit, sort, filters)
 
 
 @maingroup.command()
 @_add_options(failures_list_options)
 @_add_options(url_open_options)
-def show_pending_failures(refresh: str, limit: int, sort: list[str],
-                          **kwargs):
+def show_pending_failures(refresh: str, limit: int, **kwargs):
     """Show all failures waiting for triage.
 
     Args:
@@ -376,17 +424,17 @@ def show_pending_failures(refresh: str, limit: int, sort: list[str],
         **kwargs: Additional filter arguments from CLI options
     """
     urlopens = parse_urlopens(kwargs)
-    filters = parse_filters(kwargs)
+    config = utils.load_config()
+    filters = parse_filters(kwargs, config)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    sort = parse_sort(kwargs, config)
     _show_failures(refresh, urlopens, limit, sort, filters)
 
 
 @maingroup.command()
 @_add_options(failures_list_options)
 @_add_options(url_open_options)
-def review_pending_failures(refresh: str,
-                            limit: int, sort: list[str],
-                            **kwargs):
+def review_pending_failures(refresh: str, limit: int, **kwargs):
     """Review failures waiting for triage.
 
     Args:
@@ -396,8 +444,10 @@ def review_pending_failures(refresh: str,
         **kwargs: Additional filter arguments from CLI options
     """
     urlopens = parse_urlopens(kwargs)
-    filters = parse_filters(kwargs)
+    config = utils.load_config()
+    filters = parse_filters(kwargs, config)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    sort = parse_sort(kwargs, config)
 
     builds, userinfos = _get_builds_infos(refresh, limit, sort, filters,
                                           for_review=True)
@@ -405,7 +455,7 @@ def review_pending_failures(refresh: str,
     if not builds:
         return
 
-    reviewmenu = review.ReviewMenu(builds, userinfos, urlopens)
+    reviewmenu = review.ReviewMenu(config, builds, userinfos, urlopens)
     reviewmenu.show()
 
     userinfos.save()
@@ -419,9 +469,8 @@ def review_pending_failures(refresh: str,
                 type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
                                   case_sensitive=False))
 @click.argument('status-comment', type=str)
-def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
-                          status: str, status_comment: str,
-                          **kwargs):
+def batch_triage_failures(refresh: str, limit: int, yes: bool, status: str,
+                          status_comment: str, **kwargs):
     """Triage pending failures matching given criteria.
 
     Args:
@@ -436,11 +485,13 @@ def batch_triage_failures(refresh: str, limit: int, sort: list[str], yes: bool,
     """
     # pylint: disable=too-many-arguments,too-many-positional-arguments
 
-    filters = parse_filters(kwargs)
+    config = utils.load_config()
+    filters = parse_filters(kwargs, config)
     filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    sort = parse_sort(kwargs, config)
 
     builds, userinfos = _get_builds_infos(refresh, limit, sort, filters)
-    reviewmenu = review.ReviewMenu(builds, userinfos)
+    reviewmenu = review.ReviewMenu(config, builds, userinfos)
     reviewmenu.batch_menu(not yes,
                           swatbotrest.TriageStatus.from_str(status),
                           status_comment)

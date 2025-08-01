@@ -427,7 +427,8 @@ class InitManager:
         self._db.add_logs_data(buildbotrest.save_log_data_cache())
         self._db.commit()
 
-    def get_builds(self, sort: Collection[str]) -> list[swatbuild.Build]:
+    def get_builds(self, sort: Collection[swatbuild.Field]
+                   ) -> list[swatbuild.Build]:
         """Get consolidated list of failure infos.
 
         Returns the list of builds sorted according to the specified fields.
@@ -442,6 +443,6 @@ class InitManager:
             return []
 
         def sortfn(elem):
-            return elem.get_sort_tuple([swatbuild.Field(k) for k in sort])
+            return elem.get_sort_tuple(sort)
 
         return sorted(self._builds, key=sortfn)

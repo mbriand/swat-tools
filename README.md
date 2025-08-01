@@ -86,6 +86,25 @@ Progress: 1/15
 
 Publish new local triage status to swatbot Django interface.
 
+# Configuration file
+
+A configuration file can be stored in `~/.config/swattool.toml`, with default
+values.
+
+## Example
+
+```
+[swattool]
+sort = ['Parent Build', 'Test']
+
+[swattool-filters]
+parent_build_filter = ['vk/*']
+with_new_status = false
+
+[credentials]
+swatbot_login = 'mdubois-briand'
+```
+
 # Known issues
 
 - We use the `readline` module to have a bit fancier input() function, but

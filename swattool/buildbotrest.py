@@ -53,6 +53,7 @@ def autobuilder_base_url(autobuilder_url) -> str:
 ab_short_names = {
     'autobuilder.yoctoproject.org/typhoon': 'ty',
     'autobuilder.yoctoproject.org/valkyrie': 'vk',
+    'valkyrie.yoctoproject.org': 'vk',
 }
 
 

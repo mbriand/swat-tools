@@ -14,6 +14,7 @@ import readline
 import subprocess
 import sys
 import tempfile
+import tomllib
 from typing import Any, Iterable, Optional
 
 from simple_term_menu import TerminalMenu  # type: ignore
@@ -21,6 +22,7 @@ import click
 import tabulate
 import xdg  # type: ignore
 
+CONFIG_FILE = xdg.xdg_config_home() / "swattool.toml"
 DATADIR = xdg.xdg_cache_home() / "swattool"
 CACHEDIR = DATADIR / "cache"
 
@@ -43,6 +45,15 @@ def _get_git_username() -> Optional[str]:
 
 
 MAILNAME = _get_git_username()
+
+
+def load_config() -> dict:
+    """Load configuration file."""
+    try:
+        with open(CONFIG_FILE, "rb") as f:
+            return tomllib.load(f)
+    except FileNotFoundError:
+        return {}
 
 
 class Color:

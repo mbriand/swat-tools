@@ -36,12 +36,14 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
     """
 
     def __init__(self,
+                 config: dict,
                  builds: list[swatbuild.Build],
                  userinfos: userdata.UserInfos,
                  urlopens: Optional[set[str]] = None):
         if urlopens is None:
             urlopens = set()
 
+        self.config = config
         self.builds = builds
         self.userinfos = userinfos
         self.urlopens = urlopens
@@ -76,7 +78,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
                 prev_entry = self.entry
                 self.review_menu()
-                if self.almost_done:
+                if self.almost_done and not self.done:
                     self.exit_menu()
                 if self.need_refresh:
                     self.need_refresh = False
@@ -467,6 +469,10 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 return True
 
             self.almost_done = True
+            if not self.config.get('swattool', {}).get('confirm_quit', True):
+                self.done = True
+                return True
+
             return True
 
         if command == "y":  # "yes", acting as Quit on exit menu
