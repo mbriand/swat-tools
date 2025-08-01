@@ -82,11 +82,11 @@ def find(buildbot_url, buildid_min, buildid_max, output: TextIO):
         for buildid in progress:
             progress.set_postfix_str(str(buildid))
             try:
-                missing, update = buildbot_operations.check_build_is_missing(
-                    rest_url, buildid)
-                if missing:
+                status = buildbot_operations.check_build_is_missing(rest_url,
+                                                                    buildid)
+                if status == buildbot_operations.BuildStatus.MISSING:
                     create_builds.append(buildid)
-                elif update:
+                elif status == buildbot_operations.BuildStatus.NEEDS_UPDATE:
                     update_builds.append(buildid)
             except KeyboardInterrupt:
                 break

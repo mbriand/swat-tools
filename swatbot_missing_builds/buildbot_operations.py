@@ -5,6 +5,7 @@
 import datetime
 import json
 import logging
+from enum import Enum
 from typing import Optional
 
 
@@ -12,6 +13,15 @@ from swattool import swatbotrest
 from swattool.webrequests import Session
 
 logger = logging.getLogger(__name__)
+
+
+class BuildStatus(Enum):
+    """Status of a build check result."""
+
+    UP_TO_DATE = "up_to_date"
+    MISSING = "missing"
+    NEEDS_UPDATE = "needs_update"
+    IGNORED = "ignored"
 
 
 def get_build_collection(rest_url: str, build: dict) -> int:
@@ -90,7 +100,7 @@ def get_step_urls(rest_url: str, buildbot_url: str, build: dict, step: dict
     return [f"{prefix}/{log['name'].replace(' ', '_')}" for log in logs]
 
 
-def check_build_is_missing(rest_url: str, buildid: int) -> tuple[bool, bool]:
+def check_build_is_missing(rest_url: str, buildid: int) -> BuildStatus:
     """Check if a build is missing from swatbot or needs updating.
 
     Args:
@@ -98,7 +108,7 @@ def check_build_is_missing(rest_url: str, buildid: int) -> tuple[bool, bool]:
         buildid: The build ID to check
 
     Returns:
-        Tuple of (is_missing, needs_update)
+        BuildStatus indicating the build's status
     """
     cache_max_age = 60 * 60
 
@@ -108,7 +118,7 @@ def check_build_is_missing(rest_url: str, buildid: int) -> tuple[bool, bool]:
     build = build_data['builds'][0]
     if not build['complete_at']:
         logger.warning("Ignoring build %s as no end time was set", buildid)
-        return False, False
+        return BuildStatus.IGNORED
     build_time = datetime.datetime.fromtimestamp(build['complete_at'],
                                                  datetime.timezone.utc)
 
@@ -118,7 +128,7 @@ def check_build_is_missing(rest_url: str, buildid: int) -> tuple[bool, bool]:
         if len(sb_builds) != 1:
             logger.warning("Unexpected number of entries found on swatbot "
                            "for build %s: %s", buildid, len(sb_builds))
-            return False, False
+            return BuildStatus.IGNORED
 
         sb_complete = sb_builds[0]['attributes']['completed']
         sb_build_time = None
@@ -127,10 +137,10 @@ def check_build_is_missing(rest_url: str, buildid: int) -> tuple[bool, bool]:
 
         if sb_build_time == build_time:
             logger.debug("Build %s found on swatbot", buildid)
-            return False, False
+            return BuildStatus.UP_TO_DATE
         logger.info("Build %s found on swatbot but with %s complete time "
                     "instead of %s", buildid, sb_build_time, build_time)
-        return False, True
+        return BuildStatus.NEEDS_UPDATE
 
     logger.info("Build %s has to be sent to swatbot", buildid)
-    return True, False
+    return BuildStatus.MISSING
