@@ -103,7 +103,23 @@ def parse_urlopens(kwargs) -> set[str]:
     return opens
 
 
-@click.group()
+class AliasedGroup(click.Group):
+    """Support of subcommand aliases."""
+
+    aliases = {
+        'show': 'show-pending-failures',
+        'review': 'review-pending-failures',
+        'publish': 'publish-new-reviews',
+        'push': 'publish-new-reviews',
+    }
+
+    def get_command(self, ctx, cmd_name):
+        if cmd_name in self.aliases:
+            cmd_name = self.aliases[cmd_name]
+        return click.Group.get_command(self, ctx, cmd_name)
+
+
+@click.group(cls=AliasedGroup)
 @click.option('-v', '--verbose', count=True, help="Increase verbosity")
 def maingroup(verbose: int):
     """Handle triage of Yocto autobuilder failures.
