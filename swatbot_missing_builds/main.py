@@ -43,7 +43,7 @@ def main():
     shared_main(maingroup)
 
 
-def _get_build_collection(rest_url: str, build: dict) -> tuple[int, str, str]:
+def _get_build_collection(rest_url: str, build: dict) -> int:
     buildrequestid = build['buildrequestid']
     buildreq_url = f"{rest_url}/buildrequests/{buildrequestid}"
     buildreq_json = Session().get(buildreq_url, True, -1)
