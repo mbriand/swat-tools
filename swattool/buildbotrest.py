@@ -108,7 +108,11 @@ _log_data_cache_new: set[tuple[str, int, int, str]] = set()
 
 
 def populate_log_data_cache(data: list[sqlite3.Row]):
-    """Load cache from database rows."""
+    """Load log data cache from database rows.
+
+    Args:
+        data: List of database rows containing log metadata
+    """
     for row in data:
         key = (row["ab_instance"], row["build_id"], row["step_number"],
                row["logname"])
@@ -120,7 +124,11 @@ def populate_log_data_cache(data: list[sqlite3.Row]):
 
 
 def save_log_data_cache() -> list[dict[str, Any]]:
-    """Get new cache entries."""
+    """Get new cache entries for database storage.
+
+    Returns:
+        List of dictionaries containing new log data cache entries
+    """
     new_data = [{"ab_instance": k[0],
                  "build_id": k[1],
                  "step_number": k[2],

@@ -264,7 +264,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 break
 
     def exit_menu(self):
-        """Exit menu before really leaving."""
+        """Show exit confirmation menu before leaving the application."""
         commands = self._get_exit_commands()
         default_index = commands.index("[q] no")
 
