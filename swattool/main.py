@@ -15,6 +15,7 @@ from typing import Any, Callable, Collection
 
 import click
 import tabulate
+from tqdm.contrib.logging import tqdm_logging_redirect
 
 from .bugzilla import Bugzilla
 from . import initmanager
@@ -510,38 +511,42 @@ def publish_new_reviews(dry_run: bool):
     """
     reviews = review.get_new_reviews()
 
-    logger.info("Publishing new reviews...")
-    for (status, comment), triages in reviews.items():
-        bugurl = None
+    bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}, {postfix}]"
+    with tqdm_logging_redirect(reviews.items(), bar_format=bar_format,
+                               desc="Publishing new reviews") as progress:
+        for (status, comment), triages in progress:
+            bugurl = None
 
-        # Bug entry: need to also publish a new comment on bugzilla.
-        if status == swatbotrest.TriageStatus.BUG:
-            bugid = int(comment)
-            logs = [triage.extra['bugzilla-comment']
-                    for triage in sorted(triages, key=lambda d: d.change_date)
-                    if triage.failures]
+            # Bug entry: need to also publish a new comment on bugzilla.
+            if status == swatbotrest.TriageStatus.BUG:
+                bugid = int(comment)
+                logs = [triage.extra['bugzilla-comment']
+                        for triage in sorted(triages,
+                                             key=lambda d: d.change_date)
+                        if triage.failures]
 
-            if any(logs):
-                comment = bugurl = Bugzilla.get_bug_url(bugid)
-                bugtitle = Bugzilla.get_bug_title(bugid)
-                logger.info('Need to update ticket %s (%s) with:\n%s',
-                            bugtitle, bugurl,
-                            "\n".join(textwrap.indent(log, '    ')
-                                      for log in logs))
-                if not dry_run:
-                    Bugzilla.add_bug_comment(bugid, '\n'.join(logs))
+                if any(logs):
+                    comment = bugurl = Bugzilla.get_bug_url(bugid)
+                    bugtitle = Bugzilla.get_bug_title(bugid)
+                    logger.info('Need to update ticket %s (%s) with:\n%s',
+                                bugtitle, bugurl,
+                                "\n".join(textwrap.indent(log, '    ')
+                                          for log in logs))
+                    if not dry_run:
+                        Bugzilla.add_bug_comment(bugid, '\n'.join(logs))
 
-        failureids = [fid for triage in triages for fid in triage.failures]
-        wrappedfails = textwrap.wrap(', '.join(str(fid) for fid in failureids),
-                                     initial_indent='    ',
-                                     subsequent_indent='    ')
+            failureids = [fid for triage in triages for fid in triage.failures]
+            wrappedfails = textwrap.wrap(', '.join(str(fid)
+                                                   for fid in failureids),
+                                         initial_indent='    ',
+                                         subsequent_indent='    ')
 
-        logger.info('Need to update failures to status %s with comment "%s"'
-                    '\n%s\n',
-                    status, comment, "\n".join(wrappedfails))
-        if not dry_run:
-            for failureid in failureids:
-                swatbotrest.publish_status(failureid, status, comment)
+            logger.info('Need to update failures to status %s with comment '
+                        '"%s"\n%s\n',
+                        status, comment, "\n".join(wrappedfails))
+            if not dry_run:
+                for failureid in failureids:
+                    swatbotrest.publish_status(failureid, status, comment)
 
     if not dry_run:
         swatbotrest.invalidate_stepfailures_cache()

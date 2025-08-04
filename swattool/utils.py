@@ -20,6 +20,7 @@ from typing import Any, Iterable, Optional
 from simple_term_menu import TerminalMenu  # type: ignore
 import click
 import tabulate
+from tqdm.contrib.logging import tqdm_logging_redirect
 import xdg  # type: ignore
 
 CONFIG_FILE = xdg.xdg_config_home() / "swattool.toml"
@@ -271,15 +272,18 @@ class ExecutorWithProgress:
 
         Displays a progress bar showing job completion status.
         """
-        with click.progressbar(length=len(self.jobs), label="Loading failures",
-                               item_show_func=lambda a: a
-                               ) as jobsprogress:
+        bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]"
+        with tqdm_logging_redirect(total=len(self.jobs),
+                                   desc="Loading failures",
+                                   bar_format=bar_format
+                                   ) as jobsprogress:
             try:
                 alljobs = [job[1] for job in self.jobs]
                 for _ in concurrent.futures.as_completed(alljobs):
                     stepname = next((jobname for jobname, job in self.jobs
                                     if job.running()), "")
-                    jobsprogress.update(1, str(stepname))
+                    jobsprogress.update()
+                    jobsprogress.set_postfix_str(str(stepname))
             except KeyboardInterrupt:
                 self.executor.shutdown(cancel_futures=True)
             except Exception:

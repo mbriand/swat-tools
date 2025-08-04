@@ -17,8 +17,9 @@ import sqlite3
 from typing import Any, Collection
 from typing import Callable, Optional
 
-import click
 import pygit2  # type: ignore
+from tqdm.contrib.logging import logging_redirect_tqdm
+import tqdm
 
 from .bugzilla import Bugzilla
 from . import buildbotrest
@@ -96,14 +97,16 @@ class InitExecutor:
             InitPhase.DONE: 1,
         }
 
-        self.progress_bar = click.progressbar(
-            length=sum(self.phase_weight.values()),
-            label="Loading failures",
-            item_show_func=str)
+        bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]"
+        self.progress_bar = tqdm.tqdm(
+            total=sum(self.phase_weight.values()),
+            desc="Loading failures",
+            bar_format=bar_format
+        )
         self.progress = 0
 
         self._update_progress(InitPhase.WARM_UP)
-        self.progress_bar.render_progress()
+        self.progress_bar.refresh()
 
     def submit(self, phase: InitPhase, fn, *args, **kwargs) -> None:
         """Submit a new job to the executor.
@@ -130,7 +133,7 @@ class InitExecutor:
             assert sum(len(j) for j in self._jobs.values()) == 0
             self.done = True
 
-        self.progress_bar.render_finish()
+        self.progress_bar.close()
 
     def _wait_next_done(self, phase: InitPhase) -> None:
         wait_return = concurrent.futures.FIRST_COMPLETED
@@ -182,7 +185,8 @@ class InitExecutor:
         progress = int(sum(w * done_ratio(p)
                            for p, w in self.phase_weight.items()))
 
-        self.progress_bar.update(progress - self.progress, current_phase)
+        self.progress_bar.update(progress - self.progress)
+        self.progress_bar.set_postfix_str(str(current_phase))
         self.progress = progress
 
 
@@ -391,41 +395,44 @@ class InitManager:
         - Create build objects from database records.
         - Prepare logs for review if needed
         """
-        if self.for_review:
-            # This might be longer than everything else, especially if there is
-            # only few new failures: Add it first.
-            self._executor.submit(InitPhase.POKY_CI_ARCHIVE, self._update_gits)
+        with logging_redirect_tqdm():
+            if self.for_review:
+                # This might be longer than everything else, especially if
+                # there is only few new failures: Add it first.
+                self._executor.submit(InitPhase.POKY_CI_ARCHIVE,
+                                      self._update_gits)
 
-            self._executor.submit(InitPhase.AB_INTS, self._update_bugzilla)
+                self._executor.submit(InitPhase.AB_INTS, self._update_bugzilla)
 
-        self._fetch_missing_data()
-        self._executor.submit(InitPhase.FAILURES_LIST, self._update_failures)
+            self._fetch_missing_data()
+            self._executor.submit(InitPhase.FAILURES_LIST,
+                                  self._update_failures)
 
-        try:
-            self._executor.wait_phase_done(InitPhase.COLLECTIONS_DATA)
-        finally:
+            try:
+                self._executor.wait_phase_done(InitPhase.COLLECTIONS_DATA)
+            finally:
+                self._db.commit()
+
+            self._create_builds()
+            try:
+                self._executor.wait_all()
+            finally:
+                self._db.commit()
+
+            miss_failures = self._db.get_missing_failures()
+            if miss_failures:
+                logger.warning("Some failures were not fetched correctly: %s",
+                               miss_failures)
+
+            miss_collections = self._db.get_missing_collections()
+            miss_collections_ids = [m[0] for m in miss_collections
+                                    if _ab_url_is_valid(m[1])]
+            if miss_collections:
+                logger.warning("Some collections were not fetched correctly: "
+                               "%s", miss_collections_ids)
+
+            self._db.add_logs_data(buildbotrest.save_log_data_cache())
             self._db.commit()
-
-        self._create_builds()
-        try:
-            self._executor.wait_all()
-        finally:
-            self._db.commit()
-
-        miss_failures = self._db.get_missing_failures()
-        if miss_failures:
-            logger.warning("Some failures were not fetched correctly: %s",
-                           miss_failures)
-
-        miss_collections = self._db.get_missing_collections()
-        miss_collections_ids = [m[0] for m in miss_collections
-                                if _ab_url_is_valid(m[1])]
-        if miss_collections:
-            logger.warning("Some collections were not fetched correctly: %s",
-                           miss_collections_ids)
-
-        self._db.add_logs_data(buildbotrest.save_log_data_cache())
-        self._db.commit()
 
     def get_builds(self, sort: Collection[swatbuild.Field]
                    ) -> list[swatbuild.Build]:
