@@ -1,21 +1,96 @@
-A python tool helping triage of Yocto autobuilder failures reported on
-<https://swatbot.yoctoproject.org>.
+# SWAT Tools
 
-# Install
+A Python toolset for triaging Yocto autobuilder failures reported on
+[swatbot.yoctoproject.org](https://swatbot.yoctoproject.org).
 
-`pip install git+https://git.yoctoproject.org/git/swat-tools`
+This project provides two main tools:
+- **swattool**: Interactive triage tool for managing build failures
+- **swatbot_missing_builds**: Tool for importing missing buildbot builds into
+  swatbot
 
-# Usage
+## Overview
 
-The swattool command offers several subcommands, described here.
+The Yocto Project autobuilders run continuous integration tests that sometimes
+fail. When failures occur, they need to be triaged to determine if they
+represent real issues or infrastructure problems. SWAT Tools streamlines this
+process by providing command-line interfaces to review, categorize, and track
+these failures.
 
-## login
+## Installation
 
-Login to the swatbot Django interface.
+### Requirements
 
-## show-pending-failures
+- Python 3.11 or higher
 
-Show all failures waiting for triage. E.g.:
+### Install from Source
+
+```bash
+pip install git+https://git.yoctoproject.org/git/swat-tools
+```
+
+### Development Installation
+
+```bash
+git clone https://git.yoctoproject.org/git/swat-tools
+cd swat-tools
+pip install -e .
+```
+
+## swattool Usage
+
+The `swattool` command provides several subcommands for managing build failure
+triage:
+
+### Available Commands
+
+- `login` - Authenticate with swatbot interface
+- `bugzilla-login` - Authenticate with Yocto Project Bugzilla
+- `show-failures` - Display all failures (including resolved ones)
+- `show-pending-failures` - Display failures awaiting triage
+- `review-pending-failures` - Interactive triage interface
+- `batch-triage-failures` - Bulk triage operations
+- `publish-new-reviews` - Upload local triage decisions to swatbot
+
+### login
+
+Authenticate with the swatbot Django interface to enable triage operations.
+
+```bash
+swattool login
+```
+
+### bugzilla-login
+
+Authenticate with Yocto Project Bugzilla for bug reporting functionality.
+
+```bash
+swattool bugzilla-login
+```
+
+### show-failures
+
+Display all build failures, including those already triaged. Useful for
+reviewing historical data.
+
+```bash
+swattool show-failures [OPTIONS]
+```
+
+### show-pending-failures
+
+Display all build failures that are awaiting triage. This is the primary
+command for seeing what needs attention.
+
+**Common Options:**
+- `--owner-filter` - Show only failures assigned to a specific user. Can be
+  "none" for unassigned entries.
+- `--sort` - Sort by field values. Supported fields: 'Build', 'Status',
+  'Test', 'Owner', 'Worker', 'Completed', 'SWAT URL', 'Autobuilder URL',
+  'Failures', 'Branch', 'Notes', 'New Triage', 'Triage', 'Parent Build'.
+- `--limit N` - Limit results to N failures
+- `--test-filter PATTERN` - Filter by test name pattern
+
+**Example:**
 
 ```
 $ swattool show-pending-failures --owner-filter none --sort test
@@ -38,14 +113,20 @@ $ swattool show-pending-failures --owner-filter none --sort test
  565315  Err    toaster              opensuse154-ty-1  2024-10-05T03:40:33Z  https://swatbot.yoctoproject.org/collection/36093/  Run cmds
 ```
 
-## review-pending-failures
+### review-pending-failures
 
-Review failures waiting for triage.
+Interactive triage interface for reviewing and categorizing build failures.
+This command presents failures one by one and allows you to assign status and
+take actions.
 
-All modifications are done locally, nothing is pushed to swatbot or bugzilla,
-until you use the `publish-new-reviews` command.
+**Important:** All modifications are done locally until you use
+`publish-new-reviews` to upload your decisions.
 
-E.g.:
+**Example Session:**
+
+```bash
+swattool review-pending-failures
+```
 
 ```
 Build            565962
@@ -59,22 +140,6 @@ Autobuilder URL  https://autobuilder.yoctoproject.org/typhoon/#/builders/121/bui
 Failures         Unpack shared repositories
 
 Action
-  [a] ab-int
-  [b] bug opened
-  [c] cancelled no errors
-  [m] mail sent
-  [i] mail sent by Mathieu Dubois-Briand
-  [o] other
-  [f] other: Fixed
-  [t] not for swat
-  [r] reset status
-
-  [e] edit notes
-  [u] open autobuilder URL
-  [w] open swatbot URL
-  [g] open stdio log of first failed step URL
-  [x] open stdio log of first failed step in pager
-
 > [n] next
   [p] previous
   [l] list all failures
@@ -82,27 +147,121 @@ Action
 Progress: 1/15
 ```
 
-## publish-new-reviews
+### batch-triage-failures
 
-Publish new local triage status to swatbot Django interface.
+Perform bulk triage operations on multiple failures matching specific criteria.
 
-# Configuration file
-
-A configuration file can be stored in `~/.config/swattool.toml`, with default
-values.
-
-## Example
-
+```bash
+swattool batch-triage-failures --status "ab-int" \
+  --status-comment "Infrastructure issue" [OPTIONS]
 ```
+
+### publish-new-reviews
+
+Upload your local triage decisions to the swatbot Django interface. This
+command publishes all pending local changes made during
+`review-pending-failures` sessions.
+
+```bash
+swattool publish-new-reviews [--dry-run]
+```
+
+Use `--dry-run` to preview what would be published without making actual
+changes.
+
+## `swatbot_missing_builds` Usage
+
+The `swatbot_missing_builds` tool helps import missing buildbot builds into
+swatbot for tracking purposes.
+
+```bash
+swatbot_missing_builds [SUBCOMMAND] [OPTIONS]
+```
+
+See the tool's help output for available subcommands and options.
+
+## Configuration
+
+Both tools support configuration files to set default values and avoid
+repetitive command-line options.
+
+### Configuration File Location
+
+Store your configuration in `~/.config/swattool.toml`.
+
+### Configuration Options
+
+The configuration file uses TOML format with these main sections:
+
+#### `[swattool]` - General swattool settings
+
+- `sort` - Default sort order for failure listings (array of field names)
+
+#### `[swattool-filters]` - Default filter settings
+
+These correspond to the command-line filter options and allow you to set
+defaults:
+
+- `test_filter` - Filter by test names (array of patterns)
+- `build_filter` - Filter by build numbers (array of patterns)
+- `parent_build_filter` - Filter by parent build patterns (array of patterns)
+- `owner_filter` - Filter by owner names (array of patterns, use "none" for
+  unassigned)
+- `ignore_test_filter` - Exclude specific tests (array of patterns)
+- `status_filter` - Filter by build status (array of status names: "Success",
+  "Warnings", "Error", "Exception", "Cancelled", "Retry", "Skipped")
+- `completed_after` - Only show builds completed after this date (ISO format)
+- `completed_before` - Only show builds completed before this date (ISO format)
+- `with_notes` - Show only builds with/without notes (boolean or "both")
+- `with_new_status` - Show only builds with/without new triage status (boolean
+  or "both")
+- `triage_filter` - Filter by triage status (array of: "Pending", "AB-Int",
+  "YP-Int", "Analysis", "Bug", "Ignore")
+- `log_matches` - Filter by log content matching regex patterns (array of
+  regex strings)
+
+#### `[credentials]` - Login credentials (optional)
+
+- `swatbot_login` - Default username for swatbot authentication
+- `bugzilla_login` - Default username for Bugzilla authentication
+
+**Note:** Passwords are never stored in configuration files for security
+reasons.
+
+### Supported Field Names for Sorting
+
+Available field names for the `sort` configuration option:
+
+- `Build` - Build number
+- `Status` - Build status
+- `Test` - Test name
+- `Owner` - Assigned owner
+- `Worker` - Worker machine name
+- `Completed` - Completion timestamp
+- `SWAT URL` - SWAT interface URL
+- `Autobuilder URL` - Autobuilder URL
+- `Failures` - Failure descriptions
+- `Branch` - Git branch
+- `Notes` - Triage notes
+- `New Triage` - New triage status
+- `Triage` - Current triage status
+- `Parent Build` - Parent build number
+
+### Example Configuration
+
+```toml
 [swattool]
 sort = ['Parent Build', 'Test']
 
 [swattool-filters]
 parent_build_filter = ['vk/*']
 with_new_status = false
+status_filter = ['Error', 'Exception']
+completed_after = "2024-01-01T00:00:00"
 
 [credentials]
-swatbot_login = 'mdubois-briand'
+swatbot_login = 'your-username'
+bugzilla_login = 'your-username'
 ```
 
 # Known issues
@@ -110,20 +269,23 @@ swatbot_login = 'mdubois-briand'
 - We use the `readline` module to have a bit fancier input() function, but
   `simple_term_menu` does not behave well when `readline` is loaded. This has
   been reproduced with upstream `simple_term_menu` demo code, just by
-  additionally importing `readline`. We should either investigate the root cause
-  of the issue or get rid of one of the modules.
+  additionally importing `readline`. We should either investigate the root
+  cause of the issue or get rid of one of the modules.
   <https://github.com/IngoMeyer441/simple-term-menu/issues/98>
 
 # Contributing
 
-Please refer to our contributor guide here: https://docs.yoctoproject.org/contributor-guide/
-for full details on how to submit changes.
+Please refer to our contributor guide here:
+https://docs.yoctoproject.org/contributor-guide/ for full details on how to
+submit changes.
 
-As a quick guide, patches should be sent to yocto-patches@lists.yoctoproject.org
+As a quick guide, patches should be sent to
+yocto-patches@lists.yoctoproject.org
 The git command to do that would be:
 
 ```
-git send-email -M -1 --subject-prefix='swat-tools][PATCH' --to yocto-patches@lists.yoctoproject.org
+git send-email -M -1 --subject-prefix='swat-tools][PATCH' \
+  --to yocto-patches@lists.yoctoproject.org
 ```
 
 The 'To' header and prefix can be set as default for this repository:
