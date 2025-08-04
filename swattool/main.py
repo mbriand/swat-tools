@@ -550,3 +550,47 @@ def publish_new_reviews(dry_run: bool):
 
     if not dry_run:
         swatbotrest.invalidate_stepfailures_cache()
+
+
+CACHE_CLEAN_DATE_FILE = utils.CACHEDIR / 'cache_clean'
+
+
+def _do_clean_cache():
+    """Remove cache files that have not been used for some time."""
+    clean_limit_date = datetime.datetime.now() - datetime.timedelta(days=30)
+    clean_limit_time = clean_limit_date.timestamp()
+
+    logging.info("Cleaning old cache entries.")
+
+    for path in utils.CACHEDIR.rglob('*'):
+        if not path.is_file():
+            continue
+        if path.stat().st_atime > clean_limit_time:
+            continue
+        path.unlink()
+
+    with CACHE_CLEAN_DATE_FILE.open('w') as file:
+        file.write(str(datetime.datetime.now().timestamp()))
+
+
+@maingroup.result_callback()
+def maybe_clean_cache(*args, **kwargs):
+    """Trigger cache cleaning if it was not done lately."""
+    # pylint: disable=unused-argument
+
+    clean_date_min = datetime.datetime.now() - datetime.timedelta(days=7)
+
+    try:
+        with CACHE_CLEAN_DATE_FILE.open('r') as file:
+            last_clean = float(file.read())
+    except (FileNotFoundError, ValueError):
+        last_clean = 0
+
+    if last_clean < clean_date_min.timestamp():
+        _do_clean_cache()
+
+
+@maingroup.command()
+def clean_cache():
+    """Remove cache files that have not been used for some time."""
+    _do_clean_cache()
