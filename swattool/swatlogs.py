@@ -20,7 +20,7 @@ from . import utils
 
 logger = logging.getLogger(__name__)
 
-HILIGHTS_FORMAT_VERSION = 3
+HILIGHTS_FORMAT_VERSION = 4
 
 # Big log thershold in lines
 BIG_LOG_LIMIT = 1000 * 1000
@@ -28,23 +28,30 @@ BIG_LOG_LIMIT = 1000 * 1000
 
 class _Highlight:
     # pylint: disable=too-few-public-methods
-    def __init__(self, keyword: str, color: str, in_menu: bool, text: str):
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(self, keyword: Optional[str], color: str, text: str,
+                 in_menu: bool = False, is_context: bool = False):
         self.keyword = keyword
         self.color = color
-        self.in_menu = in_menu
         self.text = text
+        self.in_menu = in_menu
+        self.is_context = is_context
 
 
 class _Filter:
     # pylint: disable=too-few-public-methods
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(self, pat: re.Pattern, enabled: bool, color: Optional[str],
-                 in_menu: bool):
+                 in_menu: bool, context_before: int = 0,
+                 context_after: int = 0):
         self.pat = pat
         self.enabled = enabled
         self.color = color
         self.in_menu = in_menu
+        self.context_before = context_before
+        self.context_after = context_after
 
-    def match(self, line: str) -> tuple[bool, Optional[_Highlight]]:
+    def match(self, line: str) -> tuple[bool, Optional[_Highlight], list[int]]:
         """Check if the filter matches a given line.
 
         Args:
@@ -55,18 +62,20 @@ class _Filter:
             an optional highlight object.
         """
         if not self.enabled:
-            return (False, None)
+            return (False, None, [])
 
         match = self.pat.match(line)
         if not match:
-            return (False, None)
+            return (False, None, [])
 
         if not self.color:
-            return (True, None)
+            return (True, None, [])
 
-        hilight = _Highlight(match.group("keyword"), self.color, self.in_menu,
-                             line)
-        return (True, hilight)
+        hilight = _Highlight(match.group("keyword"), self.color, line,
+                             in_menu=self.in_menu)
+        context = list(range(-self.context_before, 0)) + \
+            list(range(1, self.context_after + 1))
+        return (True, hilight, context)
 
 
 class Log:
@@ -162,6 +171,8 @@ class Log:
                         True, utils.Color.RED, True),
                 _Filter(re.compile(r"RESULTS - .*: (?P<keyword>FAILED)"),
                         True, utils.Color.RED, True),
+                _Filter(re.compile(r"(?P<keyword>Failed ptests:)"),
+                        True, utils.Color.RED, True, context_after=1),
             ]
 
         return filters
@@ -172,10 +183,20 @@ class Log:
         highlight_lines = {}
         for linenum, line in enumerate(loglines, start=1):
             for filtr in filters:
-                matched, highlight = filtr.match(line)
+                matched, highlight, contextlines = filtr.match(line)
                 if matched:
                     if highlight:
                         highlight_lines[linenum] = highlight
+                    for contextline in contextlines:
+                        hline = linenum + contextline
+                        if hline in highlight_lines:
+                            continue
+                        if hline < 0 or hline >= len(loglines):
+                            continue
+                        text = loglines[hline - 1]
+                        hl = _Highlight(None, utils.Color.NONE, text,
+                                        is_context=True)
+                        highlight_lines[hline] = hl
                     break
 
         return highlight_lines
@@ -266,4 +287,4 @@ class Log:
         """
         highlights = self.get_highlights()
         return [highlights[line].text for line in sorted(highlights)
-                if highlights[line].in_menu]
+                if highlights[line].in_menu or highlights[line].is_context]

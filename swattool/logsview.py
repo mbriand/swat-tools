@@ -163,15 +163,16 @@ class LogView:
             Formatted line with ANSI color codes
         """
         highlight_lines = self.log.get_highlights()
+        highlight = highlight_lines.get(linenum)
         if linenum == colorized_line:
             if linenum in highlight_lines:
                 linecolor = highlight_lines[linenum].color
             else:
                 linecolor = utils.Color.CYAN
             text = utils.Color.colorize(text, linecolor)
-        elif linenum in highlight_lines:
-            pat = highlight_lines[linenum].keyword
-            color = highlight_lines[linenum].color
+        elif highlight and not highlight.is_context and highlight.keyword:
+            pat = highlight.keyword
+            color = highlight.color
             text = text.replace(pat, utils.Color.colorize(pat, color))
         return text
 

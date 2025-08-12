@@ -73,6 +73,7 @@ class Color:
     PURPLE = "\x1b[1;35m"
     CYAN = "\x1b[1;36m"
     WHITE = "\x1b[1;37m"
+    NONE = ""
 
     @classmethod
     def colorize(cls, text: str, color: str) -> str:
