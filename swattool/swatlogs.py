@@ -144,8 +144,7 @@ class Log:
                 #    error.
                 #  - Match on makefile "command timed out", always show in
                 #    menu.
-                #  - Match on test failures (FAIL or FAILED), always show in
-                #    menu.
+                #  - Match on test failures (FAIL), always show in menu.
                 _Filter(re.compile(r".*libgpg-error:"), True, None, False),
                 _Filter(re.compile(r".*test_fixed_size_error:"),
                         True, None, False),
@@ -167,9 +166,7 @@ class Log:
                     status == swatbuild.Status.ERROR),
                 _Filter(re.compile(r"^(?P<keyword>command timed out:)"),
                         True, utils.Color.RED, True),
-                _Filter(re.compile(r".* - INFO -  ... (?P<keyword>FAIL)"),
-                        True, utils.Color.RED, True),
-                _Filter(re.compile(r"RESULTS - .*: (?P<keyword>FAILED)"),
+                _Filter(re.compile(r".* \.\.\. (?P<keyword>FAIL[^ ]*).*"),
                         True, utils.Color.RED, True),
                 _Filter(re.compile(r"(?P<keyword>Failed ptests:)"),
                         True, utils.Color.RED, True, context_after=1),
