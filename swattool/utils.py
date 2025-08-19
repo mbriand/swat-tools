@@ -280,7 +280,12 @@ class ExecutorWithProgress:
                                    ) as jobsprogress:
             try:
                 alljobs = [job[1] for job in self.jobs]
-                for _ in concurrent.futures.as_completed(alljobs):
+                for fut in concurrent.futures.as_completed(alljobs):
+                    err = fut.exception()
+                    if (err and isinstance(err, SwattoolException)):
+                        logging.warning(str(err))
+                    elif err:
+                        raise err
                     stepname = next((jobname for jobname, job in self.jobs
                                     if job.running()), "")
                     jobsprogress.update()
