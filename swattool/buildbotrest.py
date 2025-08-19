@@ -86,6 +86,14 @@ def _get_json(url) -> Optional[dict[str, Any]]:
     return json_data
 
 
+def _fix_build_id(buildid: int) -> int:
+    # Fix builds with faked ids (old buildbot instances).
+    if buildid >= 2000000000000:
+        buildid -= 2000000000000
+
+    return buildid
+
+
 def get_build(rest_url: str, buildid: int) -> Optional[dict[str, Any]]:
     """Get data about a given build.
 
@@ -98,6 +106,8 @@ def get_build(rest_url: str, buildid: int) -> Optional[dict[str, Any]]:
     Returns:
         Dictionary containing build information or None if request fails
     """
+    buildid = _fix_build_id(buildid)
+
     build_url = f"{rest_url}/builds/{buildid}?property=*"
     logger.debug("Build info URL: %s", build_url)
 
@@ -159,6 +169,7 @@ def get_log_data(rest_url: str, buildid: int, stepnumber: int,
     if metadata:
         return metadata
 
+    buildid = _fix_build_id(buildid)
     info_url = f"{rest_url}/builds/{buildid}/steps/{stepnumber}/logs/{logname}"
     logger.debug("Log info URL: %s", info_url)
 
