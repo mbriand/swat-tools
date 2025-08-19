@@ -27,6 +27,7 @@ class Database:
     """
 
     def __init__(self):
+        utils.DATADIR.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(utils.DATADIR / "swattool.db")
         self._db.row_factory = sqlite3.Row
         self._initialize_tables()

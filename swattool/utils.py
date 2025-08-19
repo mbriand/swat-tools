@@ -168,6 +168,7 @@ def setup_logging(verbose: int):
 
 
 def _save_readline(history_file):
+    history_file.parent.mkdir(parents=True, exist_ok=True)
     readline.write_history_file(history_file)
 
 
