@@ -254,7 +254,7 @@ Available field names for the `sort` configuration option:
 sort = ['Parent Build', 'Test']
 
 [swattool-filters]
-parent_build_filter = ['vk/*']
+parent_build_filter = ['vk/*', '^$']
 with_new_status = false
 status_filter = ['Error', 'Exception']
 completed_after = "2024-01-01T00:00:00"
