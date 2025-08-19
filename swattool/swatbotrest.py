@@ -182,7 +182,7 @@ def _handle_server_request(fn, url: str, *args, **kwargs) -> dict:
             errjson = json.loads(err.response.text)
             errdetail += f": {errjson['errors']}"
         except Exception:  # pylint: disable=broad-exception-caught
-            pass
+            errdetail += f": {str(err.args[0])}"
         errstr = f"Failed to fetch {url}{errdetail}"
         raise utils.SwattoolException(errstr) from err
     except json.decoder.JSONDecodeError as err:
