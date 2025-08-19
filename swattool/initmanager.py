@@ -145,6 +145,9 @@ class InitExecutor:
             err = fut.exception()
             if (err and isinstance(err, utils.SwattoolException)
                     and not isinstance(err, utils.LoginRequiredException)):
+                if phase == InitPhase.FAILURES_LIST:
+                    errstr = f"Failed to fetch failures list: {str(err)}"
+                    raise utils.SwattoolException(errstr) from err
                 logging.warning(str(err))
             elif err:
                 raise err

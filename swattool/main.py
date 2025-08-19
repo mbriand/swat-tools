@@ -213,6 +213,8 @@ def shared_main(fn: Callable):
         success = handle_login_exception(err)
         if success:
             fn()
+    except utils.SwattoolException as err:
+        logging.error(str(err))
 
 
 def main():
