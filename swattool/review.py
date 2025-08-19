@@ -798,7 +798,7 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
             if triage.failures:
                 reviews.setdefault((status, comment), []).append(triage)
             elif old_failures:
-                userinfo.clear()
+                userinfo.notes.clear()
 
     userinfos = userdata.UserInfos()
 
