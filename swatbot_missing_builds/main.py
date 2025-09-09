@@ -70,33 +70,26 @@ def find(buildbot_url, buildid_min, buildid_max, output: TextIO):
     create_builds = []
     update_builds = []
 
-    # This operation is slow, about 10000 build check per hour when I was
-    # testing it. We could probably parallelize server requests to speed-up
-    # everything, but:
-    # - I don't want to flood buildbot and swatbot servers with my requests.
-    # - Having to scan the whole buildid range should be rare, so there is
-    #   probably no need to complexify the code for this rare use case.
-    bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}, {postfix}]"
-    with tqdm_logging_redirect(range(buildid_min, buildid_max + 1),
-                               bar_format=bar_format) as progress:
-        for buildid in progress:
-            progress.set_postfix_str(str(buildid))
-            try:
-                status = buildbot_operations.check_build_is_missing(rest_url,
-                                                                    buildid)
-                if status == buildbot_operations.BuildStatus.MISSING:
-                    create_builds.append(buildid)
-                elif status == buildbot_operations.BuildStatus.NEEDS_UPDATE:
-                    update_builds.append(buildid)
-            except KeyboardInterrupt:
-                break
-            except requests.exceptions.HTTPError:
-                logger.warning("Build %s not found on buildbot server",
-                               buildid)
-            except (requests.exceptions.RequestException,
-                    json.JSONDecodeError, KeyError, ValueError) as err:
-                logger.exception("Failed to analyze build %s: %s", buildid,
-                                 err)
+    def process_buildid(buildid):
+        try:
+            status = buildbot_operations.check_build_is_missing(rest_url,
+                                                                buildid)
+            if status == buildbot_operations.BuildStatus.MISSING:
+                create_builds.append(buildid)
+            elif status == buildbot_operations.BuildStatus.NEEDS_UPDATE:
+                update_builds.append(buildid)
+        except requests.exceptions.HTTPError:
+            logger.warning("Build %s not found on buildbot server",
+                           buildid)
+        except (requests.exceptions.RequestException,
+                json.JSONDecodeError, KeyError, ValueError) as err:
+            logger.exception("Failed to analyze build %s: %s", buildid,
+                             err)
+
+    executor = utils.ExecutorWithProgress(4)
+    for buildid in range(buildid_min, buildid_max + 1):
+        executor.submit(f"Fetching build {buildid}", process_buildid, buildid)
+    executor.run()
 
     data = {
         'buildbot_url': base_url,
