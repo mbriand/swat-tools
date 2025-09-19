@@ -100,7 +100,8 @@ def get_step_urls(rest_url: str, buildbot_url: str, build: dict, step: dict
     return [f"{prefix}/{log['name'].replace(' ', '_')}" for log in logs]
 
 
-def check_build_is_missing(rest_url: str, buildid: int) -> BuildStatus:
+def check_build_is_missing(base_url, rest_url: str, buildid: int
+                           ) -> BuildStatus:
     """Check if a build is missing from swatbot or needs updating.
 
     Args:
@@ -124,6 +125,8 @@ def check_build_is_missing(rest_url: str, buildid: int) -> BuildStatus:
 
     sb_builds = swatbotrest.get_json(f"/build/?buildid={buildid}",
                                      cache_max_age)['data']
+    build_path = f"/builders/{build['builderid']}/builds/{build['number']}"
+    build_url = f"{base_url}/#{build_path}"
     if len(sb_builds) >= 1:
         if len(sb_builds) != 1:
             logger.warning("Unexpected number of entries found on swatbot "
@@ -139,8 +142,9 @@ def check_build_is_missing(rest_url: str, buildid: int) -> BuildStatus:
             logger.debug("Build %s found on swatbot", buildid)
             return BuildStatus.UP_TO_DATE
         logger.info("Build %s found on swatbot but with %s complete time "
-                    "instead of %s", buildid, sb_build_time, build_time)
+                    "instead of %s: %s", buildid, sb_build_time, build_time,
+                    build_url)
         return BuildStatus.NEEDS_UPDATE
 
-    logger.info("Build %s has to be sent to swatbot", buildid)
+    logger.info("Build %s has to be sent to swatbot: %s", buildid, build_url)
     return BuildStatus.MISSING

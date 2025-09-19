@@ -72,7 +72,8 @@ def find(buildbot_url, buildid_min, buildid_max, output: TextIO):
 
     def process_buildid(buildid):
         try:
-            status = buildbot_operations.check_build_is_missing(rest_url,
+            status = buildbot_operations.check_build_is_missing(base_url,
+                                                                rest_url,
                                                                 buildid)
             if status == buildbot_operations.BuildStatus.MISSING:
                 create_builds.append(buildid)
