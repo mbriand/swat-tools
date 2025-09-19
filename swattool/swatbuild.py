@@ -119,7 +119,7 @@ class Failure:
         self.id = row['failure_id']
         self.build = build
         self.stepnumber = int(row['step_number'])
-        self.status = Status.from_int(row['status'])
+        self.status = Status.from_int(row['failure_status'])
         self.stepname = row['step_name']
         self.urls = json.loads(row['urls'])
         triage = row['remote_triage']

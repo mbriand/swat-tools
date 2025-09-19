@@ -74,8 +74,8 @@ class Database:
             if 'failure' not in tables:
                 cur.execute("CREATE TABLE "
                             "failure(failure_id PRIMARY KEY, build_id, "
-                            "step_number, step_name, urls, remote_triage, "
-                            "remote_triage_notes)")
+                            "step_number, step_name, urls, failure_status, "
+                            "remote_triage, remote_triage_notes)")
             if 'logs_data' not in tables:
                 cur.execute("CREATE TABLE "
                             "logs_data(ab_instance, logid, build_id, "
@@ -92,8 +92,8 @@ class Database:
         with self.cursor() as cur:
             cur.executemany("INSERT INTO failure "
                             "VALUES(:failure_id, :build_id, :step_number, "
-                            ":step_name, :urls, :remote_triage, "
-                            ":remote_triage_notes) "
+                            ":step_name, :urls, :failure_status, "
+                            ":remote_triage, :remote_triage_notes) "
                             "ON CONFLICT(failure_id) DO NOTHING;", data)
 
     def drop_failures(self,

@@ -252,6 +252,7 @@ class InitManager:
                  'urls': json.dumps({u.split()[0].rsplit('/')[-1]: u
                                      for u in
                                      f['attributes']['urls'].split()}),
+                 'failure_status': f['attributes']['status'],
                  'remote_triage': f['attributes']['triage'],
                  'remote_triage_notes': f['attributes']['triagenotes']
                  }
