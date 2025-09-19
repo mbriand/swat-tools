@@ -206,7 +206,7 @@ class Failure:
 
         return str(self.triage)
 
-    def __str__(self):
+    def __repr__(self):
         return (f"Failure {self.id}: "
                 f"{self.status} on step {self.stepnumber} "
                 f"of build {self.build}, {self.stepname}"
