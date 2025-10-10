@@ -157,6 +157,20 @@ class Log:
                                    flags=re.I),
                         utils.Color.RED, in_menu=is_error, context_after=5),
 
+                # yocto.io URLs
+                # - diffoscope URLs: "valkyrie.yocto.io/pub/repro-fail"
+                # - test logs: "yocto.io/pub/non-release"
+                _Filter(re.compile(".*/(?P<keyword>[^/]*yocto.io/pub/"
+                                   r"non-release[^ ']+).*"),
+                        enabled=(test.rpartition("-")[2] in ["ptest", "tc"]),
+                        in_logview=False, in_bugzilla=True,
+                        repl=r'https://\1' + f'/{test}/'),
+                _Filter(re.compile(".*/(?P<keyword>[^/]*yocto.io/pub/"
+                                   r"repro-fail[^/]*/[^ ']+).*"),
+                        enabled=(test == "reproducible"),
+                        in_logview=False, in_bugzilla=True,
+                        repl=r'https://\1'),
+
                 # Generic rules:
                 #  - Do nothing on "libgpg-error:".
                 #  - Do nothing on "test_fixed_size_error:".
