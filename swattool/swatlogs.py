@@ -41,9 +41,9 @@ class _Highlight:
 class _Filter:
     # pylint: disable=too-few-public-methods
     # pylint: disable=too-many-arguments,too-many-positional-arguments
-    def __init__(self, pat: re.Pattern, enabled: bool, color: Optional[str],
-                 in_menu: bool, context_before: int = 0,
-                 context_after: int = 0):
+    def __init__(self, pat: re.Pattern, color: Optional[str],
+                 enabled: bool = True, in_menu: bool = False,
+                 context_before: int = 0, context_after: int = 0):
         self.pat = pat
         self.enabled = enabled
         self.color = color
@@ -105,18 +105,19 @@ class Log:
         status = self.failure.status
         test = self.failure.build.test
 
+        is_error = status == swatbuild.Status.ERROR
+        is_warning = status == swatbuild.Status.WARNING
+
         if loglen > BIG_LOG_LIMIT:
             logging.warning("Log file for build %s (failure %s) is quite big: "
                             "using simplified log filters",
                             self.failure.build.id, self.failure.id)
             filters = [
                 _Filter(re.compile(r"(?P<keyword>\S*error):", flags=re.I),
-                        True, utils.Color.RED,
-                        status == swatbuild.Status.ERROR),
+                        utils.Color.RED, in_menu=is_error),
                 _Filter(re.compile(r"(?P<keyword>\S*warning):",
                                    flags=re.I),
-                        True, utils.Color.YELLOW,
-                        status == swatbuild.Status.WARNING),
+                        utils.Color.YELLOW, in_menu=is_warning),
             ]
         else:
             filters = [
@@ -125,12 +126,12 @@ class Log:
                 #    output).
                 #  - Match on "selenium .*exception:".
                 _Filter(re.compile(r".*except\s*\S*error:", flags=re.I),
-                        test == "toaster", None, False),
+                        None, enabled=test == "toaster", in_menu=False),
                 _Filter(re.compile(
                     r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
                     flags=re.I),
-                    test == "toaster", utils.Color.RED,
-                    status == swatbuild.Status.ERROR),
+                    utils.Color.RED, enabled=(test == "toaster"),
+                    in_menu=is_error),
 
                 # Generic rules:
                 #  - Do nothing on "libgpg-error:".
@@ -145,31 +146,26 @@ class Log:
                 #  - Match on makefile "command timed out", always show in
                 #    menu.
                 #  - Match on test failures (FAIL), always show in menu.
-                _Filter(re.compile(r".*libgpg-error:"), True, None, False),
-                _Filter(re.compile(r".*test_fixed_size_error:"),
-                        True, None, False),
-                _Filter(re.compile(r".*( |::)error::.*ok"), True, None, False),
+                _Filter(re.compile(r".*libgpg-error:"), None),
+                _Filter(re.compile(r".*test_fixed_size_error:"), None),
+                _Filter(re.compile(r".*( |::)error::.*ok"), None),
                 _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):",
                                    flags=re.I),
-                        True, utils.Color.RED,
-                        status == swatbuild.Status.ERROR),
+                        utils.Color.RED, in_menu=is_error),
                 _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*warning):",
                                    flags=re.I),
-                        True, utils.Color.YELLOW,
-                        status == swatbuild.Status.WARNING),
+                        utils.Color.YELLOW, in_menu=is_warning),
                 _Filter(re.compile(r"^(?P<keyword>fatal):", flags=re.I),
-                        True, utils.Color.RED,
-                        status == swatbuild.Status.ERROR),
+                        utils.Color.RED, in_menu=is_error),
                 _Filter(re.compile(
                     r"(.*\s|^)(?P<keyword>make\[\d\]):.* Error"),
-                    True, utils.Color.RED,
-                    status == swatbuild.Status.ERROR),
+                    utils.Color.RED, in_menu=is_error),
                 _Filter(re.compile(r"^(?P<keyword>command timed out:)"),
-                        True, utils.Color.RED, True),
+                        utils.Color.RED, in_menu=True),
                 _Filter(re.compile(r".* \.\.\. (?P<keyword>FAIL[^ ]*).*"),
-                        True, utils.Color.RED, True),
+                        utils.Color.RED, in_menu=True),
                 _Filter(re.compile(r"(?P<keyword>Failed ptests:)"),
-                        True, utils.Color.RED, True, context_after=1),
+                        utils.Color.RED, in_menu=True, context_after=1),
             ]
 
         return filters
