@@ -658,12 +658,16 @@ def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
         Formatted comment string or None if log URL is not available
     """
     logurl = build.get_first_failure().get_log_url()
-    if logurl:
-        testinfos = " ".join([build.test, build.worker, build.branch,
-                              f'completed at {build.completed}'])
-        bcomment = "\n".join([testinfos, logurl])
-    else:
-        bcomment = None
+    if not logurl:
+        return None
+
+    failure = build.get_first_failure()
+    log = swatlogs.Log(failure)
+    highlights = log.get_bugzilla_highlights()
+
+    testinfos = " ".join([build.test, build.worker, build.branch,
+                          f'completed at {build.completed}'])
+    bcomment = "\n".join([testinfos, *highlights, logurl])
 
     return bcomment
 

@@ -30,11 +30,13 @@ class _Highlight:
     # pylint: disable=too-few-public-methods
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(self, keyword: Optional[str], color: str, text: str,
-                 in_menu: bool = False, is_context: bool = False):
+                 in_menu: bool = False, in_bugzilla: bool = False,
+                 is_context: bool = False):
         self.keyword = keyword
         self.color = color
         self.text = text
         self.in_menu = in_menu
+        self.in_bugzilla = in_bugzilla
         self.is_context = is_context
 
 
@@ -43,11 +45,13 @@ class _Filter:
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(self, pat: re.Pattern, color: Optional[str],
                  enabled: bool = True, in_menu: bool = False,
+                 in_bugzilla: bool = False,
                  context_before: int = 0, context_after: int = 0):
         self.pat = pat
-        self.enabled = enabled
         self.color = color
+        self.enabled = enabled
         self.in_menu = in_menu
+        self.in_bugzilla = in_bugzilla
         self.context_before = context_before
         self.context_after = context_after
 
@@ -72,7 +76,8 @@ class _Filter:
             return (True, None, [])
 
         hilight = _Highlight(match.group("keyword"), self.color, line,
-                             in_menu=self.in_menu)
+                             in_menu=self.in_menu,
+                             in_bugzilla=self.in_bugzilla)
         context = list(range(-self.context_before, 0)) + \
             list(range(1, self.context_after + 1))
         return (True, hilight, context)
@@ -131,7 +136,7 @@ class Log:
                     r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
                     flags=re.I),
                     utils.Color.RED, enabled=(test == "toaster"),
-                    in_menu=is_error),
+                    in_menu=is_error, in_bugzilla=True),
 
                 # Generic rules:
                 #  - Do nothing on "libgpg-error:".
@@ -178,8 +183,9 @@ class Log:
             for filtr in filters:
                 matched, highlight, contextlines = filtr.match(line)
                 if matched:
-                    if highlight:
-                        highlight_lines[linenum] = highlight
+                    if not highlight:
+                        continue
+                    highlight_lines[linenum] = highlight
                     for contextline in contextlines:
                         hline = linenum + contextline
                         if hline in highlight_lines:
@@ -188,6 +194,8 @@ class Log:
                             continue
                         text = loglines[hline - 1]
                         hl = _Highlight(None, utils.Color.NONE, text,
+                                        in_menu=highlight.in_menu,
+                                        in_bugzilla=highlight.in_bugzilla,
                                         is_context=True)
                         highlight_lines[hline] = hl
                     break
@@ -280,4 +288,14 @@ class Log:
         """
         highlights = self.get_highlights()
         return [highlights[line].text for line in sorted(highlights)
-                if highlights[line].in_menu or highlights[line].is_context]
+                if highlights[line].in_menu]
+
+    def get_bugzilla_highlights(self) -> list[str]:
+        """Get text lines from a log file to use in Bugzilla comments.
+
+        Returns:
+            List of highlighted text lines
+        """
+        highlights = self.get_highlights()
+        return [highlights[line].text for line in sorted(highlights)
+                if highlights[line].in_bugzilla]
