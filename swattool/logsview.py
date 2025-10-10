@@ -162,7 +162,8 @@ class LogView:
         Returns:
             Formatted line with ANSI color codes
         """
-        highlight_lines = self.log.get_highlights()
+        highlight_lines = {k: h for k, h in self.log.get_highlights().items()
+                           if h.in_logview}
         highlight = highlight_lines.get(linenum)
         if linenum == colorized_line:
             if linenum in highlight_lines:

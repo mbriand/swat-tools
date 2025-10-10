@@ -29,12 +29,13 @@ BIG_LOG_LIMIT = 1000 * 1000
 class _Highlight:
     # pylint: disable=too-few-public-methods
     # pylint: disable=too-many-arguments,too-many-positional-arguments
-    def __init__(self, keyword: Optional[str], color: str, text: str,
-                 in_menu: bool = False, in_bugzilla: bool = False,
-                 is_context: bool = False):
+    def __init__(self, keyword: Optional[str], color: Optional[str], text: str,
+                 in_logview: bool = True, in_menu: bool = False,
+                 in_bugzilla: bool = False, is_context: bool = False):
         self.keyword = keyword
         self.color = color
         self.text = text
+        self.in_logview = in_logview
         self.in_menu = in_menu
         self.in_bugzilla = in_bugzilla
         self.is_context = is_context
@@ -43,15 +44,19 @@ class _Highlight:
 class _Filter:
     # pylint: disable=too-few-public-methods
     # pylint: disable=too-many-arguments,too-many-positional-arguments
-    def __init__(self, pat: re.Pattern, color: Optional[str],
-                 enabled: bool = True, in_menu: bool = False,
-                 in_bugzilla: bool = False,
+    # pylint: disable=too-many-instance-attributes
+    def __init__(self, pat: re.Pattern, color: Optional[str] = None,
+                 enabled: bool = True, in_logview: bool = True,
+                 in_menu: bool = False, in_bugzilla: bool = False,
+                 repl: Optional[str] = None,
                  context_before: int = 0, context_after: int = 0):
         self.pat = pat
         self.color = color
         self.enabled = enabled
+        self.in_logview = in_logview
         self.in_menu = in_menu
         self.in_bugzilla = in_bugzilla
+        self.repl = repl
         self.context_before = context_before
         self.context_after = context_after
 
@@ -72,11 +77,16 @@ class _Filter:
         if not match:
             return (False, None, [])
 
-        if not self.color:
+        keyword = match.groupdict().get("keyword")
+        if not keyword:
             return (True, None, [])
 
-        hilight = _Highlight(match.group("keyword"), self.color, line,
-                             in_menu=self.in_menu,
+        text = line
+        if self.repl:
+            text = self.pat.sub(self.repl, line)
+
+        hilight = _Highlight(keyword, self.color, text,
+                             in_logview=self.in_logview, in_menu=self.in_menu,
                              in_bugzilla=self.in_bugzilla)
         context = list(range(-self.context_before, 0)) + \
             list(range(1, self.context_after + 1))
@@ -160,9 +170,10 @@ class Log:
                 #  - Match on makefile "command timed out", always show in
                 #    menu.
                 #  - Match on test failures (FAIL), always show in menu.
-                _Filter(re.compile(r".*libgpg-error:"), None),
-                _Filter(re.compile(r".*test_fixed_size_error:"), None),
-                _Filter(re.compile(r".*( |::)error::.*ok"), None),
+                _Filter(re.compile(r".*libgpg-error:"), in_logview=False),
+                _Filter(re.compile(r".*test_fixed_size_error:"),
+                        in_logview=False),
+                _Filter(re.compile(r".*( |::)error::.*ok"), in_logview=False),
                 _Filter(re.compile(r"(.*\s|^)(?P<keyword>\S*error):",
                                    flags=re.I),
                         utils.Color.RED, in_menu=is_error),
@@ -206,6 +217,7 @@ class Log:
                             continue
                         text = loglines[hline - 1]
                         hl = _Highlight(None, utils.Color.NONE, text,
+                                        in_logview=highlight.in_logview,
                                         in_menu=highlight.in_menu,
                                         in_bugzilla=highlight.in_bugzilla,
                                         is_context=True)
@@ -309,5 +321,7 @@ class Log:
             List of highlighted text lines
         """
         highlights = self.get_highlights()
-        return [highlights[line].text for line in sorted(highlights)
-                if highlights[line].in_bugzilla]
+        bz_highlights = [highlights[line].text for line in sorted(highlights)
+                         if highlights[line].in_bugzilla]
+        # Remove duplicates but preserve order
+        return list(dict.fromkeys(bz_highlights))

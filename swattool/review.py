@@ -765,6 +765,16 @@ def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
     buf.append("Key log infos:")
     buf.append("\n".join(wrapped_highlights))
 
+    bz_highlights = log.get_bugzilla_highlights()
+    wrapped_bz_highlights = [textwrap.indent(line, " " * 4)
+                             for highlight in bz_highlights[:maxhighlights]
+                             for line in textwrap.wrap(highlight, width)
+                             ]
+    if wrapped_bz_highlights:
+        buf.append("")
+        buf.append("Data to post on Bugzilla:")
+        buf.append("\n".join(wrapped_bz_highlights))
+
     return '\n'.join(buf)
 
 

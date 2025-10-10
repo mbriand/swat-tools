@@ -76,7 +76,7 @@ class Color:
     NONE = ""
 
     @classmethod
-    def colorize(cls, text: str, color: str) -> str:
+    def colorize(cls, text: str, color: Optional[str]) -> str:
         """Colorize a string.
 
         Args:
@@ -86,6 +86,8 @@ class Color:
         Returns:
             Colorized text with reset code appended
         """
+        if not color:
+            return text
         return f"{color}{text}{cls.RESET}"
 
 
