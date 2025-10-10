@@ -138,6 +138,15 @@ class Log:
                     utils.Color.RED, enabled=(test == "toaster"),
                     in_menu=is_error, in_bugzilla=True),
 
+                # Reproducible rules:
+                #   - Match on "AssertionError: The following .* packages are
+                #     different and not in exclusion list:". Add some context.
+                _Filter(re.compile(r"(.*\s|^)(?P<keyword>AssertionError): "
+                                   r"The following \S* packages are different "
+                                   r"and not in exclusion list:",
+                                   flags=re.I),
+                        utils.Color.RED, in_menu=is_error, context_after=5),
+
                 # Generic rules:
                 #  - Do nothing on "libgpg-error:".
                 #  - Do nothing on "test_fixed_size_error:".
@@ -162,6 +171,9 @@ class Log:
                         utils.Color.YELLOW, in_menu=is_warning),
                 _Filter(re.compile(r"^(?P<keyword>fatal):", flags=re.I),
                         utils.Color.RED, in_menu=is_error),
+                _Filter(re.compile(
+                    r"(.*\s|^)(?P<keyword>make\[\d\]):.* Error"),
+                    utils.Color.RED, in_menu=is_error),
                 _Filter(re.compile(
                     r"(.*\s|^)(?P<keyword>make\[\d\]):.* Error"),
                     utils.Color.RED, in_menu=is_error),
