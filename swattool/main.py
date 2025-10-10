@@ -210,7 +210,11 @@ def shared_main(fn: Callable):
     try:
         fn()
     except utils.LoginRequiredException as err:
-        success = handle_login_exception(err)
+        try:
+            success = handle_login_exception(err)
+        except RuntimeError:
+            logger.error("Aborting login")
+            return
         if success:
             fn()
     except utils.SwattoolException as err:
