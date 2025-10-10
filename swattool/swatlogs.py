@@ -139,11 +139,11 @@ class Log:
                 # Toaster specific rules:
                 #  - Do nothing on "except xxxError:" (likely python code
                 #    output).
-                #  - Match on "selenium .*exception:".
+                #  - Match on "E (selenium .*exception|Error):".
                 _Filter(re.compile(r".*except\s*\S*error:", flags=re.I),
-                        None, enabled=test == "toaster", in_menu=False),
+                        enabled=test == "toaster", in_logview=False),
                 _Filter(re.compile(
-                    r"(.*\s|^)(?P<keyword>selenium\.\S*exception):",
+                    r"^E\s(.*\s)(?P<keyword>selenium\.\S*exception|\S*Error):",
                     flags=re.I),
                     utils.Color.RED, enabled=(test == "toaster"),
                     in_menu=is_error, in_bugzilla=True),
