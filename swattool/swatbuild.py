@@ -68,21 +68,19 @@ class Status(enum.IntEnum):
         }
         return utils.Color.colorize(text, colors[self])
 
-    def as_colored_str(self):
-        """Return status in a pretty colorized string.
+    def as_str(self, color: bool = False, short: bool = False):
+        """Return status, optionally in a pretty colorized string.
 
         Returns:
             Colorized string representation of status
         """
-        return self._colorize(self.name.title())
+        name = self.name.title()
+        if short:
+            name = name[:3]
+        if color:
+            name = self._colorize(name)
 
-    def as_short_colored_str(self):
-        """Return status in a short pretty colorized string.
-
-        Returns:
-            Short colorized string (first three characters) of status
-        """
-        return self._colorize(self.name[:3].title())
+        return name
 
 
 class Field(enum.StrEnum):
@@ -442,7 +440,7 @@ class Build:
         raise utils.SwattoolException(f"Invalid field: {field}")
 
     def format_field(self, userinfo: userdata.UserInfo, field: Field,
-                     multiline: bool = True) -> str:
+                     multiline: bool = True, color: bool = True) -> str:
         """Get formatted failure data.
 
         Args:
@@ -458,7 +456,7 @@ class Build:
             return "\n".join(data) if multiline or len(data) <= 1 else data[0]
 
         if field == Field.STATUS:
-            return self.get(Field.STATUS).as_short_colored_str()
+            return self.get(Field.STATUS).as_str(short=True, color=color)
         if field == Field.FAILURES:
             return format_multi([f.stepname for f in self.get(field).values()])
         if field == Field.TRIAGE:
@@ -548,7 +546,7 @@ class Build:
             if field == Field.STATUS:
                 if self.status == Status.ERROR:
                     return str(self.status)
-                return self.status.as_colored_str()
+                return self.status.as_str(color=True)
             if field == Field.BRANCH and self.branch:
                 _, _, branchname = self.branch.rpartition('/')
                 if branchname not in ["master", "master-next"]:
