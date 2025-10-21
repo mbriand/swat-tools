@@ -586,7 +586,7 @@ class FailureMenu:
             similarity = "--- selected ---"
         elif cur_fprint.is_similar_to(build_fprint):
             sim = cur_fprint.get_similarity_score(build_fprint)
-            similarity = f"similarity: {int(sim*100):3}%"
+            similarity = f"similarity: {int(sim * 100):3}%"
         data.insert(len(data) - 1, similarity)
 
         return data
