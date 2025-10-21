@@ -563,12 +563,7 @@ class FailureMenu:
     """
 
     shown_fields = [
-        swatbuild.Field.BUILD,
-        swatbuild.Field.BRANCH,
-        swatbuild.Field.TEST,
-        swatbuild.Field.WORKER,
-        swatbuild.Field.COMPLETED,
-        swatbuild.Field.OWNER,
+        *swatbuild.Field.get_base_fields(),
         swatbuild.Field.USER_STATUS,
     ]
 
@@ -581,7 +576,7 @@ class FailureMenu:
                       cur_build: swatbuild.Build,
                       cur_fprint: logfingerprint.LogFingerprint):
         userinfo = self.userinfos[build.id]
-        data = [build.format_field(userinfo, f, False)
+        data = [build.format_field(userinfo, f, multiline=False, color=False)
                 for f in self.shown_fields]
 
         failure = build.get_first_failure()

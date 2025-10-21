@@ -104,6 +104,20 @@ class Field(enum.StrEnum):
     TRIAGE = 'Triage'
     PARENT_BUILD = 'Parent Build'
 
+    @classmethod
+    def get_base_fields(cls):
+        """Get fields to show in every lists."""
+        return [
+            cls.BUILD,
+            cls.PARENT_BUILD,
+            cls.STATUS,
+            cls.BRANCH,
+            cls.TEST,
+            cls.OWNER,
+            cls.WORKER,
+            cls.COMPLETED,
+        ]
+
 
 class Failure:
     """A Swatbot failure.

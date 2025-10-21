@@ -367,13 +367,7 @@ def _show_failures(refresh: str, urlopens: set[str], limit: int,
     has_notes = any(userinfos[build.id].notes for build in builds)
 
     shown_fields_all = [
-        swatbuild.Field.BUILD,
-        swatbuild.Field.PARENT_BUILD,
-        swatbuild.Field.STATUS,
-        swatbuild.Field.TEST,
-        swatbuild.Field.OWNER,
-        swatbuild.Field.WORKER,
-        swatbuild.Field.COMPLETED,
+        *swatbuild.Field.get_base_fields(),
         swatbuild.Field.SWAT_URL,
         swatbuild.Field.FAILURES,
         swatbuild.Field.TRIAGE if len(filters['triage']) != 1 else None,
