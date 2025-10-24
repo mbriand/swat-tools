@@ -350,7 +350,8 @@ class InitManager:
         self._db.add_collection(data)
 
     def _update_bugzilla(self) -> None:
-        Bugzilla.get_abints()
+        Bugzilla.get_bugs()
+        Bugzilla.get_bugs(abints=True)
 
     def _create_builds(self) -> None:
         failures = self._db.get_failures(self.filters['triage'],

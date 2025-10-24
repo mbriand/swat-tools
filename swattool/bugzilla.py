@@ -49,39 +49,48 @@ class Bugzilla:
 
     CACHE_TIMEOUT_S = 60 * 60 * 24
 
+    known_bugs: dict[int, Bug] = {}
     known_abints: dict[int, Bug] = {}
 
     @classmethod
-    def get_abints(cls, force_refresh: bool = False) -> dict[int, Bug]:
-        """Get a dictionary of all AB-INT issues.
+    def get_bugs(cls, abints: bool = False, force_refresh: bool = False
+                 ) -> dict[int, Bug]:
+        """Get a dictionary of all issues.
 
-        Retrieves bugs with AB-INT in their whiteboard from Bugzilla.
+        Retrieves bugs from Bugzilla.
 
         Args:
+            abints: Only get bugs with AB-INT in their whiteboard
             force_refresh: Whether to bypass the cache and force a refresh
 
         Returns:
             Dictionary mapping bug IDs to Bug objects
         """
-        if not cls.known_abints or force_refresh:
+        bugs = cls.known_abints if abints else cls.known_bugs
+
+        if not bugs or force_refresh:
             fields = ['summary', 'classification', 'status', 'resolution']
             params = {
                 'order': 'order=bug_id%20DESC',
                 'query_format': 'advanced',
-                'resolution': ["---",
-                               "FIXED",
-                               "INVALID",
-                               "OBSOLETE",
-                               "NOTABUG",
-                               "ReportedUpstream",
-                               "WONTFIX",
-                               "WORKSFORME",
-                               "MOVED",
-                               ],
-                'status_whiteboard': 'AB-INT',
+                'resolution': ["---"],
                 'status_whiteboard_type': 'allwordssubstr',
                 'include_fields': ['id'] + fields,
             }
+            # If AB-INTs are requested, filter on whitebaord status, but also
+            # show closed tickets.
+            if abints:
+                params['status_whiteboard'] = 'AB-INT'
+                params['resolution'] = ["---",
+                                        "FIXED",
+                                        "INVALID",
+                                        "OBSOLETE",
+                                        "NOTABUG",
+                                        "ReportedUpstream",
+                                        "WONTFIX",
+                                        "WORKSFORME",
+                                        "MOVED",
+                                        ]
 
             fparams = urllib.parse.urlencode(params, doseq=True)
             req = f"{REST_BASE_URL}bug?{fparams}"
@@ -93,33 +102,38 @@ class Bugzilla:
                 logger.error("Failed to get AB-INT list")
                 return {}
 
-            cls.known_abints = {bug['id']: Bug(bug)
-                                for bug in json.loads(data)['bugs']}
+            bugs = {bug['id']: Bug(bug) for bug in json.loads(data)['bugs']}
+            if abints:
+                cls.known_abints = bugs
+            else:
+                cls.known_bugs = bugs
 
-        return cls.known_abints
+        return bugs
 
     @classmethod
-    def get_formatted_abints(cls, force_refresh: bool = False
-                             ) -> list[str]:
-        """Get a formatted list of all AB-INT issues.
+    def get_formatted_bugs(cls, abints: bool = False,
+                           force_refresh: bool = False
+                           ) -> list[str]:
+        """Get a formatted list of all issues.
 
-        Retrieves AB-INT bugs and formats them as tabular text for display.
+        Retrieves bugs and formats them as tabular text for display.
 
         Args:
+            abints: Only get AB-INT issues
             force_refresh: Whether to bypass the cache and force a refresh
 
         Returns:
             List of formatted strings representing bugs
         """
 
-        def format_status(abint):
-            if abint.status == "RESOLVED":
-                return f"rslvd:{abint.resolution}".upper()
-            return abint.status
+        def format_status(bug):
+            if bug.status == "RESOLVED":
+                return f"rslvd:{bug.resolution}".upper()
+            return bug.status
 
-        abints = cls.get_abints(force_refresh)
-        table = [[abint.id, abint.summary, format_status(abint)]
-                 for abint in abints.values()]
+        bugs = cls.get_bugs(abints, force_refresh)
+        table = [[bug.id, bug.summary, format_status(bug)]
+                 for bug in bugs.values()]
         return tabulate.tabulate(table, tablefmt="plain").splitlines()
 
     @classmethod
@@ -163,9 +177,9 @@ class Bugzilla:
         Returns:
             Bug summary or None if not found
         """
-        abints = cls.get_abints()
-        if bugid in abints:
-            return abints[bugid].summary
+        bugs = cls.get_bugs()
+        if bugid in bugs:
+            return bugs[bugid].summary
 
         params = {
             'order': 'order=bug_id%20DESC',

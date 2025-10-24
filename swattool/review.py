@@ -278,7 +278,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             if handled:
                 break
 
-    def _get_abint_num(self) -> Optional[int]:
+    def _get_bug_num(self, abint=False) -> Optional[int]:
 
         def preview_bug(fstr):
             bugnum, _, _ = fstr.partition(' ')
@@ -288,60 +288,32 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 return None
             return Bugzilla.get_bug_description(bugnum)
 
-        abints = Bugzilla.get_formatted_abints()
-        abrefresh = "Refresh AB-INT list from server"
+        if abint:
+            bugsrefresh = "Refresh AB-INT list from server"
+        else:
+            bugsrefresh = "Refresh Bugs list from server"
+        bugs = Bugzilla.get_formatted_bugs(abints=abint)
 
         while True:
-            abint_list = [abrefresh, *abints]
+            bugs_list = [bugsrefresh, *bugs]
 
-            abint_menu = TerminalMenu(abint_list, title="Bug",
-                                      search_key=None,
-                                      raise_error_on_interrupt=True,
-                                      preview_command=preview_bug)
-            abint_index = abint_menu.show()
+            bug_menu = TerminalMenu(bugs_list, title="Bug",
+                                    search_key=None,
+                                    raise_error_on_interrupt=True,
+                                    preview_command=preview_bug)
+            bug_index = bug_menu.show()
 
-            if abint_index is None:
+            if bug_index is None:
                 return None
 
-            if abint_list[abint_index] == abrefresh:
-                abints = Bugzilla.get_formatted_abints(force_refresh=True)
+            if bugs_list[bug_index] == bugsrefresh:
+                bugs = Bugzilla.get_formatted_bugs(abints=abint,
+                                                   force_refresh=True)
             else:
                 break
-        bugnum, _, _ = abint_list[abint_index].partition(' ')
+        bugnum, _, _ = bugs_list[bug_index].partition(' ')
 
         return bugnum
-
-    def _get_bug_num(self) -> Optional[int]:
-        while True:
-            try:
-                bugnum_str = input('Bug number:').strip()
-            except EOFError:
-                return None
-            if not bugnum_str or bugnum_str.strip() == "q":
-                return None
-
-            if bugnum_str.isnumeric():
-                return int(bugnum_str)
-
-            logger.warning("Invalid issue: %s", bugnum_str)
-
-    def _print_last_bugs(self):
-        """Print last used bug numbers.
-
-        Shows a list of recently used bug numbers to help with consistency.
-        """
-        # We only look for failures with unpublished new triages, this is kind
-        # of a dumb solution but should be enough for a start.
-        lastbugs = {triage.comment
-                    for userinfo in self.userinfos.values()
-                    for triage in userinfo.triages
-                    if triage.status == swatbotrest.TriageStatus.BUG}
-        if lastbugs:
-            print("Last used bugs:")
-            for lastbug in lastbugs:
-                line = f"{lastbug}: {Bugzilla.get_bug_title(lastbug)}"
-                print(textwrap.indent(line, " " * 4))
-            print()
 
     def _prompt_bug_infos(self, build: swatbuild.Build, is_abint: bool):
         """Create new status of type BUG for a given failure.
@@ -354,9 +326,8 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             A new Triage object or None if cancelled
         """
         if is_abint:
-            bugnum = self._get_abint_num()
+            bugnum = self._get_bug_num(abint=True)
         else:
-            self._print_last_bugs()
             bugnum = self._get_bug_num()
 
         if bugnum is None:
