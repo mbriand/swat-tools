@@ -633,7 +633,7 @@ def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
 
     testinfos = " ".join([build.test, build.worker, build.branch,
                           f'completed at {build.completed}'])
-    bcomment = "\n".join([testinfos, *highlights, logurl])
+    bcomment = "\n".join([testinfos, *highlights, logurl, ""])
 
     return bcomment
 
