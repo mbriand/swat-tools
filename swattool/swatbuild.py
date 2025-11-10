@@ -323,8 +323,10 @@ class Build:
 
                     commitcount = len(self._git_info[git_name]['commits'])
                     plus = '+' if commitcount == limit else ''
-                    desc = f"{commitcount}{plus} commits ahead of {basebranch}"
+                    countstr = f"{commitcount}{plus}"
+                    desc = f"{countstr} commits ahead of {basebranch}"
                     self._git_info[git_name]['description'] = desc
+                    self._git_info[git_name]['commit_count'] = countstr
 
             # if self._git_info is None and self.revisions[git_name]:
             if git_name not in self._git_info and git_name in self.revisions:

@@ -115,13 +115,21 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         build = self.builds[self.entry]
 
         def format_git_log(repo, oneline):
+            infos = build.git_info(repo)
+
             key = ""
             if repo in ["oecore", "poky"] and oneline:
                 key = "[v] "
             elif repo == "bitbake" and oneline:
                 key = "[b] "
-            options = " (oneline)" if oneline else ""
-            return f"{key}view git log: {repo}{options}"
+
+            extras = ""
+            if 'commit_count' in infos:
+                extras += f" ({infos['commit_count']} commits)"
+            if oneline:
+                extras += " - oneline"
+
+            return f"{key}view git log: {repo}{extras}"
 
         git_commands = [
             format_git_log(repo, oneline)
