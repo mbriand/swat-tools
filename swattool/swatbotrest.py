@@ -206,8 +206,7 @@ def get_json(path: str, max_cache_age: int = 0):
         Parsed JSON response as dictionary
     """
     url = f"{REST_BASE_URL}{path}"
-    use_cache = max_cache_age != 0
-    return _handle_server_request(Session().get, url, use_cache, max_cache_age)
+    return _handle_server_request(Session().get, url, True, max_cache_age)
 
 
 def post_json(path: str, data: dict) -> dict:
