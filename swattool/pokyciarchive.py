@@ -7,6 +7,7 @@ of the Poky CI archive, which contains build information for Yocto Project.
 """
 
 import logging
+import signal
 import subprocess
 import time
 from typing import Any, Optional
@@ -123,8 +124,10 @@ def show_log(tip: str, base: Optional[str] = None,
               f"{base}..{tip}" if base else tip]
     try:
         subprocess.run(gitcmd, check=True)
-    except subprocess.CalledProcessError:
-        logger.error("Failed to show git log")
-        return False
+    except subprocess.CalledProcessError as e:
+        # Ignore sigpipe errors, as maybe the user will not read the whole log
+        if e.returncode != -signal.SIGPIPE:
+            logger.error("Failed to show git log")
+            return False
 
     return True
