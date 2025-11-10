@@ -115,7 +115,11 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         build = self.builds[self.entry]
 
         def format_git_log(repo, oneline):
-            key = "[v] " if repo == "oecore" and oneline else ""
+            key = ""
+            if repo in ["oecore", "poky"] and oneline:
+                key = "[v] "
+            elif repo == "bitbake" and oneline:
+                key = "[b] "
             options = " (oneline)" if oneline else ""
             return f"{key}view git log: {repo}{options}"
 
@@ -513,9 +517,12 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             logsview.show_logs_menu(build)
             return True
         # View git log
-        if command == "v" or command.startswith("view git log:"):
+        if command in ["v", "b"] or command.startswith("view git log:"):
             if command == "v":
                 repo = "oecore"
+                options = ['--oneline']
+            elif command == "b":
+                repo = "bitbake"
                 options = ['--oneline']
             else:
                 command_data = command[len("view git log:"):].strip()
