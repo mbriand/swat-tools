@@ -113,6 +113,18 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
     def _get_commands(self):
         build = self.builds[self.entry]
+
+        def format_git_log(repo, oneline):
+            key = "[v] " if repo == "oecore" and oneline else ""
+            options = " (oneline)" if oneline else ""
+            return f"{key}view git log: {repo}{options}"
+
+        git_commands = [
+            format_git_log(repo, oneline)
+            for repo in swatbuild.ALL_REPOS if _can_show_git_log(build, repo)
+            for oneline in [False, True]
+        ]
+
         commands = [
             "[t] triage failure",
             "[e] edit notes",
@@ -121,8 +133,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             "[g] open stdio log of first failed step URL",
             "[l] show stdio log of first failed step",
             "[x] explore all logs",
-            "[v] view git log (oneline)" if _can_show_git_log(build) else "",
-            "view git log" if _can_show_git_log(build) else "",
+            *git_commands,
             None,
             "[n] next",
             "next pending failure",
@@ -501,14 +512,23 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         if command == "x":  # Explore logs
             logsview.show_logs_menu(build)
             return True
-        if command in ["v", "view git log"]:  # View git log
-            base = build.git_info['base_commit']
-            tip = build.git_info['tip_commit']
+        # View git log
+        if command == "v" or command.startswith("view git log:"):
             if command == "v":
+                repo = "oecore"
                 options = ['--oneline']
             else:
-                options = ["--patch", "--name-only"]
-            self.need_refresh = pokyciarchive.show_log(tip, base, options)
+                command_data = command[len("view git log:"):].strip()
+                repo, _, oneline = command_data.partition(" ")
+                if oneline.strip() == "(oneline)":
+                    options = ['--oneline']
+                else:
+                    options = ["--patch", "--name-only"]
+
+            infos = build.git_info(repo)
+            self.need_refresh = pokyciarchive.show_log(infos['tip_commit'],
+                                                       infos['base_commit'],
+                                                       options)
             return True
 
         return False
@@ -666,7 +686,7 @@ def _copy_triages_for(source_triages: list[userdata.Triage],
     return [copy_status(s, tbuild) for s in source_triages]
 
 
-def _can_show_git_log(build: swatbuild.Build) -> bool:
+def _can_show_git_log(build: swatbuild.Build, repo: str) -> bool:
     """Check if git log can be shown for a build.
 
     Args:
@@ -676,8 +696,8 @@ def _can_show_git_log(build: swatbuild.Build) -> bool:
         True if git log can be shown, False otherwise
     """
     return (build.git_info is not None
-            and 'base_commit' in build.git_info
-            and 'tip_commit' in build.git_info)
+            and 'base_commit' in build.git_info(repo)
+            and 'tip_commit' in build.git_info(repo))
 
 
 def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]

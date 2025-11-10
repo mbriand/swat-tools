@@ -29,6 +29,8 @@ from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
+ALL_REPOS = ['bitbake', 'meta-yocto', 'oecore', 'poky']
+
 
 class Status(enum.IntEnum):
     """The status of a failure.
@@ -254,7 +256,10 @@ class Build:
         self.autobuilder_url = sql_rows[0]['ab_url']
         self.owner = sql_rows[0]['owner']
         self.branch = sql_rows[0]['branch']
-        self.yp_build_revision = sql_rows[0]['yp_build_revision']
+        self.revisions = {}
+        for repo in ALL_REPOS:
+            field = f'commit_{repo}'.replace('-', '_')
+            self.revisions[repo] = sql_rows[0][field]
 
         self.parent_builder_name = None
         self.parent_builder = self.parent_build_number = None
@@ -269,7 +274,7 @@ class Build:
             self.parent_build = \
                 f'{ab}/{self.parent_builder_name}/{self.parent_build_number}'
 
-        self._git_info: Optional[dict[str, Any]] = None
+        self._git_info: dict[str, dict[str, Any]] = {}
 
         self.failures = {row['failure_id']: Failure(row, self)
                          for row in sql_rows}
@@ -292,14 +297,13 @@ class Build:
 
         return None
 
-    @property
-    def git_info(self) -> dict[str, Any]:
+    def git_info(self, git_name: str) -> dict[str, Any]:
         """Get information about built git branch.
 
         Returns:
             Dictionary containing git information about the build
         """
-        if self._git_info is None:
+        if git_name not in self._git_info:
             gittag = self._get_git_tag()
 
             if gittag:
@@ -308,25 +312,32 @@ class Build:
                     basebranch = basebranch[:-len('-next')]
 
                 limit = 100
-                git_info = pokyciarchive.get_build_commits(gittag, basebranch,
+                repo_tag = f"{git_name}/{gittag}"
+                git_info = pokyciarchive.get_build_commits(repo_tag,
+                                                           basebranch,
                                                            limit)
 
                 if git_info is not None:
-                    self._git_info = git_info
+                    self._git_info[git_name] = git_info
 
-                    commitcount = len(self._git_info['commits'])
+                    commitcount = len(self._git_info[git_name]['commits'])
                     plus = '+' if commitcount == limit else ''
                     desc = f"{commitcount}{plus} commits ahead of {basebranch}"
-                    self._git_info['description'] = desc
+                    self._git_info[git_name]['description'] = desc
 
-            if self._git_info is None and self.yp_build_revision:
-                self._git_info = {'description':
-                                  f"On commit {self.yp_build_revision}"}
+            # if self._git_info is None and self.revisions[git_name]:
+            if git_name not in self._git_info and git_name in self.revisions:
+                self._git_info[git_name] = {
+                    'description':
+                    f"On commit {self.revisions[git_name]}"
+                }
 
-            if self._git_info is None:
-                self._git_info = {'description': "On unknown revision"}
+            if git_name not in self._git_info:
+                self._git_info[git_name] = {
+                    'description': "On unknown revision"
+                }
 
-        return self._git_info
+        return self._git_info[git_name]
 
     def _completed_match_filters(self, filters: dict[str, Any]) -> bool:
         if filters['completed-after'] and self.completed:
@@ -585,8 +596,11 @@ class Build:
         if self.parent_build_number:
             table.append(["Parent", self._format_parent_description()])
 
-        if 'description' in self.git_info:
-            table.append(["Git info", self.git_info['description']])
+        for repo in ALL_REPOS:
+            if self.revisions.get(repo) != 'HEAD':
+                infos = self.git_info(repo)
+                if 'description' in infos:
+                    table.append([f"Git info ({repo})", infos['description']])
 
         for i, (failureid, failure) in enumerate(self.failures.items()):
             # Create strings for all failures and the attributed new status (if

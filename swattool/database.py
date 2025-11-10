@@ -70,7 +70,8 @@ class Database:
                             "collection_id PRIMARY KEY, owner, branch, "
                             "collection_build_id, target_name, "
                             "parent_builder, parent_build_number, "
-                            "yp_build_revision)")
+                            "commit_bitbake, commit_meta_yocto, "
+                            "commit_oecore, commit_poky)")
             if 'failure' not in tables:
                 cur.execute("CREATE TABLE "
                             "failure(failure_id PRIMARY KEY, build_id, "
@@ -229,7 +230,8 @@ class Database:
             cur.execute("INSERT INTO collection "
                         "VALUES(:collection_id, :owner, :branch, "
                         ":collection_build_id, :target_name, :parent_builder, "
-                        ":parent_build_number, :yp_build_revision)",
+                        ":parent_build_number, :commit_bitbake, "
+                        ":commit_meta_yocto, :commit_oecore, :commit_poky)",
                         data)
 
     def get_collections_ids(self) -> set[int]:

@@ -333,16 +333,17 @@ class InitManager:
         data['branch'] = collection['attributes']['branch']
         data['collection_build_id'] = collection['attributes']['buildid']
         data['target_name'] = collection['attributes']['targetname']
-        data['parent_builder'] = \
-            data['parent_build_number'] = \
-            data['yp_build_revision'] = None
+        data['parent_builder'] = data['parent_build_number'] = None
+        for repo in swatbuild.ALL_REPOS:
+            data[f'commit_{repo}'.replace('-', '_')] = None
         if build_data:
             build = build_data['builds'][0]
             data['parent_builder'] = build['builderid']
             data['parent_build_number'] = build['number']
-            rev = build['properties'].get('yp_build_revision')
-            if rev:
-                data['yp_build_revision'] = rev[0]
+            for repo in swatbuild.ALL_REPOS:
+                rev = build['properties'].get(f'commit_{repo}')
+                if rev:
+                    data[f'commit_{repo}'.replace('-', '_')] = rev[0]
 
         return self._fetch_collection_done_cb, data
 
