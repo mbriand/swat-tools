@@ -223,10 +223,7 @@ class InitManager:
         self._builds: list[swatbuild.Build] = []
 
     def _update_gits(self) -> None:
-        try:
-            pokyciarchive.update(min_age=10 * 60)
-        except pygit2.GitError:
-            logger.warning("Failed to update poky-ci-archive")
+        pokyciarchive.update(min_age=10 * 60)
 
     def _update_failures(self
                          ) -> Optional[tuple[Callable,

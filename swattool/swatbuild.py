@@ -314,6 +314,7 @@ class Build:
                 limit = 100
                 repo_tag = f"{git_name}/{gittag}"
                 git_info = pokyciarchive.get_build_commits(repo_tag,
+                                                           git_name,
                                                            basebranch,
                                                            limit)
 

@@ -18,8 +18,14 @@ from . import utils
 logger = logging.getLogger(__name__)
 
 GITDIR = utils.DATADIR / 'gits' / 'poky-ci-archive'
-POKYGIT_GITURL = 'https://git.yoctoproject.org/poky'
-ARCHIVE_GITURL = 'https://git.yoctoproject.org/poky-ci-archive'
+
+remotes = {
+    "poky-ci-archive": 'https://git.yoctoproject.org/poky-ci-archive',
+    "poky": 'https://git.yoctoproject.org/poky',
+    "bitbake": 'https://git.openembedded.org/bitbake',
+    "meta-yocto": 'https://git.yoctoproject.org/meta-yocto',
+    "oecore": 'https://git.openembedded.org/openembedded-core',
+}
 
 
 def update(min_age: Optional[int] = None) -> None:
@@ -41,15 +47,24 @@ def update(min_age: Optional[int] = None) -> None:
                 return
     else:
         GITDIR.parent.mkdir(parents=True, exist_ok=True)
-        repo = pygit2.clone_repository(POKYGIT_GITURL, GITDIR, bare=True)
-        repo.remotes.create("archive", ARCHIVE_GITURL)
+        repo = pygit2.clone_repository(remotes["poky-ci-archive"], GITDIR,
+                                       bare=True)
+
+    for name, url in remotes.items():
+        if name in repo.remotes.names():
+            repo.remotes.set_url(name, url)
+        else:
+            repo.remotes.create(name, url)
 
     for remote in repo.remotes:
-        remote.fetch(remote.fetch_refspecs + ['--tags'])
+        try:
+            remote.fetch(remote.fetch_refspecs + ['--tags'])
+        except pygit2.GitError as e:
+            logger.warning("Failed to update poky-ci-archive: %s", str(e))
 
 
-def get_build_commits(buildname: str, basebranch: str = "master",
-                      limit: int = 100
+def get_build_commits(buildname: str, git_name: str,
+                      basebranch: str = "master", limit: int = 100
                       ) -> Optional[dict[str, Any]]:
     """Get the list of commits ahead of master for a given build.
 
@@ -66,7 +81,7 @@ def get_build_commits(buildname: str, basebranch: str = "master",
     """
     repo = pygit2.Repository(GITDIR)
     tagname = f'refs/tags/{buildname}'
-    branchname = f'refs/remotes/origin/{basebranch}'
+    branchname = f'refs/remotes/{git_name}/{basebranch}'
 
     if tagname not in repo.references or branchname not in repo.references:
         return None
