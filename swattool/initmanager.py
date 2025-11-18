@@ -17,7 +17,6 @@ import sqlite3
 from typing import Any, Collection
 from typing import Callable, Optional
 
-import pygit2  # type: ignore
 from tqdm.contrib.logging import logging_redirect_tqdm
 import tqdm
 
