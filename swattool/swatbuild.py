@@ -13,7 +13,7 @@ import sqlite3
 import textwrap
 import urllib
 from datetime import datetime
-from typing import Any, Iterable, Optional
+from typing import Any, Generator, Iterable, Optional
 
 import click
 import requests
@@ -557,19 +557,7 @@ class Build:
         parent_url = f"{ab_url}/#/builders/{pbldr}/builds/{pnmbr}"
         return f"{parent_url} ({self.parent_builder_name})"
 
-    def format_description(self, userinfo: userdata.UserInfo,
-                           maxwidth: int, maxfailures: Optional[int] = None
-                           ) -> str:
-        """Get info on one given failure in a pretty way.
-
-        Args:
-            userinfo: User information for this build
-            maxwidth: Maximum width for formatting
-            maxfailures: Maximum number of failures to include
-
-        Returns:
-            Formatted description of the build
-        """
+    def _format_fields(self) -> list[list]:
         def format_field(field):
             if field == Field.STATUS:
                 if self.status == Status.ERROR:
@@ -594,7 +582,40 @@ class Build:
             Field.SWAT_URL,
             Field.AUTOBUILDER_URL,
         ]
-        table = [[k, format_field(k)] for k in simple_fields]
+        return [[k, format_field(k)] for k in simple_fields]
+
+    def _format_failures(self, userinfo: userdata.UserInfo,
+                         maxfailures: Optional[int] = None
+                         ) -> Generator[list]:
+        for i, (failureid, failure) in enumerate(self.failures.items()):
+            # Create strings for all failures and the attributed new status (if
+            # one was set).
+            triage = userinfo.get_failure_triage(failureid)
+
+            if (maxfailures is not None and i >= maxfailures):
+                if maxfailures != 0:
+                    removed = len(self.failures) - i
+                    yield ["", f"... {removed} more failures ...", ""]
+                break
+
+            yield [Field.FAILURES if i == 0 else "",
+                   failure.stepname,
+                   triage.format_description() if triage else ""]
+
+    def format_description(self, userinfo: userdata.UserInfo,
+                           maxwidth: int, maxfailures: Optional[int] = None
+                           ) -> str:
+        """Get info on one given failure in a pretty way.
+
+        Args:
+            userinfo: User information for this build
+            maxwidth: Maximum width for formatting
+            maxfailures: Maximum number of failures to include
+
+        Returns:
+            Formatted description of the build
+        """
+        table = self._format_fields()
 
         if self.parent_build_number:
             table.append(["Parent", self._format_parent_description()])
@@ -605,20 +626,8 @@ class Build:
                 if 'description' in infos:
                     table.append([f"Git info ({repo})", infos['description']])
 
-        for i, (failureid, failure) in enumerate(self.failures.items()):
-            # Create strings for all failures and the attributed new status (if
-            # one was set).
-            triage = userinfo.get_failure_triage(failureid)
-
-            if (maxfailures is not None and i >= maxfailures):
-                if maxfailures != 0:
-                    removed = len(self.failures) - i
-                    table.append(["", f"... {removed} more failures ...", ""])
-                break
-
-            table.append([Field.FAILURES if i == 0 else "",
-                          failure.stepname,
-                          triage.format_description() if triage else ""])
+        for failure in self._format_failures(userinfo, maxfailures):
+            table.append(failure)
 
         desc = tabulate.tabulate(table, tablefmt="plain")
 
