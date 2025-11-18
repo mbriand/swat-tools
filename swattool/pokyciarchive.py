@@ -61,7 +61,7 @@ def update(min_age: Optional[int] = None) -> None:
         try:
             remote.fetch(remote.fetch_refspecs + ['--tags'])
         except pygit2.GitError as e:
-            logger.warning("Failed to update poky-ci-archive: %s", str(e))
+            logger.warning("Failed to update %s: %s", remote.name, str(e))
 
 
 def get_build_commits(buildname: str, git_name: str,
