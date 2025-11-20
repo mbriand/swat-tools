@@ -24,8 +24,9 @@ readme = "README.md"
 license = {text = "MIT"}
 
 [tool.setuptools]
-packages = ["swattool", "swatbot_missing_builds"]
+packages = ["swattool", "swatbot_missing_builds", "selftest_perfs"]
 
 [project.scripts]
 swattool = "swattool.main:main"
 swatbot_missing_builds = "swatbot_missing_builds.main:main"
+selftest_perfs = "selftest_perfs.main:main"
