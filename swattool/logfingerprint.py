@@ -88,7 +88,8 @@ class LogFingerprint:
                     bestsim = max(scores[i])
                 else:
                     bestsim = max(s[i] for s in scores)
-                num += factor * bestsim if bestsim > 0.7 else 0
+                if bestsim > LogFingerprint.threshold:
+                    num += factor * bestsim
                 denom += factor
 
             score = num / denom

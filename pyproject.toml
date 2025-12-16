@@ -36,7 +36,7 @@ selftest_perfs = "selftest_perfs.main:main"
 line-length = 79
 
 [tool.ruff.lint]
-select = ["D", "B", "E", "F", "SIM", "TC"]
+select = ["D", "B", "E", "F", "N", "PL", "SIM", "TC"]
 ignore = ["D107", "D105", "D102",
           "SIM103"]
 

@@ -17,6 +17,8 @@ import requests
 from .webrequests import Session
 from . import utils
 
+FAKE_ID_MIN = 2000000000000
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +80,7 @@ def _get_json(url) -> Optional[dict[str, Any]]:
         requests.exceptions.ConnectionError,
         requests.exceptions.HTTPError,
     ) as err:
-        raise utils.SwattoolException(f"Failed to fetch {url}") from err
+        raise utils.SwattoolError(f"Failed to fetch {url}") from err
 
     try:
         json_data = json.loads(data)
@@ -90,8 +92,8 @@ def _get_json(url) -> Optional[dict[str, Any]]:
 
 def _fix_build_id(buildid: int) -> int:
     # Fix builds with faked ids (old buildbot instances).
-    if buildid >= 2000000000000:
-        buildid -= 2000000000000
+    if buildid >= FAKE_ID_MIN:
+        buildid -= FAKE_ID_MIN
 
     return buildid
 
@@ -186,7 +188,7 @@ def get_log_data(
 
     try:
         info_data = _get_json(info_url)
-    except utils.SwattoolException as err:
+    except utils.SwattoolError as err:
         logger.warning("Got exception while trying to load logs: %s", err)
         return None
     if not info_data:

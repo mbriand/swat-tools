@@ -17,6 +17,8 @@ from swattool.main import shared_main
 from swattool import utils
 from swattool.webrequests import Session
 
+ONE_HOUR = 60 * 60
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,13 +58,14 @@ def extract_times_from_log(log_data: str) -> dict[str, float]:
     timings = {}
     for line in log_data.splitlines():
         fields = line.split(" - ")
-        if len(fields) < 4:
-            continue
-        if fields[1] != "oe-selftest" or fields[3] != "RESULTS":
-            continue
+        try:
+            if fields[1] != "oe-selftest" or fields[3] != "RESULTS":
+                continue
 
-        subfields = fields[4].split()
-        if subfields[1] != "PASSED":
+            subfields = fields[4].split()
+            if subfields[1] != "PASSED":
+                continue
+        except IndexError:
             continue
 
         testname = subfields[0].strip(":")
@@ -192,15 +195,18 @@ def _find_long_tests(
 ) -> tuple[list[str], list[str]]:
     long_tests = []
     longer_tests = []
+    new_mean_thresh = 3
+    min_mean = 5
+    sample_size = 5
     for test in tests:
         timings = _get_timings(builds_data, test)
 
-        if max(timings) > 3600:
+        if max(timings) > ONE_HOUR:
             long_tests.append(test)
 
-        old_mean = sum(timings[:5]) / 5
-        new_mean = sum(timings[-5:]) / 5
-        if new_mean > 5 and new_mean > 3 * old_mean:
+        old_mean = sum(timings[:sample_size]) / sample_size
+        new_mean = sum(timings[-sample_size:]) / sample_size
+        if new_mean > min_mean and new_mean > new_mean_thresh * old_mean:
             longer_tests.append(test)
 
     return (long_tests, longer_tests)
@@ -269,7 +275,7 @@ def print_export_data(
     "--export-stats", "-s", multiple=True, help="Export stats for a given test"
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments
-def stats(
+def stats(  # noqa: PLR0913
     buildbot_url: str,
     builder_id: int,
     start_date: datetime,

@@ -29,7 +29,7 @@ BIG_LOG_LIMIT = 1000 * 1000
 class _Highlight:
     # pylint: disable=too-few-public-methods
     # pylint: disable=too-many-arguments,too-many-positional-arguments
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         keyword: Optional[str],
         color: Optional[str],
@@ -52,7 +52,7 @@ class _Filter:
     # pylint: disable=too-few-public-methods
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     # pylint: disable=too-many-instance-attributes
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         pat: re.Pattern,
         color: Optional[str] = None,

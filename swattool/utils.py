@@ -103,14 +103,14 @@ class Color:
         return f"{color}{text}{cls.RESET}"
 
 
-class SwattoolException(Exception):
+class SwattoolError(Exception):
     """A generic swattool error.
 
     Base exception class for all swattool exceptions.
     """
 
 
-class LoginRequiredException(SwattoolException):
+class LoginRequiredError(SwattoolError):
     """An exception for operations requiring login.
 
     Raised when an operation requires login but the user is not logged in.
@@ -173,7 +173,7 @@ def setup_logging(verbose: int):
 
     logging.basicConfig(level=loglevel, handlers=handlers)
 
-    if verbose < 2:
+    if verbose <= 1:
         logging.getLogger("charset_normalizer").setLevel(logging.WARNING)
         logging.getLogger("urllib3").setLevel(logging.WARNING)
 
@@ -294,7 +294,7 @@ class ExecutorWithProgress:
                 alljobs = [job[1] for job in self.jobs]
                 for fut in concurrent.futures.as_completed(alljobs):
                     err = fut.exception()
-                    if err and isinstance(err, SwattoolException):
+                    if err and isinstance(err, SwattoolError):
                         logging.warning(str(err))
                     elif err:
                         raise err

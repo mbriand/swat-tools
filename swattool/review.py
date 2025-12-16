@@ -478,20 +478,22 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
         return False
 
-    # pylint: disable=too-many-branches
+    def _handle_quit_command(self) -> bool:
+        if self.almost_done:
+            # Go back to the review menu
+            self.almost_done = False
+            return True
+
+        self.almost_done = True
+        if not self.config.get("swattool", {}).get("confirm_quit", True):
+            self.done = True
+            return True
+
+        return True
+
     def _handle_navigation_command(self, command: str) -> bool:
         if command == "q" or command is None:  # Quit
-            if self.almost_done:
-                # Go back to the review menu
-                self.almost_done = False
-                return True
-
-            self.almost_done = True
-            if not self.config.get("swattool", {}).get("confirm_quit", True):
-                self.done = True
-                return True
-
-            return True
+            return self._handle_quit_command()
 
         if command == "y":  # "yes", acting as Quit on exit menu
             self.done = True
@@ -529,8 +531,31 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
         return True
 
-    def _handle_view_command(self, command: str) -> bool:
-        # pylint: disable=too-many-return-statements
+    def _handle_view_git_log_command(
+        self, command: str, build: swatbuild.Build
+    ):
+        if command == "v":
+            repo = "oecore"
+            options = ["--oneline"]
+        elif command == "b":
+            repo = "bitbake"
+            options = ["--oneline"]
+        else:
+            command_data = command[len("view git log:") :].strip()
+            repo, _, oneline = command_data.partition(" ")
+            if oneline.strip() == "(oneline)":
+                options = ["--oneline"]
+            else:
+                options = ["--patch", "--name-only"]
+
+        infos = build.git_info(repo)
+        self.need_refresh = pokyciarchive.show_log(
+            infos["tip_commit"], infos["base_commit"], options
+        )
+        return True
+
+    def _handle_view_command(self, command: str) -> bool:  # noqa: PLR0911
+        # noqa: PLR0911
 
         build = self.builds[self.entry]
 
@@ -552,25 +577,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             return True
         # View git log
         if command in ["v", "b"] or command.startswith("view git log:"):
-            if command == "v":
-                repo = "oecore"
-                options = ["--oneline"]
-            elif command == "b":
-                repo = "bitbake"
-                options = ["--oneline"]
-            else:
-                command_data = command[len("view git log:") :].strip()
-                repo, _, oneline = command_data.partition(" ")
-                if oneline.strip() == "(oneline)":
-                    options = ["--oneline"]
-                else:
-                    options = ["--patch", "--name-only"]
-
-            infos = build.git_info(repo)
-            self.need_refresh = pokyciarchive.show_log(
-                infos["tip_commit"], infos["base_commit"], options
-            )
-            return True
+            return self._handle_view_git_log_command(command, build)
 
         return False
 

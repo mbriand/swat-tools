@@ -393,7 +393,7 @@ class Build:
 
         return False
 
-    def match_filters(
+    def match_filters(  # noqa: PLR0911
         self, filters: dict[str, Any], userinfo: userdata.UserInfo
     ) -> bool:
         """Check if this build matches given filters.
@@ -463,7 +463,7 @@ class Build:
             The value of the requested field
 
         Raises:
-            SwattoolException: If the field is invalid
+            SwattoolError: If the field is invalid
         """
         if field == Field.BUILD:
             return self.id
@@ -472,7 +472,7 @@ class Build:
         if field.name.lower() in self.__dict__:
             return self.__dict__[field.name.lower()]
 
-        raise utils.SwattoolException(f"Invalid field: {field}")
+        raise utils.SwattoolError(f"Invalid field: {field}")
 
     def format_field(
         self,
@@ -553,7 +553,7 @@ class Build:
 
         userinfo = userinfos.get(self.id)
 
-        def get_field(field):
+        def get_field(field):  # noqa: PLR0911
             # pylint: disable=too-many-return-statements
             if field == Field.FAILURES:
                 return sorted(fail.stepname for fail in self.failures.values())

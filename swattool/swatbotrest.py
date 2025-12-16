@@ -187,14 +187,14 @@ def _handle_server_request(fn, url: str, *args, **kwargs) -> dict:
         except Exception:  # pylint: disable=broad-exception-caught
             errdetail += f": {str(err.args[0])}"
         errstr = f"Failed to fetch {url}{errdetail}"
-        raise utils.SwattoolException(errstr) from err
+        raise utils.SwattoolError(errstr) from err
     except json.decoder.JSONDecodeError as err:
         Session().invalidate_cache(url)
         if "Please login to see this page." in reply:
-            raise utils.LoginRequiredException(
+            raise utils.LoginRequiredError(
                 "Not logged in swatbot", "swatbot"
             ) from err
-        raise utils.SwattoolException("Failed to parse server reply") from err
+        raise utils.SwattoolError("Failed to parse server reply") from err
     return json_data
 
 

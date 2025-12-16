@@ -176,7 +176,7 @@ def maingroup(verbose: int):
     utils.setup_readline()
 
 
-def handle_login_exception(err: utils.LoginRequiredException) -> bool:
+def handle_login_exception(err: utils.LoginRequiredError) -> bool:
     """Handle a login exception by authenticating on remote service.
 
     Args:
@@ -217,7 +217,7 @@ def shared_main(fn: Callable):
     """
     try:
         fn()
-    except utils.LoginRequiredException as err:
+    except utils.LoginRequiredError as err:
         try:
             success = handle_login_exception(err)
         except RuntimeError:
@@ -225,7 +225,7 @@ def shared_main(fn: Callable):
             return
         if success:
             fn()
-    except utils.SwattoolException as err:
+    except utils.SwattoolError as err:
         logging.error(str(err))
 
 
@@ -622,6 +622,7 @@ def publish_new_reviews(dry_run: bool):
 
         for (status, comment), triages in progress:
             bugurl = None
+            final_comment = comment
 
             # Bug entry: need to also publish a new comment on bugzilla.
             if status == swatbotrest.TriageStatus.BUG:
@@ -633,7 +634,7 @@ def publish_new_reviews(dry_run: bool):
                 ]
 
                 if any(logs):
-                    comment = bugurl = Bugzilla.get_bug_url(bugid)
+                    final_comment = bugurl = Bugzilla.get_bug_url(bugid)
                     bugtitle = Bugzilla.get_bug_title(bugid)
                     logger.info(
                         "Need to update ticket %s (%s) with:\n%s",
@@ -656,12 +657,14 @@ def publish_new_reviews(dry_run: bool):
             logger.info(
                 'Need to update failures to status %s with comment "%s"\n%s\n',
                 status,
-                comment,
+                final_comment,
                 "\n".join(wrappedfails),
             )
             if not dry_run:
                 for failureid in failureids:
-                    swatbotrest.publish_status(failureid, status, comment)
+                    swatbotrest.publish_status(
+                        failureid, status, final_comment
+                    )
 
     if not dry_run:
         swatbotrest.invalidate_stepfailures_cache()

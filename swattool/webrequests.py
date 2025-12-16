@@ -23,6 +23,7 @@ from . import utils
 logger = logging.getLogger(__name__)
 
 COOKIESFILE = utils.DATADIR / "cookies"
+MIN_HASHED_FILESTEM = 50
 
 cache_lock = threading.Lock()
 
@@ -99,7 +100,7 @@ class Session:
     def _get_old_cache_file_prefix(self, url: str) -> pathlib.Path:
         filestem = url.split("://", 1)[1].replace("/", "_").replace(":", "_")
 
-        if len(filestem) > 100:
+        if len(filestem) > MIN_HASHED_FILESTEM:
             hashname = hashlib.sha256(filestem.encode(), usedforsecurity=False)
             filestem = hashname.hexdigest()
 
@@ -110,7 +111,7 @@ class Session:
             url = url[:-1] + "_"
         filename = pathlib.Path(url.split("://", 1)[1].replace(":", "_"))
 
-        if len(filename.stem) > 50:
+        if len(filename.stem) > MIN_HASHED_FILESTEM:
             hashname = hashlib.sha256(
                 filename.stem.encode(), usedforsecurity=False
             )

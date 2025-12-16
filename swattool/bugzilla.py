@@ -281,7 +281,7 @@ class Bugzilla:
             comment: Text content of the comment to add
         """
         if not TOKENFILE.exists():
-            raise utils.LoginRequiredException(
+            raise utils.LoginRequiredError(
                 "Not logged in bugzilla", "bugzilla"
             )
         with TOKENFILE.open("r") as file:
@@ -297,6 +297,6 @@ class Bugzilla:
             Session().post(url, data=data)
         except requests.exceptions.HTTPError as err:
             logging.error("Failed to post comment on Bugzilla, please login")
-            raise utils.LoginRequiredException(
+            raise utils.LoginRequiredError(
                 "Not logged in bugzilla", "bugzilla"
             ) from err
