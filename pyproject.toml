@@ -6,18 +6,19 @@ authors = [
     {name = "Mathieu Dubois-Briand", email = "mathieu.dubois-briand@bootlin.com"},
 ]
 dependencies = [
-	'setuptools',
-	'wheel',
-	'click==8.1.7',
-	'jellyfish',
-	'pygit2',
-	'PyYAML==6.0.2',
-	'requests==2.32.3',
-	'simple-term-menu==1.6.4',
-	'tabulate==0.9.0',
-	'xdg==6.0.0',
-	'buildbot>=4.3',
-	'tqdm',
+    'PyYAML==6.0.2',
+    'buildbot>=4.3',
+    'click==8.1.7',
+    'jellyfish',
+    'pre-commit',
+    'pygit2',
+    'requests==2.32.3',
+    'setuptools',
+    'simple-term-menu==1.6.4',
+    'tabulate==0.9.0',
+    'tqdm',
+    'wheel',
+    'xdg==6.0.0',
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -30,3 +31,14 @@ packages = ["swattool", "swatbot_missing_builds", "selftest_perfs"]
 swattool = "swattool.main:main"
 swatbot_missing_builds = "swatbot_missing_builds.main:main"
 selftest_perfs = "selftest_perfs.main:main"
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+select = ["D", "B", "E", "F", "SIM", "TC"]
+ignore = ["D107", "D105", "D102",
+          "SIM103"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
