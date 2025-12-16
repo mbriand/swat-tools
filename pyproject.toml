@@ -42,3 +42,6 @@ ignore = ["D107", "D105", "D102",
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
+
+[tool.mypy]
+follow_untyped_imports = true
