@@ -455,7 +455,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
     # pylint: disable=too-many-branches
     def _handle_navigation_command(self, command: str) -> bool:
-        if command == "q":  # Quit
+        if command == "q" or command is None:  # Quit
 
             if self.almost_done:
                 # Go back to the review menu
