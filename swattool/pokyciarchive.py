@@ -74,6 +74,7 @@ def get_build_commits(buildname: str, git_name: str,
 
     Args:
         buildname: Name of the build/tag to query
+        git_name: Name of the git remote to use for branch lookup
         basebranch: Base branch to compare against
         limit: Maximum number of commits to return
 

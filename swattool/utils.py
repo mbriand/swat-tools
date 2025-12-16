@@ -49,7 +49,15 @@ MAILNAME = _get_git_username()
 
 
 def load_config() -> dict:
-    """Load configuration file."""
+    """Load configuration from the user's config file.
+
+    Loads the TOML configuration file from ~/.config/swattool.toml if it
+    exists, otherwise returns an empty dictionary.
+
+    Returns:
+        Dictionary containing the configuration data, or empty dict if no
+        config file found
+    """
     try:
         with open(CONFIG_FILE, "rb") as f:
             return tomllib.load(f)

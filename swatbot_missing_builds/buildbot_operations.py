@@ -105,6 +105,7 @@ def check_build_is_missing(base_url, rest_url: str, buildid: int
     """Check if a build is missing from swatbot or needs updating.
 
     Args:
+        base_url: The buildbot base URL
         rest_url: The REST API URL prefix
         buildid: The build ID to check
 
