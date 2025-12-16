@@ -158,7 +158,8 @@ def login(user: str, password: str) -> bool:
     try:
         session.post(LOGIN_URL, data=data)
     except requests.exceptions.HTTPError as error:
-        if error.response.status_code != requests.codes.NOT_FOUND:
+        status = error.response.status_code
+        if status != requests.codes.NOT_FOUND:  # type: ignore[attr-defined]
             raise error
     else:
         logger.warning("Unexpected reply, login probably failed")
@@ -200,7 +201,8 @@ def get_json(path: str, max_cache_age: int = 0):
 
     Args:
         path: The API path to request
-        max_cache_age: Maximum age in seconds for cached responses (0 = no cache)
+        max_cache_age: Maximum age in seconds for cached responses
+            (0 = no cache)
 
     Returns:
         Parsed JSON response as dictionary

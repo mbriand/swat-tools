@@ -343,22 +343,22 @@ class Build:
         return self._git_info[git_name]
 
     def _completed_match_filters(self, filters: dict[str, Any]) -> bool:
-        if filters['completed-after'] and self.completed:
-            if self.completed < filters['completed-after']:
-                return False
+        comp_after = filters['completed-after']
+        if comp_after and self.completed and self.completed < comp_after:
+            return False
 
-        if filters['completed-before'] and self.completed:
-            if self.completed > filters['completed-before']:
-                return False
+        comp_before = filters['completed-before']
+        if comp_before and self.completed and self.completed > comp_before:
+            return False
 
         return True
 
     def _userinfo_match_filters(self, filters: dict[str, Any],
                                 userinfo: userdata.UserInfo
                                 ) -> bool:
-        if filters['with-notes'] is not None:
-            if filters['with-notes'] ^ bool(userinfo.notes):
-                return False
+        withnotes = filters['with-notes']
+        if withnotes is not None and withnotes ^ bool(userinfo.notes):
+            return False
 
         if filters['with-new-status'] is not None:
             userstatus = userinfo.triages

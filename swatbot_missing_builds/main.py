@@ -121,12 +121,17 @@ def fix(dry_run: bool, input_file: TextIO):
     bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}, {postfix}]"
     all_builds = input_data['update_builds'] + input_data['create_builds']
     with tqdm_logging_redirect(all_builds, bar_format=bar_format) as progress:
+        if not progress:
+            return
+
         for buildid in progress:
             try:
                 if buildid in input_data['create_builds']:
-                    if not swatbot_operations.add_build(rest_url,
-                                                        buildbot_url,
-                                                        buildid, dry_run):
+                    add_success = swatbot_operations.add_build(rest_url,
+                                                               buildbot_url,
+                                                               buildid,
+                                                               dry_run)
+                    if not add_success:
                         continue
                 swatbot_operations.update_build(rest_url, buildbot_url,
                                                 buildid, dry_run)

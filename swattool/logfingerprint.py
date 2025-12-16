@@ -59,7 +59,8 @@ class LogFingerprint:
         # Compute scores for all fingerprint fragment combinations
         # Only consider combinations with similar positions in the files:
         # reduce both false positives and computation time.
-        scores = [[0 for _ in other.lines] for _ in self.lines]
+        scores: list[list[float]] = [[.0 for _ in other.lines]
+                                     for _ in self.lines]
         lendiff = len(self.lines) - len(other.lines)
         for i, fing1 in enumerate(self.lines):
             for j, fing2 in enumerate(other.lines):

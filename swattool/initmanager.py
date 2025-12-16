@@ -13,9 +13,8 @@ import enum
 import json
 import logging
 import os
-import sqlite3
 from typing import Any, Collection
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
 
 from tqdm.contrib.logging import logging_redirect_tqdm
 import tqdm
@@ -30,6 +29,9 @@ from . import swatbuild
 from . import swatlogs
 from . import userdata
 from . import utils
+
+if TYPE_CHECKING:
+    import sqlite3
 
 logger = logging.getLogger(__name__)
 

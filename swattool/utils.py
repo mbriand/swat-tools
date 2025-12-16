@@ -8,6 +8,7 @@ application.
 
 import atexit
 import concurrent.futures
+import contextlib
 import logging
 import os
 import readline
@@ -158,10 +159,7 @@ def setup_logging(verbose: int):
     Args:
         verbose: Verbosity level for logging
     """
-    if verbose >= 1:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
+    loglevel = logging.DEBUG if verbose >= 1 else logging.INFO
 
     defhandler = logging.StreamHandler()
     if sys.stdout.isatty():
@@ -187,11 +185,9 @@ def setup_readline():
 
     Loads history from file and sets up saving on exit.
     """
-    history_file = DATADIR / 'history'
-    try:
+    history_file = DATADIR / "history"
+    with contextlib.suppress(FileNotFoundError):
         readline.read_history_file(history_file)
-    except FileNotFoundError:
-        pass
 
     atexit.register(_save_readline, history_file)
 

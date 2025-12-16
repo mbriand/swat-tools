@@ -195,7 +195,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
         try:
             command_index = action_menu.show()
-            if command_index is None:
+            if not isinstance(command_index, int):
                 return None
             command = commands[command_index]
             if command[0] == '[' and command[2] == ']':
@@ -326,7 +326,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                                     preview_command=preview_bug)
             bug_index = bug_menu.show()
 
-            if bug_index is None:
+            if not isinstance(bug_index, int):
                 return None
 
             if bugs_list[bug_index] == bugsrefresh:
@@ -336,7 +336,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 break
         bugnum, _, _ = bugs_list[bug_index].partition(' ')
 
-        return bugnum
+        return int(bugnum)
 
     def _prompt_bug_infos(self, build: swatbuild.Build, is_abint: bool):
         """Create new status of type BUG for a given failure.
@@ -790,7 +790,7 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
         Dictionary mapping (status, comment) tuples to lists of triage objects
     """
 
-    def update_userinfo(userinfo):
+    def update_userinfo(userinfo, buildid):
         for triage in userinfo.triages:
             status = triage.status
             comment = triage.comment
@@ -821,7 +821,7 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                   list[userdata.Triage]] = {}
     executor = utils.ExecutorWithProgress(8)
     for buildid, userinfo in userinfos.items():
-        executor.submit("Updating pending review", update_userinfo, userinfo)
+        executor.submit("Updating pending review", update_userinfo, userinfo, buildid)
 
     executor.run()
     userinfos.save()

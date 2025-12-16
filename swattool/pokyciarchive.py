@@ -92,7 +92,7 @@ def get_build_commits(buildname: str, git_name: str,
     branch = repo.revparse(branchname).from_object.id
     mergebase = repo.merge_base(tag, branch)
 
-    commits: list[pygit2.Object] = []
+    commits: list[pygit2.Commit] = []
     for commit in repo.walk(tag):
         if len(commits) > limit or commit.id == mergebase:
             break
@@ -120,7 +120,7 @@ def show_log(tip: str, base: Optional[str] = None,
     """
     if options is None:
         options = []
-    gitcmd = ["git", "-C", GITDIR, "-c", "core.pager=less",
+    gitcmd = ["git", "-C", GITDIR.as_posix(), "-c", "core.pager=less",
               "log", *options,
               f"{base}..{tip}" if base else tip]
     try:

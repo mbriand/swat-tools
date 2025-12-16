@@ -43,7 +43,8 @@ class LogView:
         see the whole file or jump to highlighted sections.
 
         Returns:
-            True if the viewing was successful, False if log data is not available
+            True if the viewing was successful, False if log data is not
+            available
         """
         logdata = self.log.get_data()
         if not logdata:
@@ -71,10 +72,11 @@ class LogView:
                                 preview_command=preview,
                                 preview_size=self.preview_size,
                                 raise_error_on_interrupt=True)
-            entry = menu.show()
-            if entry is None:
+            menu_ret = menu.show()
+            if not isinstance(menu_ret, int):
                 return True
 
+            entry = menu_ret
             if entry == 0:
                 self._show(loglines, None)
             elif entry == 1:
@@ -274,7 +276,7 @@ def show_logs_menu(build: swatbuild.Build):
 
     while True:
         newentry = logs_menu.show()
-        if newentry is None:
+        if not isinstance(newentry, int):
             break
 
         log = LogView(*logs[newentry])

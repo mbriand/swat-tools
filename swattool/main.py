@@ -514,6 +514,9 @@ def publish_new_reviews(dry_run: bool):
     bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}, {postfix}]"
     with tqdm_logging_redirect(reviews.items(), bar_format=bar_format,
                                desc="Publishing new reviews") as progress:
+        if not progress:
+            return
+
         for (status, comment), triages in progress:
             bugurl = None
 
