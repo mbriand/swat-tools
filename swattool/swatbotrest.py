@@ -79,10 +79,11 @@ class RefreshManager:
         """
         self.set_policy(RefreshPolicy[policy_name.upper()])
 
-    def get_refresh_max_age(self,
-                            refresh_override: Optional[RefreshPolicy] = None,
-                            auto: int = AUTO_REFRESH_S
-                            ) -> int:
+    def get_refresh_max_age(
+        self,
+        refresh_override: Optional[RefreshPolicy] = None,
+        auto: int = AUTO_REFRESH_S,
+    ) -> int:
         """Get the maximum age before refresh for a given policy.
 
         Args:
@@ -108,7 +109,7 @@ class TriageStatus(enum.IntEnum):
     """
 
     @staticmethod
-    def from_str(status: str) -> 'TriageStatus':
+    def from_str(status: str) -> "TriageStatus":
         """Get TriageStatus instance from its name as a string.
 
         Args:
@@ -131,7 +132,7 @@ class TriageStatus(enum.IntEnum):
 
 
 def _get_csrftoken() -> str:
-    return Session().session.cookies['csrftoken']
+    return Session().session.cookies["csrftoken"]
 
 
 def login(user: str, password: str) -> bool:
@@ -152,7 +153,7 @@ def login(user: str, password: str) -> bool:
     data = {
         "csrfmiddlewaretoken": _get_csrftoken(),
         "username": user,
-        "password": password
+        "password": password,
     }
 
     try:
@@ -177,7 +178,7 @@ def _handle_server_request(fn, url: str, *args, **kwargs) -> dict:
         json_data = json.loads(reply)
     except requests.exceptions.RequestException as err:
         errdetail = ""
-        if 'json' in kwargs:
+        if "json" in kwargs:
             errdetail += f" with data {kwargs['json']}"
         try:
             if err.response is not None:
@@ -190,8 +191,9 @@ def _handle_server_request(fn, url: str, *args, **kwargs) -> dict:
     except json.decoder.JSONDecodeError as err:
         Session().invalidate_cache(url)
         if "Please login to see this page." in reply:
-            raise utils.LoginRequiredException("Not logged in swatbot",
-                                               "swatbot") from err
+            raise utils.LoginRequiredException(
+                "Not logged in swatbot", "swatbot"
+            ) from err
         raise utils.SwattoolException("Failed to parse server reply") from err
     return json_data
 
@@ -222,10 +224,13 @@ def post_json(path: str, data: dict) -> dict:
         Parsed JSON response as dictionary
     """
     url = f"{REST_BASE_URL}{path}"
-    headers = {'Content-type': 'application/vnd.api+json',
-               'X-CSRFToken': Session().get_cookies().get('csrftoken')}
-    return _handle_server_request(Session().post, url, json=data,
-                                  headers=headers)
+    headers = {
+        "Content-type": "application/vnd.api+json",
+        "X-CSRFToken": Session().get_cookies().get("csrftoken"),
+    }
+    return _handle_server_request(
+        Session().post, url, json=data, headers=headers
+    )
 
 
 def put_json(path: str, data: dict) -> dict:
@@ -239,10 +244,13 @@ def put_json(path: str, data: dict) -> dict:
         Parsed JSON response as dictionary
     """
     url = f"{REST_BASE_URL}{path}"
-    headers = {'Content-type': 'application/vnd.api+json',
-               'X-CSRFToken': Session().get_cookies().get('csrftoken')}
-    return _handle_server_request(Session().put, url, json=data,
-                                  headers=headers)
+    headers = {
+        "Content-type": "application/vnd.api+json",
+        "X-CSRFToken": Session().get_cookies().get("csrftoken"),
+    }
+    return _handle_server_request(
+        Session().put, url, json=data, headers=headers
+    )
 
 
 def get_build(buildid: int) -> dict:
@@ -254,7 +262,7 @@ def get_build(buildid: int) -> dict:
     Returns:
         Dictionary containing build information
     """
-    return get_json(f"/build/{buildid}/")['data']
+    return get_json(f"/build/{buildid}/")["data"]
 
 
 def get_build_collection(collectionid: int) -> dict:
@@ -267,7 +275,7 @@ def get_build_collection(collectionid: int) -> dict:
     Returns:
         Dictionary containing collection information
     """
-    return get_json(f"/buildcollection/{collectionid}/")['data']
+    return get_json(f"/buildcollection/{collectionid}/")["data"]
 
 
 def invalidate_stepfailures_cache():
@@ -283,9 +291,10 @@ FAILURES_AUTO_REFRESH_S = 60 * 60 * 4
 PENDING_FAILURES_AUTO_REFRESH_S = 60 * 10
 
 
-def get_stepfailures(status: Optional[TriageStatus] = None,
-                     refresh_override: Optional[RefreshPolicy] = None
-                     ) -> list[dict]:
+def get_stepfailures(
+    status: Optional[TriageStatus] = None,
+    refresh_override: Optional[RefreshPolicy] = None,
+) -> list[dict]:
     """Get info on all failures.
 
     Args:
@@ -298,15 +307,16 @@ def get_stepfailures(status: Optional[TriageStatus] = None,
     auto_refresh_s = FAILURES_AUTO_REFRESH_S
     params: dict[str, Any] = {}
     if status is not None:
-        params['triage'] = status.value
+        params["triage"] = status.value
         if status.value == TriageStatus.PENDING:
             auto_refresh_s = PENDING_FAILURES_AUTO_REFRESH_S
 
     request = f"/stepfailure/?{urllib.parse.urlencode(params)}"
-    maxage = RefreshManager().get_refresh_max_age(refresh_override,
-                                                  auto=auto_refresh_s)
+    maxage = RefreshManager().get_refresh_max_age(
+        refresh_override, auto=auto_refresh_s
+    )
 
-    return get_json(request, maxage)['data']
+    return get_json(request, maxage)["data"]
 
 
 def get_stepfailure(failureid: int):
@@ -319,11 +329,12 @@ def get_stepfailure(failureid: int):
     Returns:
         Dictionary containing failure information
     """
-    return get_json(f"/stepfailure/{failureid}/")['data']
+    return get_json(f"/stepfailure/{failureid}/")["data"]
 
 
-def get_failures(status: Optional[TriageStatus] = None
-                 ) -> dict[int, dict[int, dict]]:
+def get_failures(
+    status: Optional[TriageStatus] = None,
+) -> dict[int, dict[int, dict]]:
     """Get all failures on swatbot server.
 
     Retrieves failures and organizes them by build ID and failure ID.
@@ -338,15 +349,14 @@ def get_failures(status: Optional[TriageStatus] = None
     failures = get_stepfailures(status)
     ids: dict[int, dict[int, dict]] = {}
     for failure_data in failures:
-        buildid = int(failure_data['relationships']['build']['data']['id'])
-        failureid = int(failure_data['id'])
+        buildid = int(failure_data["relationships"]["build"]["data"]["id"])
+        failureid = int(failure_data["id"])
         ids.setdefault(buildid, {})[failureid] = failure_data
 
     return ids
 
 
-def publish_status(failureid: int,
-                   status: TriageStatus, comment: str):
+def publish_status(failureid: int, status: TriageStatus, comment: str):
     """Publish new triage status to the swatbot Django server.
 
     Args:
@@ -359,9 +369,10 @@ def publish_status(failureid: int,
     # want to update. Just use collection 1.
     swat_url = f"{BASE_URL}/collection/1/"
 
-    data = {"csrfmiddlewaretoken": _get_csrftoken(),
-            "failureid": failureid,
-            "status": status.value,
-            "notes": comment
-            }
+    data = {
+        "csrfmiddlewaretoken": _get_csrftoken(),
+        "failureid": failureid,
+        "status": status.value,
+        "notes": comment,
+    }
     Session().post(swat_url, data)

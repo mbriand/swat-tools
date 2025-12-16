@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 def _ab_url_is_valid(url: str) -> bool:
-    return '.yoctoproject.org' in url
+    return ".yoctoproject.org" in url
 
 
 class InitPhase(enum.IntEnum):
@@ -58,13 +58,13 @@ class InitPhase(enum.IntEnum):
 
     def __str__(self) -> str:
         descriptions = {
-            InitPhase.WARM_UP: 'Initialization',
-            InitPhase.FAILURES_LIST: 'Fetching failures list',
-            InitPhase.FAILURES_DATA: 'Fetching failures data',
-            InitPhase.COLLECTIONS_DATA: 'Fetching collections data',
-            InitPhase.LOGS: 'Fetching and preparing logs',
-            InitPhase.AB_INTS: 'Fetching AB-INT list',
-            InitPhase.POKY_CI_ARCHIVE: 'Fetching poky-ci-archive git',
+            InitPhase.WARM_UP: "Initialization",
+            InitPhase.FAILURES_LIST: "Fetching failures list",
+            InitPhase.FAILURES_DATA: "Fetching failures data",
+            InitPhase.COLLECTIONS_DATA: "Fetching collections data",
+            InitPhase.LOGS: "Fetching and preparing logs",
+            InitPhase.AB_INTS: "Fetching AB-INT list",
+            InitPhase.POKY_CI_ARCHIVE: "Fetching poky-ci-archive git",
         }
         return descriptions.get(self, self.name)
 
@@ -102,7 +102,7 @@ class InitExecutor:
         self.progress_bar = tqdm.tqdm(
             total=sum(self.phase_weight.values()),
             desc="Loading failures",
-            bar_format=bar_format
+            bar_format=bar_format,
         )
         self.progress = 0
 
@@ -124,8 +124,11 @@ class InitExecutor:
 
     def wait_phase_done(self, phase: InitPhase) -> None:
         """Wait until all tasks of a specific phase of init are done."""
-        self._run(lambda: all(p > phase or len(j) == 0
-                              for p, j in self._jobs.items()))
+        self._run(
+            lambda: all(
+                p > phase or len(j) == 0 for p, j in self._jobs.items()
+            )
+        )
 
     def wait_all(self) -> None:
         """Wait until all tasks are done."""
@@ -138,14 +141,18 @@ class InitExecutor:
 
     def _wait_next_done(self, phase: InitPhase) -> None:
         wait_return = concurrent.futures.FIRST_COMPLETED
-        done, _ = concurrent.futures.wait(self._jobs[phase],
-                                          return_when=wait_return)
+        done, _ = concurrent.futures.wait(
+            self._jobs[phase], return_when=wait_return
+        )
         if self.stopping:
             return
         for fut in done:
             err = fut.exception()
-            if (err and isinstance(err, utils.SwattoolException)
-                    and not isinstance(err, utils.LoginRequiredException)):
+            if (
+                err
+                and isinstance(err, utils.SwattoolException)
+                and not isinstance(err, utils.LoginRequiredException)
+            ):
                 if phase == InitPhase.FAILURES_LIST:
                     errstr = f"Failed to fetch failures list: {str(err)}"
                     raise utils.SwattoolException(errstr) from err
@@ -163,8 +170,9 @@ class InitExecutor:
     def _run(self, end_cond: Callable) -> None:
         try:
             for phase in InitPhase:
-                while self._jobs.get(phase) and not (end_cond()
-                                                     or self.stopping):
+                while self._jobs.get(phase) and not (
+                    end_cond() or self.stopping
+                ):
                     self._update_progress(phase)
                     self._wait_next_done(phase)
         except KeyboardInterrupt:
@@ -186,8 +194,9 @@ class InitExecutor:
                 return dones[phase] / (lengths.get(phase, 0) + dones[phase])
             return 0
 
-        progress = int(sum(w * done_ratio(p)
-                           for p, w in self.phase_weight.items()))
+        progress = int(
+            sum(w * done_ratio(p) for p, w in self.phase_weight.items())
+        )
 
         self.progress_bar.update(progress - self.progress)
         self.progress_bar.set_postfix_str(str(current_phase))
@@ -207,8 +216,13 @@ class InitManager:
 
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, userinfos: userdata.UserInfos, limit: int,
-                 filters: dict[str, Any], for_review: bool):
+    def __init__(
+        self,
+        userinfos: userdata.UserInfos,
+        limit: int,
+        filters: dict[str, Any],
+        for_review: bool,
+    ):
         self.userinfos = userinfos
         self.limit = limit
         self.filters = filters
@@ -226,122 +240,145 @@ class InitManager:
     def _update_gits(self) -> None:
         pokyciarchive.update(min_age=10 * 60)
 
-    def _update_failures(self
-                         ) -> Optional[tuple[Callable,
-                                             list[dict[str, Any]],
-                                             Optional[swatbotrest.TriageStatus]
-                                             ]]:
+    def _update_failures(
+        self,
+    ) -> Optional[
+        tuple[
+            Callable, list[dict[str, Any]], Optional[swatbotrest.TriageStatus]
+        ]
+    ]:
         statusfilter = None
-        if len(self.filters.get('triage', [])) == 1:
-            statusfilter = self.filters['triage'][0]
+        if len(self.filters.get("triage", [])) == 1:
+            statusfilter = self.filters["triage"][0]
         failures = swatbotrest.get_stepfailures(statusfilter)
         if failures is None:
             return None
 
         return self._update_failures_done_cb, failures, statusfilter
 
-    def _update_failures_done_cb(self, failures: list[dict[str, Any]],
-                                 status: Optional[swatbotrest.TriageStatus]
-                                 ) -> None:
-        data = [{'failure_id': int(f['id']),
-                 'build_id': int(f['relationships']['build']['data']['id']),
-                 'step_number': f['attributes']['stepnumber'],
-                 'step_name': f['attributes']['stepname'],
-                 'urls': json.dumps({u.split()[0].rsplit('/')[-1]: u
-                                     for u in
-                                     f['attributes']['urls'].split()}),
-                 'failure_status': f['attributes']['status'],
-                 'remote_triage': f['attributes']['triage'],
-                 'remote_triage_notes': f['attributes']['triagenotes']
-                 }
-                for f in failures]
+    def _update_failures_done_cb(
+        self,
+        failures: list[dict[str, Any]],
+        status: Optional[swatbotrest.TriageStatus],
+    ) -> None:
+        data = [
+            {
+                "failure_id": int(f["id"]),
+                "build_id": int(f["relationships"]["build"]["data"]["id"]),
+                "step_number": f["attributes"]["stepnumber"],
+                "step_name": f["attributes"]["stepname"],
+                "urls": json.dumps(
+                    {
+                        u.split()[0].rsplit("/")[-1]: u
+                        for u in f["attributes"]["urls"].split()
+                    }
+                ),
+                "failure_status": f["attributes"]["status"],
+                "remote_triage": f["attributes"]["triage"],
+                "remote_triage_notes": f["attributes"]["triagenotes"],
+            }
+            for f in failures
+        ]
         self._db.drop_failures(status)
         self._db.add_failures(data)
 
         build_failures: dict[int, dict[int, dict]] = {}
         for failure_data in failures:
-            buildid = int(failure_data['relationships']['build']['data']['id'])
-            failureid = int(failure_data['id'])
+            buildid = int(failure_data["relationships"]["build"]["data"]["id"])
+            failureid = int(failure_data["id"])
             build_failures.setdefault(buildid, {})[failureid] = failure_data
 
-        limited_pending_ids = set(sorted(build_failures.keys(),
-                                         reverse=True)[:self.limit])
+        limited_pending_ids = set(
+            sorted(build_failures.keys(), reverse=True)[: self.limit]
+        )
         # Generate a list of all pending failures, fetching details from the
         # remote server as needed.
         for buildid in limited_pending_ids.difference(self._builds_ids):
             # Filter on status now, limiting the size of data we will have
             # to download from the server.
-            if self.filters['triage']:
-                triages = {f['attributes']['triage']
-                           for f in build_failures[buildid].values()}
+            if self.filters["triage"]:
+                triages = {
+                    f["attributes"]["triage"]
+                    for f in build_failures[buildid].values()
+                }
 
-                if triages.isdisjoint(self.filters['triage']):
+                if triages.isdisjoint(self.filters["triage"]):
                     continue
 
-            self._executor.submit(InitPhase.FAILURES_DATA, self._fetch_build,
-                                  buildid)
+            self._executor.submit(
+                InitPhase.FAILURES_DATA, self._fetch_build, buildid
+            )
 
-    def _fetch_build(self, buildid: int
-                     ) -> Optional[tuple[Callable, dict[str, Any]]]:
+    def _fetch_build(
+        self, buildid: int
+    ) -> Optional[tuple[Callable, dict[str, Any]]]:
         build = swatbotrest.get_build(buildid)
-        attributes = build['attributes']
-        relationships = build['relationships']
+        attributes = build["attributes"]
+        relationships = build["relationships"]
 
-        collectionid = relationships['buildcollection']['data']['id']
+        collectionid = relationships["buildcollection"]["data"]["id"]
 
         data: dict[str, Any] = {}
-        data['build_id'] = buildid
-        data['buildbot_build_id'] = attributes['buildid']
-        data['status'] = int(attributes['status'])
-        data['test'] = attributes['targetname']
-        data['worker'] = attributes['workername']
-        data['completed'] = attributes['completed']
-        data['collection_id'] = int(collectionid)
-        data['ab_url'] = attributes['url']
-        data['parent_id'] = None
+        data["build_id"] = buildid
+        data["buildbot_build_id"] = attributes["buildid"]
+        data["status"] = int(attributes["status"])
+        data["test"] = attributes["targetname"]
+        data["worker"] = attributes["workername"]
+        data["completed"] = attributes["completed"]
+        data["collection_id"] = int(collectionid)
+        data["ab_url"] = attributes["url"]
+        data["parent_id"] = None
 
         return self._fetch_build_done_cb, data
 
     def _fetch_build_done_cb(self, data: dict[str, Any]) -> None:
         self._db.add_build(data)
-        self._trigger_fetch_collection(int(data['collection_id']),
-                                       data['ab_url'])
+        self._trigger_fetch_collection(
+            int(data["collection_id"]), data["ab_url"]
+        )
 
-    def _trigger_fetch_collection(self, collectionid: int, ab_url: str
-                                  ) -> None:
-        if (collectionid not in self._collections_ids
-                and collectionid not in self._collections_fetch):
+    def _trigger_fetch_collection(
+        self, collectionid: int, ab_url: str
+    ) -> None:
+        if (
+            collectionid not in self._collections_ids
+            and collectionid not in self._collections_fetch
+        ):
             aburl = buildbotrest.autobuilder_base_url(ab_url)
             buildboturl = buildbotrest.rest_api_url(aburl)
-            self._executor.submit(InitPhase.COLLECTIONS_DATA,
-                                  self._fetch_collection, collectionid,
-                                  buildboturl)
+            self._executor.submit(
+                InitPhase.COLLECTIONS_DATA,
+                self._fetch_collection,
+                collectionid,
+                buildboturl,
+            )
             self._collections_fetch.add(collectionid)
 
-    def _fetch_collection(self, collectionid: int, buildboturl: str
-                          ) -> Optional[tuple[Callable, dict[str, Any]]]:
+    def _fetch_collection(
+        self, collectionid: int, buildboturl: str
+    ) -> Optional[tuple[Callable, dict[str, Any]]]:
         collection = swatbotrest.get_build_collection(collectionid)
 
-        build_id = collection['attributes']['buildid']
+        build_id = collection["attributes"]["buildid"]
         build_data = buildbotrest.get_build(buildboturl, build_id)
 
         data: dict[str, Any] = {}
-        data['collection_id'] = collectionid
-        data['owner'] = collection['attributes']['owner']
-        data['branch'] = collection['attributes']['branch']
-        data['collection_build_id'] = collection['attributes']['buildid']
-        data['target_name'] = collection['attributes']['targetname']
-        data['parent_builder'] = data['parent_build_number'] = None
+        data["collection_id"] = collectionid
+        data["owner"] = collection["attributes"]["owner"]
+        data["branch"] = collection["attributes"]["branch"]
+        data["collection_build_id"] = collection["attributes"]["buildid"]
+        data["target_name"] = collection["attributes"]["targetname"]
+        data["parent_builder"] = data["parent_build_number"] = None
         for repo in swatbuild.ALL_REPOS:
-            data[f'commit_{repo}'.replace('-', '_')] = None
+            data[f"commit_{repo}".replace("-", "_")] = None
         if build_data:
-            build = build_data['builds'][0]
-            data['parent_builder'] = build['builderid']
-            data['parent_build_number'] = build['number']
+            build = build_data["builds"][0]
+            data["parent_builder"] = build["builderid"]
+            data["parent_build_number"] = build["number"]
             for repo in swatbuild.ALL_REPOS:
-                rev = build['properties'].get(f'commit_{repo}')
+                rev = build["properties"].get(f"commit_{repo}")
                 if rev:
-                    data[f'commit_{repo}'.replace('-', '_')] = rev[0]
+                    data[f"commit_{repo}".replace("-", "_")] = rev[0]
 
         return self._fetch_collection_done_cb, data
 
@@ -353,17 +390,18 @@ class InitManager:
         Bugzilla.get_bugs(abints=True)
 
     def _create_builds(self) -> None:
-        failures = self._db.get_failures(self.filters['triage'],
-                                         with_data=True)
+        failures = self._db.get_failures(
+            self.filters["triage"], with_data=True
+        )
 
         if self.for_review:
-            build_ids = {f['buildbot_build_id'] for f in failures}
+            build_ids = {f["buildbot_build_id"] for f in failures}
             logs_data = self._db.get_logs_data(build_ids)
             buildbotrest.populate_log_data_cache(logs_data)
 
         builds: dict[int, list[sqlite3.Row]] = {}
         for failure in failures:
-            builds.setdefault(failure['build_id'], []).append(failure)
+            builds.setdefault(failure["build_id"], []).append(failure)
 
         for build_data in builds.values():
             build = swatbuild.Build(build_data)
@@ -374,8 +412,9 @@ class InitManager:
 
             self._builds.append(build)
             if self.for_review:
-                self._executor.submit(InitPhase.LOGS, self._prepare_for_review,
-                                      build)
+                self._executor.submit(
+                    InitPhase.LOGS, self._prepare_for_review, build
+                )
 
     def _prepare_for_review(self, build: swatbuild.Build) -> None:
         swatlogs.Log(build.get_first_failure()).get_highlights()
@@ -403,14 +442,16 @@ class InitManager:
             if self.for_review:
                 # This might be longer than everything else, especially if
                 # there is only few new failures: Add it first.
-                self._executor.submit(InitPhase.POKY_CI_ARCHIVE,
-                                      self._update_gits)
+                self._executor.submit(
+                    InitPhase.POKY_CI_ARCHIVE, self._update_gits
+                )
 
                 self._executor.submit(InitPhase.AB_INTS, self._update_bugzilla)
 
             self._fetch_missing_data()
-            self._executor.submit(InitPhase.FAILURES_LIST,
-                                  self._update_failures)
+            self._executor.submit(
+                InitPhase.FAILURES_LIST, self._update_failures
+            )
 
             try:
                 self._executor.wait_phase_done(InitPhase.COLLECTIONS_DATA)
@@ -425,21 +466,27 @@ class InitManager:
 
             miss_failures = self._db.get_missing_failures()
             if miss_failures:
-                logger.warning("Some failures were not fetched correctly: %s",
-                               miss_failures)
+                logger.warning(
+                    "Some failures were not fetched correctly: %s",
+                    miss_failures,
+                )
 
             miss_collections = self._db.get_missing_collections()
-            miss_collections_ids = [m[0] for m in miss_collections
-                                    if _ab_url_is_valid(m[1])]
+            miss_collections_ids = [
+                m[0] for m in miss_collections if _ab_url_is_valid(m[1])
+            ]
             if miss_collections:
-                logger.warning("Some collections were not fetched correctly: "
-                               "%s", miss_collections_ids)
+                logger.warning(
+                    "Some collections were not fetched correctly: %s",
+                    miss_collections_ids,
+                )
 
             self._db.add_logs_data(buildbotrest.save_log_data_cache())
             self._db.commit()
 
-    def get_builds(self, sort: Collection[swatbuild.Field]
-                   ) -> list[swatbuild.Build]:
+    def get_builds(
+        self, sort: Collection[swatbuild.Field]
+    ) -> list[swatbuild.Build]:
         """Get consolidated list of failure infos.
 
         Returns the list of builds sorted according to the specified fields.

@@ -26,7 +26,7 @@ class LogFingerprint:
     """
 
     _similarity_scores: dict[tuple[tuple[int, str], ...], float] = {}
-    threshold = .7
+    threshold = 0.7
 
     def __init__(self, failure: swatbuild.Failure, logname: str):
         self.failure = failure
@@ -38,11 +38,11 @@ class LogFingerprint:
         log = swatlogs.Log(failure, logname)
         self.lines = log.get_highlights_text()[:100]
 
-    def _get_similarity_score(self, other: 'LogFingerprint') -> float:
+    def _get_similarity_score(self, other: "LogFingerprint") -> float:
         """Get similarity score between log of this entry and another log.
 
-        Computes a similarity score between 0.0 and 1.0 based on Jaro similarity
-        of highlighted lines in both logs.
+        Computes a similarity score between 0.0 and 1.0 based on Jaro
+        similarity of highlighted lines in both logs.
 
         Args:
             other: Another LogFingerprint to compare with
@@ -53,14 +53,16 @@ class LogFingerprint:
         if not self.lines or not other.lines:
             return 1 if not self.lines and not other.lines else 0
 
-        specific_error_re = re.compile(r"^\S+error:",
-                                       flags=re.IGNORECASE | re.MULTILINE)
+        specific_error_re = re.compile(
+            r"^\S+error:", flags=re.IGNORECASE | re.MULTILINE
+        )
 
         # Compute scores for all fingerprint fragment combinations
         # Only consider combinations with similar positions in the files:
         # reduce both false positives and computation time.
-        scores: list[list[float]] = [[.0 for _ in other.lines]
-                                     for _ in self.lines]
+        scores: list[list[float]] = [
+            [0.0 for _ in other.lines] for _ in self.lines
+        ]
         lendiff = len(self.lines) - len(other.lines)
         for i, fing1 in enumerate(self.lines):
             for j, fing2 in enumerate(other.lines):
@@ -86,7 +88,7 @@ class LogFingerprint:
                     bestsim = max(scores[i])
                 else:
                     bestsim = max(s[i] for s in scores)
-                num += factor * bestsim if bestsim > .7 else 0
+                num += factor * bestsim if bestsim > 0.7 else 0
                 denom += factor
 
             score = num / denom
@@ -97,11 +99,12 @@ class LogFingerprint:
 
         return (s1 + s2) / 2
 
-    def _get_cached_score(self,
-                          failure: Optional[swatbuild.Failure] = None,
-                          logname: Optional[str] = None,
-                          other: Optional['LogFingerprint'] = None,
-                          ) -> float:
+    def _get_cached_score(
+        self,
+        failure: Optional[swatbuild.Failure] = None,
+        logname: Optional[str] = None,
+        other: Optional["LogFingerprint"] = None,
+    ) -> float:
         if failure is None or logname is None:
             assert failure is None and logname is None
             assert other is not None
@@ -109,8 +112,9 @@ class LogFingerprint:
             logname = other.logname
         else:
             assert other is None
-        key = tuple(sorted(((self.failure.id, self.logname),
-                            (failure.id, logname))))
+        key = tuple(
+            sorted(((self.failure.id, self.logname), (failure.id, logname)))
+        )
         score = self._similarity_scores.get(key)
         if score is None:
             if other is None:
@@ -120,7 +124,7 @@ class LogFingerprint:
 
         return score
 
-    def get_similarity_score(self, other: 'LogFingerprint') -> float:
+    def get_similarity_score(self, other: "LogFingerprint") -> float:
         """Get similarity score between log of this entry and another log.
 
         Retrieves a cached similarity score or computes it if not available.
@@ -133,7 +137,7 @@ class LogFingerprint:
         """
         return self._get_cached_score(other=other)
 
-    def is_similar_to(self, other: 'LogFingerprint') -> bool:
+    def is_similar_to(self, other: "LogFingerprint") -> bool:
         """Check if a given log fingerprint is similar to this one.
 
         Determines if the similarity score exceeds the threshold.
@@ -146,8 +150,9 @@ class LogFingerprint:
         """
         return self._get_cached_score(other=other) > self.threshold
 
-    def is_similar_to_failure(self, failure: swatbuild.Failure, logname: str
-                              ) -> bool:
+    def is_similar_to_failure(
+        self, failure: swatbuild.Failure, logname: str
+    ) -> bool:
         """Check if a given log fingerprint is similar to this one.
 
         Determines if the similarity score exceeds the threshold.
@@ -162,12 +167,14 @@ class LogFingerprint:
         return self._get_cached_score(failure, logname) > self.threshold
 
 
-_cached_log_fingerprint: dict[tuple[swatbuild.Failure, str],
-                              LogFingerprint] = {}
+_cached_log_fingerprint: dict[
+    tuple[swatbuild.Failure, str], LogFingerprint
+] = {}
 
 
-def get_log_fingerprint(failure: swatbuild.Failure,
-                        logname: str = 'stdio') -> LogFingerprint:
+def get_log_fingerprint(
+    failure: swatbuild.Failure, logname: str = "stdio"
+) -> LogFingerprint:
     """Get a fingerprint of the log, allowing to compare it with others.
 
     Creates or retrieves a cached LogFingerprint for the given failure and log.

@@ -18,14 +18,14 @@ from . import utils
 
 logger = logging.getLogger(__name__)
 
-GITDIR = utils.DATADIR / 'gits' / 'poky-ci-archive'
+GITDIR = utils.DATADIR / "gits" / "poky-ci-archive"
 
 remotes = {
-    "poky-ci-archive": 'https://git.yoctoproject.org/poky-ci-archive',
-    "poky": 'https://git.yoctoproject.org/poky',
-    "bitbake": 'https://git.openembedded.org/bitbake',
-    "meta-yocto": 'https://git.yoctoproject.org/meta-yocto',
-    "oecore": 'https://git.openembedded.org/openembedded-core',
+    "poky-ci-archive": "https://git.yoctoproject.org/poky-ci-archive",
+    "poky": "https://git.yoctoproject.org/poky",
+    "bitbake": "https://git.openembedded.org/bitbake",
+    "meta-yocto": "https://git.yoctoproject.org/meta-yocto",
+    "oecore": "https://git.openembedded.org/openembedded-core",
 }
 
 
@@ -48,8 +48,9 @@ def update(min_age: Optional[int] = None) -> None:
                 return
     else:
         GITDIR.parent.mkdir(parents=True, exist_ok=True)
-        repo = pygit2.clone_repository(remotes["poky-ci-archive"], GITDIR,
-                                       bare=True)
+        repo = pygit2.clone_repository(
+            remotes["poky-ci-archive"], GITDIR, bare=True
+        )
 
     for name, url in remotes.items():
         if name in repo.remotes.names():
@@ -59,14 +60,14 @@ def update(min_age: Optional[int] = None) -> None:
 
     for remote in repo.remotes:
         try:
-            remote.fetch(remote.fetch_refspecs + ['--tags'])
+            remote.fetch(remote.fetch_refspecs + ["--tags"])
         except pygit2.GitError as e:
             logger.warning("Failed to update %s: %s", remote.name, str(e))
 
 
-def get_build_commits(buildname: str, git_name: str,
-                      basebranch: str = "master", limit: int = 100
-                      ) -> Optional[dict[str, Any]]:
+def get_build_commits(
+    buildname: str, git_name: str, basebranch: str = "master", limit: int = 100
+) -> Optional[dict[str, Any]]:
     """Get the list of commits ahead of master for a given build.
 
     Analyzes the git history to find commits specific to a build by comparing
@@ -82,8 +83,8 @@ def get_build_commits(buildname: str, git_name: str,
         Dictionary with commit information or None if build not found
     """
     repo = pygit2.Repository(GITDIR)
-    tagname = f'refs/tags/{buildname}'
-    branchname = f'refs/remotes/{git_name}/{basebranch}'
+    tagname = f"refs/tags/{buildname}"
+    branchname = f"refs/remotes/{git_name}/{basebranch}"
 
     if tagname not in repo.references or branchname not in repo.references:
         return None
@@ -98,14 +99,16 @@ def get_build_commits(buildname: str, git_name: str,
             break
         commits.append(commit)
 
-    return {'base_commit': branch,
-            'tip_commit': tag,
-            'commits': commits,
-            }
+    return {
+        "base_commit": branch,
+        "tip_commit": tag,
+        "commits": commits,
+    }
 
 
-def show_log(tip: str, base: Optional[str] = None,
-             options: Optional[list[str]] = None) -> bool:
+def show_log(
+    tip: str, base: Optional[str] = None, options: Optional[list[str]] = None
+) -> bool:
     """Show git log between two commits.
 
     Opens git log viewer (less) to show commit history.
@@ -120,9 +123,16 @@ def show_log(tip: str, base: Optional[str] = None,
     """
     if options is None:
         options = []
-    gitcmd = ["git", "-C", GITDIR.as_posix(), "-c", "core.pager=less",
-              "log", *options,
-              f"{base}..{tip}" if base else tip]
+    gitcmd = [
+        "git",
+        "-C",
+        GITDIR.as_posix(),
+        "-c",
+        "core.pager=less",
+        "log",
+        *options,
+        f"{base}..{tip}" if base else tip,
+    ]
     try:
         subprocess.run(gitcmd, check=True)
     except subprocess.CalledProcessError as e:

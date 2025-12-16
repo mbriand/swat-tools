@@ -40,11 +40,12 @@ class Triage:
 
         if values:
             try:
-                failures = values['failures']
-                status = swatbotrest.TriageStatus.from_str(values['status'])
-                comment = values['comment']
-                extra = {k: v for k, v in values.items()
-                         if k not in self.__dict__}
+                failures = values["failures"]
+                status = swatbotrest.TriageStatus.from_str(values["status"])
+                comment = values["comment"]
+                extra = {
+                    k: v for k, v in values.items() if k not in self.__dict__
+                }
             except KeyError:
                 pass
             else:
@@ -59,12 +60,13 @@ class Triage:
         Returns:
             Dictionary representation of the triage entry
         """
-        return {'failures': self.failures,
-                'status': self.status.name,
-                'comment': self.comment,
-                'change_date': self.change_date,
-                **self.extra
-                }
+        return {
+            "failures": self.failures,
+            "status": self.status.name,
+            "comment": self.comment,
+            "change_date": self.change_date,
+            **self.extra,
+        }
 
     def __str__(self):
         return f"{str(self.status)}: {self.comment}"
@@ -89,10 +91,10 @@ class Triage:
                 nf = utils.Color.colorize("NOT FOUND", utils.Color.RED)
                 statusfrags.append(f", {nf}")
 
-        bzcomment = self.extra.get('bugzilla-comment')
+        bzcomment = self.extra.get("bugzilla-comment")
         if bzcomment:
             statusfrags.append("\n")
-            bcomlines = bzcomment.split('\n')
+            bcomlines = bzcomment.split("\n")
             bcom = [textwrap.fill(line) for line in bcomlines]
             statusfrags.append("\n".join(bcom))
 
@@ -102,13 +104,14 @@ class Triage:
 class UserInfo:
     """A failure user data.
 
-    Stores user-specific data about a build, including notes and triage decisions.
+    Stores user-specific data about a build, including notes and triage
+    decisions.
     """
 
     def __init__(self, values: Optional[dict] = None):
         if values:
-            self.notes = values.get('notes', [])
-            self.triages = [Triage(t) for t in values.get('triages', [])]
+            self.notes = values.get("notes", [])
+            self.triages = [Triage(t) for t in values.get("triages", [])]
         else:
             self.notes = []
             self.triages = []
@@ -131,18 +134,24 @@ class UserInfo:
         Returns:
             Formatted and wrapped notes
         """
-        wrapped_lns = ["\n".join([textwrap.indent(li, indent)
-                                  for line in note.split("\n")
-                                  for li in textwrap.wrap(line, width)
-                                  ])
-                       for note in self.notes]
+        wrapped_lns = [
+            "\n".join(
+                [
+                    textwrap.indent(li, indent)
+                    for line in note.split("\n")
+                    for li in textwrap.wrap(line, width)
+                ]
+            )
+            for note in self.notes
+        ]
         return "\n\n".join(wrapped_lns)
 
     def set_notes(self, notes: Optional[str]):
         """Set user notes.
 
         Args:
-            notes: String containing notes, with paragraphs separated by double newlines
+            notes: String containing notes, with paragraphs separated by double
+            newlines
         """
         if not notes:
             self.notes = []
@@ -157,9 +166,9 @@ class UserInfo:
         """
         data = {}
         if self.notes:
-            data['notes'] = self.notes
+            data["notes"] = self.notes
         if self.triages:
-            data['triages'] = [triage.as_dict() for triage in self.triages]
+            data["triages"] = [triage.as_dict() for triage in self.triages]
 
         return data
 
@@ -198,12 +207,14 @@ class UserInfos(collections.abc.MutableMapping):
         Reads user information from the YAML file if it exists.
         """
         if USERINFOFILE.exists():
-            with USERINFOFILE.open('r') as file:
+            with USERINFOFILE.open("r") as file:
                 pretty_userinfos = yaml.load(file, Loader=yaml.SafeLoader)
                 if not pretty_userinfos:
                     pretty_userinfos = {}
-                self.infos = {bid: UserInfo(info)
-                              for bid, info in pretty_userinfos.items()}
+                self.infos = {
+                    bid: UserInfo(info)
+                    for bid, info in pretty_userinfos.items()
+                }
 
     def save(self, suffix="") -> pathlib.Path:
         """Store user infos for later runs.
@@ -220,23 +231,26 @@ class UserInfos(collections.abc.MutableMapping):
         for info in self.infos.values():
             info.triages = [t for t in info.triages if t.failures]
 
-        pretty_userinfos = {bid: info.as_dict()
-                            for bid, info in self.infos.items()
-                            if info.as_dict()}
+        pretty_userinfos = {
+            bid: info.as_dict()
+            for bid, info in self.infos.items()
+            if info.as_dict()
+        }
 
-        filename = USERINFOFILE.with_stem(f'{USERINFOFILE.stem}{suffix}')
-        with filename.open('w') as file:
+        filename = USERINFOFILE.with_stem(f"{USERINFOFILE.stem}{suffix}")
+        with filename.open("w") as file:
             yaml.dump(pretty_userinfos, file)
 
         # Create backup files. We might remove this once the code becomes more
         # stable
-        backupfile = filename.parent / 'backups' / filename.name
+        backupfile = filename.parent / "backups" / filename.name
         backupfile.mkdir(parents=True, exist_ok=True)
         i = 0
-        while backupfile.with_stem(f'{filename.stem}-backup-{i}').exists():
+        while backupfile.with_stem(f"{filename.stem}-backup-{i}").exists():
             i += 1
-        shutil.copy(filename,
-                    backupfile.with_stem(f'{filename.stem}-backup-{i}'))
+        shutil.copy(
+            filename, backupfile.with_stem(f"{filename.stem}-backup-{i}")
+        )
 
         return filename
 

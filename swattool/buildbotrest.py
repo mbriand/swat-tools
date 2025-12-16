@@ -43,7 +43,7 @@ def autobuilder_base_url(autobuilder_url) -> str:
     Returns:
         The base URL without UI-specific components
     """
-    for sep in ['/#/builders', '/#builders']:
+    for sep in ["/#/builders", "/#builders"]:
         if sep in autobuilder_url:
             autobuilder_url, _, _ = autobuilder_url.partition(sep)
             break
@@ -51,9 +51,9 @@ def autobuilder_base_url(autobuilder_url) -> str:
 
 
 ab_short_names = {
-    'autobuilder.yoctoproject.org/typhoon': 'ty',
-    'autobuilder.yoctoproject.org/valkyrie': 'vk',
-    'valkyrie.yoctoproject.org': 'vk',
+    "autobuilder.yoctoproject.org/typhoon": "ty",
+    "autobuilder.yoctoproject.org/valkyrie": "vk",
+    "valkyrie.yoctoproject.org": "vk",
 }
 
 
@@ -67,15 +67,17 @@ def autobuilder_short_name(autobuilder_url) -> str:
         The autobuilder instance short name
     """
     url = urllib.parse.urlparse(autobuilder_base_url(autobuilder_url))
-    ab_name = f'{url.netloc}{url.path}'
+    ab_name = f"{url.netloc}{url.path}"
     return ab_short_names.get(ab_name, ab_name)
 
 
 def _get_json(url) -> Optional[dict[str, Any]]:
     try:
         data = Session().get(url)
-    except (requests.exceptions.ConnectionError,
-            requests.exceptions.HTTPError) as err:
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.HTTPError,
+    ) as err:
         raise utils.SwattoolException(f"Failed to fetch {url}") from err
 
     try:
@@ -125,8 +127,12 @@ def populate_log_data_cache(data: list[sqlite3.Row]):
         data: List of database rows containing log metadata
     """
     for row in data:
-        key = (row["ab_instance"], row["build_id"], row["step_number"],
-               row["logname"])
+        key = (
+            row["ab_instance"],
+            row["build_id"],
+            row["step_number"],
+            row["logname"],
+        )
         _log_data_cache[key] = {
             "logid": row["logid"],
             "num_lines": row["num_lines"],
@@ -140,18 +146,23 @@ def save_log_data_cache() -> list[dict[str, Any]]:
     Returns:
         List of dictionaries containing new log data cache entries
     """
-    new_data = [{"ab_instance": k[0],
-                 "build_id": k[1],
-                 "step_number": k[2],
-                 "logname": _log_data_cache[k]["name"],
-                 **_log_data_cache[k],
-                 } for k in _log_data_cache_new]
+    new_data = [
+        {
+            "ab_instance": k[0],
+            "build_id": k[1],
+            "step_number": k[2],
+            "logname": _log_data_cache[k]["name"],
+            **_log_data_cache[k],
+        }
+        for k in _log_data_cache_new
+    ]
     _log_data_cache_new.clear()
     return new_data
 
 
-def get_log_data(rest_url: str, buildid: int, stepnumber: int,
-                 logname: str = "stdio") -> Optional[dict[str, Any]]:
+def get_log_data(
+    rest_url: str, buildid: int, stepnumber: int, logname: str = "stdio"
+) -> Optional[dict[str, Any]]:
     """Get the metadata of a log file.
 
     Args:
@@ -181,6 +192,6 @@ def get_log_data(rest_url: str, buildid: int, stepnumber: int,
     if not info_data:
         return None
 
-    _log_data_cache[cache_key] = info_data['logs'][0]
+    _log_data_cache[cache_key] = info_data["logs"][0]
     _log_data_cache_new.add(cache_key)
-    return info_data['logs'][0]
+    return info_data["logs"][0]

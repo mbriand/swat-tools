@@ -2,8 +2,8 @@
 
 """Bugzilla related functions.
 
-This module provides functionality for interacting with the Yocto Project Bugzilla
-system, including retrieving bug information and posting comments.
+This module provides functionality for interacting with the Yocto Project
+Bugzilla system, including retrieving bug information and posting comments.
 """
 
 import urllib
@@ -23,7 +23,7 @@ BASE_URL = "https://bugzilla.yoctoproject.org"
 REST_BASE_URL = f"{BASE_URL}/rest/"
 ISSUE_URL = f"{BASE_URL}/show_bug.cgi?id="
 
-TOKENFILE = utils.DATADIR / 'bugzilla_token'
+TOKENFILE = utils.DATADIR / "bugzilla_token"
 
 
 class Bug:
@@ -35,10 +35,10 @@ class Bug:
     # pylint: disable=too-few-public-methods
 
     def __init__(self, bugdata):
-        self.id = bugdata['id']
-        self.summary = bugdata['summary']
-        self.status = bugdata['status']
-        self.resolution = bugdata['resolution']
+        self.id = bugdata["id"]
+        self.summary = bugdata["summary"]
+        self.status = bugdata["status"]
+        self.resolution = bugdata["resolution"]
 
 
 class Bugzilla:
@@ -53,8 +53,9 @@ class Bugzilla:
     known_abints: dict[int, Bug] = {}
 
     @classmethod
-    def get_bugs(cls, abints: bool = False, force_refresh: bool = False
-                 ) -> dict[int, Bug]:
+    def get_bugs(
+        cls, abints: bool = False, force_refresh: bool = False
+    ) -> dict[int, Bug]:
         """Get a dictionary of all issues.
 
         Retrieves bugs from Bugzilla.
@@ -69,28 +70,29 @@ class Bugzilla:
         bugs = cls.known_abints if abints else cls.known_bugs
 
         if not bugs or force_refresh:
-            fields = ['summary', 'classification', 'status', 'resolution']
+            fields = ["summary", "classification", "status", "resolution"]
             params = {
-                'order': 'order=bug_id%20DESC',
-                'query_format': 'advanced',
-                'resolution': ["---"],
-                'status_whiteboard_type': 'allwordssubstr',
-                'include_fields': ['id'] + fields,
+                "order": "order=bug_id%20DESC",
+                "query_format": "advanced",
+                "resolution": ["---"],
+                "status_whiteboard_type": "allwordssubstr",
+                "include_fields": ["id"] + fields,
             }
             # If AB-INTs are requested, filter on whitebaord status, but also
             # show closed tickets.
             if abints:
-                params['status_whiteboard'] = 'AB-INT'
-                params['resolution'] = ["---",
-                                        "FIXED",
-                                        "INVALID",
-                                        "OBSOLETE",
-                                        "NOTABUG",
-                                        "ReportedUpstream",
-                                        "WONTFIX",
-                                        "WORKSFORME",
-                                        "MOVED",
-                                        ]
+                params["status_whiteboard"] = "AB-INT"
+                params["resolution"] = [
+                    "---",
+                    "FIXED",
+                    "INVALID",
+                    "OBSOLETE",
+                    "NOTABUG",
+                    "ReportedUpstream",
+                    "WONTFIX",
+                    "WORKSFORME",
+                    "MOVED",
+                ]
 
             fparams = urllib.parse.urlencode(params, doseq=True)
             req = f"{REST_BASE_URL}bug?{fparams}"
@@ -102,7 +104,7 @@ class Bugzilla:
                 logger.error("Failed to get AB-INT list")
                 return {}
 
-            bugs = {bug['id']: Bug(bug) for bug in json.loads(data)['bugs']}
+            bugs = {bug["id"]: Bug(bug) for bug in json.loads(data)["bugs"]}
             if abints:
                 cls.known_abints = bugs
             else:
@@ -111,9 +113,9 @@ class Bugzilla:
         return bugs
 
     @classmethod
-    def get_formatted_bugs(cls, abints: bool = False,
-                           force_refresh: bool = False
-                           ) -> list[str]:
+    def get_formatted_bugs(
+        cls, abints: bool = False, force_refresh: bool = False
+    ) -> list[str]:
         """Get a formatted list of all issues.
 
         Retrieves bugs and formats them as tabular text for display.
@@ -132,8 +134,9 @@ class Bugzilla:
             return bug.status
 
         bugs = cls.get_bugs(abints, force_refresh)
-        table = [[bug.id, bug.summary, format_status(bug)]
-                 for bug in bugs.values()]
+        table = [
+            [bug.id, bug.summary, format_status(bug)] for bug in bugs.values()
+        ]
         return tabulate.tabulate(table, tablefmt="plain").splitlines()
 
     @classmethod
@@ -160,7 +163,7 @@ class Bugzilla:
         """
         if bugurl.startswith(ISSUE_URL):
             try:
-                return int(bugurl[len(ISSUE_URL):])
+                return int(bugurl[len(ISSUE_URL) :])
             except ValueError:
                 pass
         return None
@@ -182,27 +185,27 @@ class Bugzilla:
             return bugs[bugid].summary
 
         params = {
-            'order': 'order=bug_id%20DESC',
-            'query_format': 'advanced',
-            'bug_id': bugid,
+            "order": "order=bug_id%20DESC",
+            "query_format": "advanced",
+            "bug_id": bugid,
         }
 
         fparams = urllib.parse.urlencode(params, doseq=True)
         req = f"{REST_BASE_URL}bug?{fparams}"
         data = Session().get(req, True, cls.CACHE_TIMEOUT_S)
 
-        jsondata = json.loads(data)['bugs']
+        jsondata = json.loads(data)["bugs"]
         if len(jsondata) != 1:
             return None
 
-        return jsondata[0]['summary']
+        return jsondata[0]["summary"]
 
     @classmethod
     def get_bug_description(cls, bugid: int) -> Optional[str]:
         """Get bugzilla bug description.
 
-        Currently returns just the bug URL since fetching the actual description
-        is too slow with the current Bugzilla version.
+        Currently returns just the bug URL since fetching the actual
+        description is too slow with the current Bugzilla version.
 
         Args:
             bugid: Bugzilla issue ID
@@ -227,7 +230,7 @@ class Bugzilla:
         #     return None
 
         # return comments[0]['text']
-        return f'{BASE_URL}/show_bug.cgi?id={bugid}'
+        return f"{BASE_URL}/show_bug.cgi?id={bugid}"
 
     @classmethod
     def login(cls, user: str, password: str) -> bool:
@@ -246,8 +249,8 @@ class Bugzilla:
 
         logger.info("Sending logging request...")
         params = {
-            'login': user,
-            'password': password,
+            "login": user,
+            "password": password,
         }
 
         fparams = urllib.parse.urlencode(params)
@@ -259,10 +262,10 @@ class Bugzilla:
             logger.error("Login failed")
             return False
 
-        token = json.loads(data)['token']
+        token = json.loads(data)["token"]
         logger.info("Logging success")
 
-        with TOKENFILE.open('w') as file:
+        with TOKENFILE.open("w") as file:
             file.write(token)
 
         return True
@@ -278,14 +281,15 @@ class Bugzilla:
             comment: Text content of the comment to add
         """
         if not TOKENFILE.exists():
-            raise utils.LoginRequiredException("Not logged in bugzilla",
-                                               "bugzilla")
-        with TOKENFILE.open('r') as file:
+            raise utils.LoginRequiredException(
+                "Not logged in bugzilla", "bugzilla"
+            )
+        with TOKENFILE.open("r") as file:
             token = file.read()
 
         data = {
-            'token': token,
-            'comment': comment,
+            "token": token,
+            "comment": comment,
         }
 
         url = f"{REST_BASE_URL}bug/{bugid}/comment"
@@ -293,5 +297,6 @@ class Bugzilla:
             Session().post(url, data=data)
         except requests.exceptions.HTTPError as err:
             logging.error("Failed to post comment on Bugzilla, please login")
-            raise utils.LoginRequiredException("Not logged in bugzilla",
-                                               "bugzilla") from err
+            raise utils.LoginRequiredException(
+                "Not logged in bugzilla", "bugzilla"
+            ) from err

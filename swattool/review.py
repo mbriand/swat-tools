@@ -35,11 +35,13 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
     Provides a menu-based interface for reviewing and triaging build failures.
     """
 
-    def __init__(self,
-                 config: dict,
-                 builds: list[swatbuild.Build],
-                 userinfos: userdata.UserInfos,
-                 urlopens: Optional[set[str]] = None):
+    def __init__(
+        self,
+        config: dict,
+        builds: list[swatbuild.Build],
+        userinfos: userdata.UserInfos,
+        urlopens: Optional[set[str]] = None,
+    ):
         if urlopens is None:
             urlopens = set()
 
@@ -88,8 +90,9 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 if kbinter:
                     sys.exit(1)
                 else:
-                    logger.warning("^C pressed. "
-                                   "Press again to quit without saving")
+                    logger.warning(
+                        "^C pressed. Press again to quit without saving"
+                    )
                     kbinter = True
                     continue
             except Exception as error:
@@ -97,7 +100,8 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 logging.error(
                     "Got exception, saving userinfos in a crash file: "
                     "You may want to retrieve data from there (%s)",
-                    filename)
+                    filename,
+                )
                 raise error
             kbinter = False
 
@@ -124,7 +128,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 key = "[b] "
 
             extras = ""
-            if 'commit_count' in infos:
+            if "commit_count" in infos:
                 extras += f" ({infos['commit_count']} commits)"
             if oneline:
                 extras += " - oneline"
@@ -133,7 +137,8 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
         git_commands = [
             format_git_log(repo, oneline)
-            for repo in swatbuild.ALL_REPOS if _can_show_git_log(build, repo)
+            for repo in swatbuild.ALL_REPOS
+            if _can_show_git_log(build, repo)
             for oneline in [False, True]
         ]
 
@@ -184,29 +189,40 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
 
         return [c for c in commands if c != ""]
 
-    def _show_menu(self, commands: list[str], cursor_index: Optional[int],
-                   status_bar: str = "") -> Optional[str]:
+    def _show_menu(
+        self,
+        commands: list[str],
+        cursor_index: Optional[int],
+        status_bar: str = "",
+    ) -> Optional[str]:
         if not status_bar:
             status_bar = f"Progress: {self.entry + 1}/{len(self.builds)}"
-        action_menu = TerminalMenu(commands, title="Action",
-                                   status_bar=status_bar,
-                                   cursor_index=cursor_index,
-                                   raise_error_on_interrupt=True)
+        action_menu = TerminalMenu(
+            commands,
+            title="Action",
+            status_bar=status_bar,
+            cursor_index=cursor_index,
+            raise_error_on_interrupt=True,
+        )
 
         try:
             command_index = action_menu.show()
             if not isinstance(command_index, int):
                 return None
             command = commands[command_index]
-            if command[0] == '[' and command[2] == ']':
+            if command[0] == "[" and command[2] == "]":
                 command = command[1]
         except EOFError:
             return None
 
         return command
 
-    def batch_menu(self, ask_confirm: bool,
-                   status: swatbotrest.TriageStatus, status_comment: str):
+    def batch_menu(
+        self,
+        ask_confirm: bool,
+        status: swatbotrest.TriageStatus,
+        status_comment: str,
+    ):
         """Allow a user batch triage a list of failures.
 
         Args:
@@ -214,11 +230,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             status: Triage status to set for all failures
             status_comment: Comment to set for the triage status
         """
-        commands = [
-            "[y] yes",
-            "[n] no",
-            "[q] quit"
-        ]
+        commands = ["[y] yes", "[n] no", "[q] quit"]
 
         for build in self.builds:
             userinfo = self.userinfos.get(build.id, {})
@@ -226,9 +238,9 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
                 self._show_infos(build)
 
                 command = self._show_menu(commands, None)
-                if command == 'q' or command is None:
+                if command == "q" or command is None:
                     return
-                if command == 'n':
+                if command == "n":
                     continue
 
             newstatus = userdata.Triage()
@@ -236,12 +248,17 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             newstatus.comment = status_comment
             newstatus.failures = list(build.failures.keys())
             if status == swatbotrest.TriageStatus.BUG:
-                newstatus.extra['bugzilla-comment'] = \
-                    _format_bugzilla_comment(build)
+                newstatus.extra["bugzilla-comment"] = _format_bugzilla_comment(
+                    build
+                )
             userinfo.triages = [newstatus]
 
-            logging.info("applying triage %s (%s) on build %s", status,
-                         status_comment, build.format_tiny_description())
+            logging.info(
+                "applying triage %s (%s) on build %s",
+                status,
+                status_comment,
+                build.format_tiny_description(),
+            )
 
     def triage_menu(self):
         """Allow a user to interactively triage a failure.
@@ -294,17 +311,17 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         default_index = commands.index("[q] no")
 
         while True:
-            command = self._show_menu(commands, default_index,
-                                      status_bar="Sure you want to exit?")
+            command = self._show_menu(
+                commands, default_index, status_bar="Sure you want to exit?"
+            )
 
             handled = self._handle_navigation_command(command)
             if handled:
                 break
 
     def _get_bug_num(self, abint=False) -> Optional[int]:
-
         def preview_bug(fstr):
-            bugnum, _, _ = fstr.partition(' ')
+            bugnum, _, _ = fstr.partition(" ")
             try:
                 bugnum = int(bugnum)
             except ValueError:
@@ -320,21 +337,25 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         while True:
             bugs_list = [bugsrefresh, *bugs]
 
-            bug_menu = TerminalMenu(bugs_list, title="Bug",
-                                    search_key=None,
-                                    raise_error_on_interrupt=True,
-                                    preview_command=preview_bug)
+            bug_menu = TerminalMenu(
+                bugs_list,
+                title="Bug",
+                search_key=None,
+                raise_error_on_interrupt=True,
+                preview_command=preview_bug,
+            )
             bug_index = bug_menu.show()
 
             if not isinstance(bug_index, int):
                 return None
 
             if bugs_list[bug_index] == bugsrefresh:
-                bugs = Bugzilla.get_formatted_bugs(abints=abint,
-                                                   force_refresh=True)
+                bugs = Bugzilla.get_formatted_bugs(
+                    abints=abint, force_refresh=True
+                )
             else:
                 break
-        bugnum, _, _ = bugs_list[bug_index].partition(' ')
+        bugnum, _, _ = bugs_list[bug_index].partition(" ")
 
         return int(bugnum)
 
@@ -367,11 +388,14 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         newstatus = userdata.Triage()
         newstatus.status = swatbotrest.TriageStatus.BUG
         newstatus.comment = str(bugnum)
-        newstatus.extra['bugzilla-comment'] = bcomment
+        newstatus.extra["bugzilla-comment"] = bcomment
         return newstatus
 
-    def _create_new_status(self, build: swatbuild.Build, command: str,
-                           ) -> Optional[userdata.Triage]:
+    def _create_new_status(
+        self,
+        build: swatbuild.Build,
+        command: str,
+    ) -> Optional[userdata.Triage]:
         """Create new status for a given failure.
 
         Args:
@@ -387,7 +411,8 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         elif command == "c":
             if build.status != swatbuild.Status.CANCELLED:
                 logging.error(
-                    "Only cancelled builds can be triaged as cancelled")
+                    "Only cancelled builds can be triaged as cancelled"
+                )
                 return None
             newstatus.status = swatbotrest.TriageStatus.CANCELLED
             newstatus.comment = "Cancelled"
@@ -400,16 +425,16 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             newstatus.status = swatbotrest.TriageStatus.OTHER
         elif command == "f":
             newstatus.status = swatbotrest.TriageStatus.OTHER
-            newstatus.comment = 'Fixed'
+            newstatus.comment = "Fixed"
         elif command == "d":
             newstatus.status = swatbotrest.TriageStatus.OTHER
-            newstatus.comment = 'Patch dropped'
+            newstatus.comment = "Patch dropped"
         elif command == "t":
             newstatus.status = swatbotrest.TriageStatus.NOT_FOR_SWAT
 
         if newstatus and not newstatus.comment:
             try:
-                newstatus.comment = input('Comment:').strip()
+                newstatus.comment = input("Comment:").strip()
             except EOFError:
                 return None
             if not newstatus.comment:
@@ -456,14 +481,13 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
     # pylint: disable=too-many-branches
     def _handle_navigation_command(self, command: str) -> bool:
         if command == "q" or command is None:  # Quit
-
             if self.almost_done:
                 # Go back to the review menu
                 self.almost_done = False
                 return True
 
             self.almost_done = True
-            if not self.config.get('swattool', {}).get('confirm_quit', True):
+            if not self.config.get("swattool", {}).get("confirm_quit", True):
                 self.done = True
                 return True
 
@@ -478,8 +502,10 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             self.need_refresh = True
         elif command == "next pending failure":
             self.entry += 1
-            while (self.entry < len(self.builds)
-                   and self.userinfos[self.builds[self.entry].id].triages):
+            while (
+                self.entry < len(self.builds)
+                and self.userinfos[self.builds[self.entry].id].triages
+            ):
                 self.entry += 1
             self.need_refresh = True
         elif command == "p":  # Previous
@@ -519,7 +545,7 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
             return True
         if command == "l":  # View stdio log
             failure = build.get_first_failure()
-            self.need_refresh = logsview.LogView(failure, 'stdio').show_menu()
+            self.need_refresh = logsview.LogView(failure, "stdio").show_menu()
             return True
         if command == "x":  # Explore logs
             logsview.show_logs_menu(build)
@@ -528,22 +554,22 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         if command in ["v", "b"] or command.startswith("view git log:"):
             if command == "v":
                 repo = "oecore"
-                options = ['--oneline']
+                options = ["--oneline"]
             elif command == "b":
                 repo = "bitbake"
-                options = ['--oneline']
+                options = ["--oneline"]
             else:
-                command_data = command[len("view git log:"):].strip()
+                command_data = command[len("view git log:") :].strip()
                 repo, _, oneline = command_data.partition(" ")
                 if oneline.strip() == "(oneline)":
-                    options = ['--oneline']
+                    options = ["--oneline"]
                 else:
                     options = ["--patch", "--name-only"]
 
             infos = build.git_info(repo)
-            self.need_refresh = pokyciarchive.show_log(infos['tip_commit'],
-                                                       infos['base_commit'],
-                                                       options)
+            self.need_refresh = pokyciarchive.show_log(
+                infos["tip_commit"], infos["base_commit"], options
+            )
             return True
 
         return False
@@ -553,8 +579,9 @@ class ReviewMenu:  # pylint: disable=too-many-instance-attributes
         userinfo = self.userinfos[build.id]
 
         if command == "e":  # Edit notes
-            userinfo.set_notes(click.edit(userinfo.get_notes(),
-                                          require_save=False))
+            userinfo.set_notes(
+                click.edit(userinfo.get_notes(), require_save=False)
+            )
             self.need_refresh = True
             return True
 
@@ -573,17 +600,23 @@ class FailureMenu:
         swatbuild.Field.USER_STATUS,
     ]
 
-    def __init__(self, builds: list[swatbuild.Build],
-                 userinfos: userdata.UserInfos):
+    def __init__(
+        self, builds: list[swatbuild.Build], userinfos: userdata.UserInfos
+    ):
         self.builds = builds
         self.userinfos = userinfos
 
-    def _format_build(self, build: swatbuild.Build,
-                      cur_build: swatbuild.Build,
-                      cur_fprint: logfingerprint.LogFingerprint):
+    def _format_build(
+        self,
+        build: swatbuild.Build,
+        cur_build: swatbuild.Build,
+        cur_fprint: logfingerprint.LogFingerprint,
+    ):
         userinfo = self.userinfos[build.id]
-        data = [build.format_field(userinfo, f, multiline=False, color=False)
-                for f in self.shown_fields]
+        data = [
+            build.format_field(userinfo, f, multiline=False, color=False)
+            for f in self.shown_fields
+        ]
 
         failure = build.get_first_failure()
         build_fprint = logfingerprint.get_log_fingerprint(failure)
@@ -619,13 +652,17 @@ class FailureMenu:
         termsize = shutil.get_terminal_size((80, 20))
         width = termsize.columns - 2  # Borders
 
-        entries = [self._format_build(b, build, fingerprint)
-                   for b in self.builds]
-        failures_menu = utils.tabulated_menu(entries, title="Failures",
-                                             cursor_index=entry,
-                                             preview_command=preview_failure,
-                                             preview_size=.5,
-                                             **kwargs)
+        entries = [
+            self._format_build(b, build, fingerprint) for b in self.builds
+        ]
+        failures_menu = utils.tabulated_menu(
+            entries,
+            title="Failures",
+            cursor_index=entry,
+            preview_command=preview_failure,
+            preview_size=0.5,
+            **kwargs,
+        )
         return failures_menu.show()
 
     def show_multi(self, entry: int, **kwargs):
@@ -638,12 +675,14 @@ class FailureMenu:
         Returns:
             List of selected entry indices or None if cancelled
         """
-        return self.show(entry,
-                         multi_select=True,
-                         show_multi_select_hint=True,
-                         multi_select_select_on_accept=False,
-                         multi_select_empty_ok=True,
-                         **kwargs)
+        return self.show(
+            entry,
+            multi_select=True,
+            show_multi_select_hint=True,
+            multi_select_select_on_accept=False,
+            multi_select_empty_ok=True,
+            **kwargs,
+        )
 
 
 def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
@@ -666,15 +705,22 @@ def _format_bugzilla_comment(build: swatbuild.Build) -> Optional[str]:
     log = swatlogs.Log(failure)
     highlights = log.get_bugzilla_highlights()
 
-    testinfos = " ".join([build.test, build.worker, build.branch,
-                          f'completed at {build.completed}'])
+    testinfos = " ".join(
+        [
+            build.test,
+            build.worker,
+            build.branch,
+            f"completed at {build.completed}",
+        ]
+    )
     bcomment = "\n".join([testinfos, *highlights, logurl, ""])
 
     return bcomment
 
 
-def _copy_triages_for(source_triages: list[userdata.Triage],
-                      tbuild: swatbuild.Build) -> list[userdata.Triage]:
+def _copy_triages_for(
+    source_triages: list[userdata.Triage], tbuild: swatbuild.Build
+) -> list[userdata.Triage]:
     """Copy triage statuses from one build to another.
 
     Copies all triage objects from the source to target build, adjusting
@@ -687,6 +733,7 @@ def _copy_triages_for(source_triages: list[userdata.Triage],
     Returns:
         List of new triage objects for the target build
     """
+
     def copy_status(status, build):
         newstatus = userdata.Triage()
         newstatus.status = status.status
@@ -694,8 +741,9 @@ def _copy_triages_for(source_triages: list[userdata.Triage],
         newstatus.extra = copy.deepcopy(status.extra)
         newstatus.failures = list(build.failures.keys())
         if newstatus.status == swatbotrest.TriageStatus.BUG:
-            newstatus.extra['bugzilla-comment'] = \
-                _format_bugzilla_comment(build)
+            newstatus.extra["bugzilla-comment"] = _format_bugzilla_comment(
+                build
+            )
         return newstatus
 
     return [copy_status(s, tbuild) for s in source_triages]
@@ -710,13 +758,16 @@ def _can_show_git_log(build: swatbuild.Build, repo: str) -> bool:
     Returns:
         True if git log can be shown, False otherwise
     """
-    return (build.git_info is not None
-            and 'base_commit' in build.git_info(repo)
-            and 'tip_commit' in build.git_info(repo))
+    return (
+        build.git_info is not None
+        and "base_commit" in build.git_info(repo)
+        and "tip_commit" in build.git_info(repo)
+    )
 
 
-def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]
-                        ) -> list[swatbuild.Build]:
+def _get_similar_builds(
+    build: swatbuild.Build, builds: list[swatbuild.Build]
+) -> list[swatbuild.Build]:
     """Find builds with similar log fingerprints.
 
     Identifies builds that have similar error patterns in their logs.
@@ -731,13 +782,17 @@ def _get_similar_builds(build: swatbuild.Build, builds: list[swatbuild.Build]
     fprint = logfingerprint.get_log_fingerprint(build.get_first_failure())
 
     def is_similar(b):
-        return fprint.is_similar_to_failure(b.get_first_failure(), 'stdio')
+        return fprint.is_similar_to_failure(b.get_first_failure(), "stdio")
 
     return [b for b in builds if is_similar(b)]
 
 
-def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
-               width: int, maxfailures: Optional[int] = None) -> str:
+def _get_infos(
+    build: swatbuild.Build,
+    userinfo: userdata.UserInfo,
+    width: int,
+    maxfailures: Optional[int] = None,
+) -> str:
     """Format detailed information about a build for display.
 
     Creates a formatted string containing build details and log highlights.
@@ -753,34 +808,37 @@ def _get_infos(build: swatbuild.Build, userinfo: userdata.UserInfo,
     """
     buf = []
     buf.append(build.format_description(userinfo, width, maxfailures))
-    buf.append('')
+    buf.append("")
 
     failure = build.get_first_failure()
     log = swatlogs.Log(failure)
     highlights = log.get_highlights_text()
     maxhighlights = 5
-    wrapped_highlights = [textwrap.indent(line, " " * 4)
-                          for highlight in highlights[:maxhighlights]
-                          for line in textwrap.wrap(highlight, width)
-                          ]
+    wrapped_highlights = [
+        textwrap.indent(line, " " * 4)
+        for highlight in highlights[:maxhighlights]
+        for line in textwrap.wrap(highlight, width)
+    ]
     buf.append("Key log infos:")
     buf.append("\n".join(wrapped_highlights))
 
     bz_highlights = log.get_bugzilla_highlights()
-    wrapped_bz_highlights = [textwrap.indent(line, " " * 4)
-                             for highlight in bz_highlights[:maxhighlights]
-                             for line in textwrap.wrap(highlight, width)
-                             ]
+    wrapped_bz_highlights = [
+        textwrap.indent(line, " " * 4)
+        for highlight in bz_highlights[:maxhighlights]
+        for line in textwrap.wrap(highlight, width)
+    ]
     if wrapped_bz_highlights:
         buf.append("")
         buf.append("Data to post on Bugzilla:")
         buf.append("\n".join(wrapped_bz_highlights))
 
-    return '\n'.join(buf)
+    return "\n".join(buf)
 
 
-def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
-                              list[userdata.Triage]]:
+def get_new_reviews() -> dict[
+    tuple[swatbotrest.TriageStatus, Any], list[userdata.Triage]
+]:
     """Get a list of new reviews waiting to be published on swatbot server.
 
     Collects all local triage information that hasn't been published yet,
@@ -798,13 +856,15 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
                 continue
 
             if not comment:
-                logger.warning("Review for failure %s is missing comment: "
-                               "skipping", buildid)
+                logger.warning(
+                    "Review for failure %s is missing comment: skipping",
+                    buildid,
+                )
                 continue
 
             def is_pending(failure_id):
                 failure = swatbotrest.get_stepfailure(failure_id)
-                return failure['attributes']['triage'] == 0
+                return failure["attributes"]["triage"] == 0
 
             # Make sure failures are still pending
             old_failures = triage.failures
@@ -817,11 +877,14 @@ def get_new_reviews() -> dict[tuple[swatbotrest.TriageStatus, Any],
 
     userinfos = userdata.UserInfos()
 
-    reviews: dict[tuple[swatbotrest.TriageStatus, Any],
-                  list[userdata.Triage]] = {}
+    reviews: dict[
+        tuple[swatbotrest.TriageStatus, Any], list[userdata.Triage]
+    ] = {}
     executor = utils.ExecutorWithProgress(8)
     for buildid, userinfo in userinfos.items():
-        executor.submit("Updating pending review", update_userinfo, userinfo, buildid)
+        executor.submit(
+            "Updating pending review", update_userinfo, userinfo, buildid
+        )
 
     executor.run()
     userinfos.save()

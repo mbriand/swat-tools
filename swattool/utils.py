@@ -38,8 +38,11 @@ def _get_git_username() -> Optional[str]:
         The global Git username or None if not found.
     """
     try:
-        process = subprocess.run(["git", "config", "--global", "user.name"],
-                                 capture_output=True, check=True)
+        process = subprocess.run(
+            ["git", "config", "--global", "user.name"],
+            capture_output=True,
+            check=True,
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
@@ -215,8 +218,9 @@ def tabulated_menu(entries: Iterable[Iterable[Any]], **kwargs) -> TerminalMenu:
         TerminalMenu: A terminal menu with formatted tabular entries
     """
     tabulated_entries = tabulate.tabulate(entries, tablefmt="plain")
-    return TerminalMenu(tabulated_entries.splitlines(),
-                        raise_error_on_interrupt=True, **kwargs)
+    return TerminalMenu(
+        tabulated_entries.splitlines(), raise_error_on_interrupt=True, **kwargs
+    )
 
 
 def show_in_less(text: str, startline: Optional[int] = 0):
@@ -230,7 +234,7 @@ def show_in_less(text: str, startline: Optional[int] = 0):
     if startline:
         less_cmd.append(f"+G{startline}")
 
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as file:
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as file:
         file.write(text)
         file.close()
         try:
@@ -246,7 +250,7 @@ def launch_in_system_default(text: str):
     Args:
         text: Text content to display
     """
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as file:
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as file:
         file.write(text)
         file.close()
         click.launch(file.name)
@@ -281,20 +285,27 @@ class ExecutorWithProgress:
         Displays a progress bar showing job completion status.
         """
         bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]"
-        with tqdm_logging_redirect(total=len(self.jobs),
-                                   desc="Loading failures",
-                                   bar_format=bar_format
-                                   ) as jobsprogress:
+        with tqdm_logging_redirect(
+            total=len(self.jobs),
+            desc="Loading failures",
+            bar_format=bar_format,
+        ) as jobsprogress:
             try:
                 alljobs = [job[1] for job in self.jobs]
                 for fut in concurrent.futures.as_completed(alljobs):
                     err = fut.exception()
-                    if (err and isinstance(err, SwattoolException)):
+                    if err and isinstance(err, SwattoolException):
                         logging.warning(str(err))
                     elif err:
                         raise err
-                    stepname = next((jobname for jobname, job in self.jobs
-                                    if job.running()), "")
+                    stepname = next(
+                        (
+                            jobname
+                            for jobname, job in self.jobs
+                            if job.running()
+                        ),
+                        "",
+                    )
                     jobsprogress.update()
                     jobsprogress.set_postfix_str(str(stepname))
             except KeyboardInterrupt:

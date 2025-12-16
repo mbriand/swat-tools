@@ -29,7 +29,7 @@ from .webrequests import Session
 
 logger = logging.getLogger(__name__)
 
-ALL_REPOS = ['bitbake', 'meta-yocto', 'oecore', 'poky']
+ALL_REPOS = ["bitbake", "meta-yocto", "oecore", "poky"]
 
 
 class Status(enum.IntEnum):
@@ -44,7 +44,7 @@ class Status(enum.IntEnum):
     UNKNOWN = -1
 
     @staticmethod
-    def from_int(status: int) -> 'Status':
+    def from_int(status: int) -> "Status":
         """Get Status instance from an integer status value.
 
         Args:
@@ -91,20 +91,20 @@ class Field(enum.StrEnum):
     Represents the different fields available in a build or failure record.
     """
 
-    BUILD = 'Build'
-    STATUS = 'Status'
-    TEST = 'Test'
-    OWNER = 'Owner'
-    WORKER = 'Worker'
-    COMPLETED = 'Completed'
-    SWAT_URL = 'SWAT URL'
-    AUTOBUILDER_URL = 'Autobuilder URL'
-    FAILURES = 'Failures'
-    BRANCH = 'Branch'
-    USER_NOTES = 'Notes'
-    USER_STATUS = 'New Triage'
-    TRIAGE = 'Triage'
-    PARENT_BUILD = 'Parent Build'
+    BUILD = "Build"
+    STATUS = "Status"
+    TEST = "Test"
+    OWNER = "Owner"
+    WORKER = "Worker"
+    COMPLETED = "Completed"
+    SWAT_URL = "SWAT URL"
+    AUTOBUILDER_URL = "Autobuilder URL"
+    FAILURES = "Failures"
+    BRANCH = "Branch"
+    USER_NOTES = "Notes"
+    USER_STATUS = "New Triage"
+    TRIAGE = "Triage"
+    PARENT_BUILD = "Parent Build"
 
     @classmethod
     def get_base_fields(cls):
@@ -129,16 +129,16 @@ class Failure:
 
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, row: sqlite3.Row, build: 'Build'):
-        self.id = row['failure_id']
+    def __init__(self, row: sqlite3.Row, build: "Build"):
+        self.id = row["failure_id"]
         self.build = build
-        self.stepnumber = int(row['step_number'])
-        self.status = Status.from_int(row['failure_status'])
-        self.stepname = row['step_name']
-        self.urls = json.loads(row['urls'])
-        triage = row['remote_triage']
+        self.stepnumber = int(row["step_number"])
+        self.status = Status.from_int(row["failure_status"])
+        self.stepname = row["step_name"]
+        self.urls = json.loads(row["urls"])
+        triage = row["remote_triage"]
         self.triage = swatbotrest.TriageStatus(triage)
-        self.triagenotes = row['remote_triage_notes']
+        self.triagenotes = row["remote_triage_notes"]
 
     def get_log_url(self, logname: str = "stdio") -> Optional[str]:
         """Get the URL of a given log webpage.
@@ -175,8 +175,9 @@ class Failure:
             Dictionary containing log metadata or None if request fails
         """
         rest_url = self.build.rest_api_url()
-        return buildbotrest.get_log_data(rest_url, self.build.id,
-                                         self.stepnumber, logname)
+        return buildbotrest.get_log_data(
+            rest_url, self.build.id, self.stepnumber, logname
+        )
 
     def get_log(self, logname: str) -> Optional[str]:
         """Get content of a given log file.
@@ -188,8 +189,9 @@ class Failure:
             Content of the log file or None if retrieval fails
         """
         rest_url = self.build.rest_api_url()
-        logdata = buildbotrest.get_log_data(rest_url, self.build.id,
-                                            self.stepnumber, logname)
+        logdata = buildbotrest.get_log_data(
+            rest_url, self.build.id, self.stepnumber, logname
+        )
         if not logdata:
             logging.error("Failed to find log")
             return None
@@ -221,10 +223,11 @@ class Failure:
         return str(self.triage)
 
     def __repr__(self):
-        return (f"Failure {self.id}: "
-                f"{self.status} on step {self.stepnumber} "
-                f"of build {self.build}, {self.stepname}"
-                )
+        return (
+            f"Failure {self.id}: "
+            f"{self.status} on step {self.stepnumber} "
+            f"of build {self.build}, {self.stepname}"
+        )
 
 
 class Build:
@@ -244,54 +247,56 @@ class Build:
             sql_rows: List of SQLite Row objects containing build, collection,
                       and failure data joined together.
         """
-        collection_id = sql_rows[0]['collection_id']
+        collection_id = sql_rows[0]["collection_id"]
         swat_url = f"{swatbotrest.BASE_URL}/collection/{collection_id}/"
 
-        self.id = sql_rows[0]['buildbot_build_id']
-        self.status = Status.from_int(sql_rows[0]['status'])
-        self.test = sql_rows[0]['test']
-        self.worker = sql_rows[0]['worker']
-        self.completed = datetime.fromisoformat(sql_rows[0]['completed'])
+        self.id = sql_rows[0]["buildbot_build_id"]
+        self.status = Status.from_int(sql_rows[0]["status"])
+        self.test = sql_rows[0]["test"]
+        self.worker = sql_rows[0]["worker"]
+        self.completed = datetime.fromisoformat(sql_rows[0]["completed"])
         self.swat_url = swat_url
-        self.autobuilder_url = sql_rows[0]['ab_url']
-        self.owner = sql_rows[0]['owner']
-        self.branch = sql_rows[0]['branch']
+        self.autobuilder_url = sql_rows[0]["ab_url"]
+        self.owner = sql_rows[0]["owner"]
+        self.branch = sql_rows[0]["branch"]
         self.revisions = {}
         for repo in ALL_REPOS:
-            field = f'commit_{repo}'.replace('-', '_')
+            field = f"commit_{repo}".replace("-", "_")
             self.revisions[repo] = sql_rows[0][field]
 
         self.parent_builder_name = None
         self.parent_builder = self.parent_build_number = None
         self.parent_build = ""
 
-        self.collection_build_id = sql_rows[0]['collection_build_id']
+        self.collection_build_id = sql_rows[0]["collection_build_id"]
         if self.collection_build_id != self.id:
             self.parent_builder_name = sql_rows[0]["target_name"]
-            self.parent_builder = sql_rows[0]['parent_builder']
-            self.parent_build_number = sql_rows[0]['parent_build_number']
+            self.parent_builder = sql_rows[0]["parent_builder"]
+            self.parent_build_number = sql_rows[0]["parent_build_number"]
             ab = buildbotrest.autobuilder_short_name(self.autobuilder_url)
-            self.parent_build = \
-                f'{ab}/{self.parent_builder_name}/{self.parent_build_number}'
+            self.parent_build = (
+                f"{ab}/{self.parent_builder_name}/{self.parent_build_number}"
+            )
 
         self._git_info: dict[str, dict[str, Any]] = {}
 
-        self.failures = {row['failure_id']: Failure(row, self)
-                         for row in sql_rows}
+        self.failures = {
+            row["failure_id"]: Failure(row, self) for row in sql_rows
+        }
 
     def _get_git_tag(self) -> Optional[str]:
         if self.parent_builder_name and self.parent_build_number:
             name = self.parent_builder_name
             number = self.parent_build_number
-        elif self.test in ['a-quick', 'a-full']:
+        elif self.test in ["a-quick", "a-full"]:
             name = self.test
-            _, _, number = self.autobuilder_url.rpartition('/')
+            _, _, number = self.autobuilder_url.rpartition("/")
         else:
             name = number = None
 
         if name and number:
             aburl = urllib.parse.urlparse(self.autobuilder_url)
-            host = aburl.netloc.replace(':', '_')
+            host = aburl.netloc.replace(":", "_")
 
             return f"{host}{aburl.path}{name}-{number}"
 
@@ -307,92 +312,90 @@ class Build:
             gittag = self._get_git_tag()
 
             if gittag:
-                basebranch = self.branch.split('/')[-1]
-                if basebranch.endswith('-next'):
-                    basebranch = basebranch[:-len('-next')]
+                basebranch = self.branch.split("/")[-1]
+                if basebranch.endswith("-next"):
+                    basebranch = basebranch[: -len("-next")]
 
                 limit = 100
                 repo_tag = f"{git_name}/{gittag}"
-                git_info = pokyciarchive.get_build_commits(repo_tag,
-                                                           git_name,
-                                                           basebranch,
-                                                           limit)
+                git_info = pokyciarchive.get_build_commits(
+                    repo_tag, git_name, basebranch, limit
+                )
 
                 if git_info is not None:
                     self._git_info[git_name] = git_info
 
-                    commitcount = len(self._git_info[git_name]['commits'])
-                    plus = '+' if commitcount == limit else ''
+                    commitcount = len(self._git_info[git_name]["commits"])
+                    plus = "+" if commitcount == limit else ""
                     countstr = f"{commitcount}{plus}"
                     desc = f"{countstr} commits ahead of {basebranch}"
-                    self._git_info[git_name]['description'] = desc
-                    self._git_info[git_name]['commit_count'] = countstr
+                    self._git_info[git_name]["description"] = desc
+                    self._git_info[git_name]["commit_count"] = countstr
 
             # if self._git_info is None and self.revisions[git_name]:
             if git_name not in self._git_info and git_name in self.revisions:
                 self._git_info[git_name] = {
-                    'description':
-                    f"On commit {self.revisions[git_name]}"
+                    "description": f"On commit {self.revisions[git_name]}"
                 }
 
             if git_name not in self._git_info:
                 self._git_info[git_name] = {
-                    'description': "On unknown revision"
+                    "description": "On unknown revision"
                 }
 
         return self._git_info[git_name]
 
     def _completed_match_filters(self, filters: dict[str, Any]) -> bool:
-        comp_after = filters['completed-after']
+        comp_after = filters["completed-after"]
         if comp_after and self.completed and self.completed < comp_after:
             return False
 
-        comp_before = filters['completed-before']
+        comp_before = filters["completed-before"]
         if comp_before and self.completed and self.completed > comp_before:
             return False
 
         return True
 
-    def _userinfo_match_filters(self, filters: dict[str, Any],
-                                userinfo: userdata.UserInfo
-                                ) -> bool:
-        withnotes = filters['with-notes']
+    def _userinfo_match_filters(
+        self, filters: dict[str, Any], userinfo: userdata.UserInfo
+    ) -> bool:
+        withnotes = filters["with-notes"]
         if withnotes is not None and withnotes ^ bool(userinfo.notes):
             return False
 
-        if filters['with-new-status'] is not None:
+        if filters["with-new-status"] is not None:
             userstatus = userinfo.triages
-            if filters['with-new-status'] ^ bool(userstatus):
+            if filters["with-new-status"] ^ bool(userstatus):
                 return False
 
         return True
 
     def _triage_match_filters(self, filters: dict[str, Any]) -> bool:
-        if filters['triage']:
+        if filters["triage"]:
             triages = {f.triage for f in self.failures.values()}
-            if triages.isdisjoint(filters['triage']):
+            if triages.isdisjoint(filters["triage"]):
                 return False
 
         return True
 
     def _logs_match_filters(self, filters: dict[str, Any]) -> bool:
-        if not filters['log-matches']:
+        if not filters["log-matches"]:
             return True
 
-        logdata = self.get_first_failure().get_log('stdio')
+        logdata = self.get_first_failure().get_log("stdio")
         if not logdata:
             return False
 
-        for pat in filters['log-matches']:
+        for pat in filters["log-matches"]:
             for line in logdata.splitlines():
                 if pat.match(line):
                     return True
 
         return False
 
-    def match_filters(self, filters: dict[str, Any],
-                      userinfo: userdata.UserInfo
-                      ) -> bool:
+    def match_filters(
+        self, filters: dict[str, Any], userinfo: userdata.UserInfo
+    ) -> bool:
         """Check if this build matches given filters.
 
         Args:
@@ -416,7 +419,7 @@ class Build:
             if select_re and not matches:
                 return False
 
-            ignore_re = filters.get(f'ignore-{field.name.lower()}', [])
+            ignore_re = filters.get(f"ignore-{field.name.lower()}", [])
             matches = [True for r in ignore_re if r.match(value)]
             if ignore_re and matches:
                 return False
@@ -427,8 +430,12 @@ class Build:
         if not all(simple_match(field) for field in simple_filters):
             return False
 
-        regex_filters = [Field.BUILD, Field.OWNER, Field.TEST,
-                         Field.PARENT_BUILD]
+        regex_filters = [
+            Field.BUILD,
+            Field.OWNER,
+            Field.TEST,
+            Field.PARENT_BUILD,
+        ]
         if not all(regex_match(field) for field in regex_filters):
             return False
 
@@ -461,14 +468,19 @@ class Build:
         if field == Field.BUILD:
             return self.id
         if field == Field.COMPLETED:
-            return self.completed.astimezone().isoformat(timespec='minutes')
+            return self.completed.astimezone().isoformat(timespec="minutes")
         if field.name.lower() in self.__dict__:
             return self.__dict__[field.name.lower()]
 
         raise utils.SwattoolException(f"Invalid field: {field}")
 
-    def format_field(self, userinfo: userdata.UserInfo, field: Field,
-                     multiline: bool = True, color: bool = True) -> str:
+    def format_field(
+        self,
+        userinfo: userdata.UserInfo,
+        field: Field,
+        multiline: bool = True,
+        color: bool = True,
+    ) -> str:
         """Get formatted failure data.
 
         Args:
@@ -488,11 +500,18 @@ class Build:
         if field == Field.FAILURES:
             return format_multi([f.stepname for f in self.get(field).values()])
         if field == Field.TRIAGE:
-            return format_multi([str(f.get_triage_with_notes())
-                                 for f in self.failures.values()])
+            return format_multi(
+                [
+                    str(f.get_triage_with_notes())
+                    for f in self.failures.values()
+                ]
+            )
         if field == Field.USER_STATUS:
-            statuses = [str(triage) for fail in self.failures.values()
-                        if (triage := userinfo.get_failure_triage(fail.id))]
+            statuses = [
+                str(triage)
+                for fail in self.failures.values()
+                if (triage := userinfo.get_failure_triage(fail.id))
+            ]
             return format_multi(statuses)
         if field == Field.USER_NOTES:
             notes = userinfo.get_notes()
@@ -513,9 +532,11 @@ class Build:
                 return failure
         return self.failures[min(self.failures)]
 
-    def get_sort_tuple(self, keys: Iterable[Field],
-                       userinfos: Optional[dict[int, dict[Field, Any]]] = None
-                       ) -> tuple:
+    def get_sort_tuple(
+        self,
+        keys: Iterable[Field],
+        userinfos: Optional[dict[int, dict[Field, Any]]] = None,
+    ) -> tuple:
         """Get selected fields in sortable fashion.
 
         Creates a tuple of field values for sorting builds.
@@ -535,15 +556,14 @@ class Build:
         def get_field(field):
             # pylint: disable=too-many-return-statements
             if field == Field.FAILURES:
-                return sorted(fail.stepname
-                              for fail in self.failures.values())
+                return sorted(fail.stepname for fail in self.failures.values())
             if field == Field.OWNER:
                 return str(self.owner)
             if field == Field.TRIAGE:
                 return self.get_first_failure().get_triage_with_notes()
             if field == Field.USER_STATUS:
                 if userinfo and userinfo.triages:
-                    return userinfo.triages[0]['status']
+                    return userinfo.triages[0]["status"]
                 return swatbotrest.TriageStatus.PENDING
             if field == Field.USER_NOTES:
                 return "\n".join(userinfo.notes) if userinfo else ""
@@ -564,10 +584,11 @@ class Build:
                     return str(self.status)
                 return self.status.as_str(color=True)
             if field == Field.BRANCH and self.branch:
-                _, _, branchname = self.branch.rpartition('/')
+                _, _, branchname = self.branch.rpartition("/")
                 if branchname not in ["master", "master-next"]:
-                    return utils.Color.colorize(self.branch,
-                                                utils.Color.YELLOW)
+                    return utils.Color.colorize(
+                        self.branch, utils.Color.YELLOW
+                    )
                 return self.branch
             return self.get(field)
 
@@ -584,27 +605,32 @@ class Build:
         ]
         return [[k, format_field(k)] for k in simple_fields]
 
-    def _format_failures(self, userinfo: userdata.UserInfo,
-                         maxfailures: Optional[int] = None
-                         ) -> Generator[list]:
+    def _format_failures(
+        self, userinfo: userdata.UserInfo, maxfailures: Optional[int] = None
+    ) -> Generator[list]:
         for i, (failureid, failure) in enumerate(self.failures.items()):
             # Create strings for all failures and the attributed new status (if
             # one was set).
             triage = userinfo.get_failure_triage(failureid)
 
-            if (maxfailures is not None and i >= maxfailures):
+            if maxfailures is not None and i >= maxfailures:
                 if maxfailures != 0:
                     removed = len(self.failures) - i
                     yield ["", f"... {removed} more failures ...", ""]
                 break
 
-            yield [Field.FAILURES if i == 0 else "",
-                   failure.stepname,
-                   triage.format_description() if triage else ""]
+            yield [
+                Field.FAILURES if i == 0 else "",
+                failure.stepname,
+                triage.format_description() if triage else "",
+            ]
 
-    def format_description(self, userinfo: userdata.UserInfo,
-                           maxwidth: int, maxfailures: Optional[int] = None
-                           ) -> str:
+    def format_description(
+        self,
+        userinfo: userdata.UserInfo,
+        maxwidth: int,
+        maxfailures: Optional[int] = None,
+    ) -> str:
         """Get info on one given failure in a pretty way.
 
         Args:
@@ -621,10 +647,10 @@ class Build:
             table.append(["Parent", self._format_parent_description()])
 
         for repo in ALL_REPOS:
-            if self.revisions.get(repo) != 'HEAD':
+            if self.revisions.get(repo) != "HEAD":
                 infos = self.git_info(repo)
-                if 'description' in infos:
-                    table.append([f"Git info ({repo})", infos['description']])
+                if "description" in infos:
+                    table.append([f"Git info ({repo})", infos["description"]])
 
         for failure in self._format_failures(userinfo, maxfailures):
             table.append(failure)
@@ -643,9 +669,11 @@ class Build:
         Returns:
             Short formatted description of the build
         """
-        return f"Build {self.id} ({self.branch}): " \
-               f"{self.test} on {self.worker}, " \
-               f"{str(self.status).lower()} at {self.completed}"
+        return (
+            f"Build {self.id} ({self.branch}): "
+            f"{self.test} on {self.worker}, "
+            f"{str(self.status).lower()} at {self.completed}"
+        )
 
     def format_tiny_description(self) -> str:
         """Get very short info on one given failure.
@@ -670,9 +698,9 @@ class Build:
         Args:
             urlopens: Set of URL types to open
         """
-        if 'autobuilder' in urlopens:
+        if "autobuilder" in urlopens:
             click.launch(self.autobuilder_url)
-        if 'swatbot' in urlopens:
+        if "swatbot" in urlopens:
             click.launch(self.swat_url)
-        if 'stdio' in urlopens:
+        if "stdio" in urlopens:
             self.get_first_failure().open_log_url()

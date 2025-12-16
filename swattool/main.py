@@ -33,6 +33,7 @@ def _add_options(options):
         for option in reversed(options):
             func = option(func)
         return func
+
     return _add_options
 
 
@@ -49,12 +50,15 @@ def parse_filters(filters_cmd, config: dict) -> dict[str, Any]:
     Returns:
         Dictionary of parsed filters ready for use with get_failure_infos()
     """
+
     def regex_filter(lst):
         # Create a regex for each entry. If it is an alphanumeric string use
         # full match, so user can pass exact name without having to bother with
         # regex.
-        return [re.compile(f"^{f}$" if str(f).isalnum() else f, flags=re.I)
-                for f in lst]
+        return [
+            re.compile(f"^{f}$" if str(f).isalnum() else f, flags=re.I)
+            for f in lst
+        ]
 
     def bool_filter(val):
         if val in ["yes", True, "true"]:
@@ -64,41 +68,45 @@ def parse_filters(filters_cmd, config: dict) -> dict[str, Any]:
         return None
 
     filters_in = filters_cmd.copy()
-    for k, v in config.get('swattool-filters', {}).items():
+    for k, v in config.get("swattool-filters", {}).items():
         if not filters_cmd[k] and not isinstance(filters_cmd[k], bool):
             filters_in[k] = v
 
-    statuses = [swatbuild.Status[s.upper()]
-                for s in filters_in['status_filter']]
-    triages = [swatbotrest.TriageStatus.from_str(s)
-               for s in filters_in.get('triage_filter', [])]
+    statuses = [
+        swatbuild.Status[s.upper()] for s in filters_in["status_filter"]
+    ]
+    triages = [
+        swatbotrest.TriageStatus.from_str(s)
+        for s in filters_in.get("triage_filter", [])
+    ]
 
     completed_after = completed_before = None
-    if filters_in['completed_after']:
-        completed_after = filters_in['completed_after'].astimezone()
-    elif not filters_in['completed_before']:
+    if filters_in["completed_after"]:
+        completed_after = filters_in["completed_after"].astimezone()
+    elif not filters_in["completed_before"]:
         after_date = datetime.datetime.now() - datetime.timedelta(days=30)
         completed_after = after_date.astimezone()
-        logger.warning("Only considering builds after %s",
-                       after_date.strftime("%Y-%m-%d"))
+        logger.warning(
+            "Only considering builds after %s", after_date.strftime("%Y-%m-%d")
+        )
 
-    if filters_in['completed_before']:
-        completed_before = filters_in['completed_before'].astimezone()
+    if filters_in["completed_before"]:
+        completed_before = filters_in["completed_before"].astimezone()
 
-    filters = {'build': regex_filter(filters_in['build_filter']),
-               'parent_build': regex_filter(filters_in['parent_build_filter']),
-               'test': regex_filter(filters_in['test_filter']),
-               'ignore-test': regex_filter(filters_in['ignore_test_filter']),
-               'status': statuses,
-               'owner': regex_filter(filters_in['owner_filter']),
-               'completed-after': completed_after,
-               'completed-before': completed_before,
-               'with-notes': bool_filter(filters_in['with_notes']),
-               'with-new-status': bool_filter(filters_in['with_new_status']),
-               'triage': triages,
-               'log-matches': [re.compile(r)
-                               for r in filters_in['log_matches']],
-               }
+    filters = {
+        "build": regex_filter(filters_in["build_filter"]),
+        "parent_build": regex_filter(filters_in["parent_build_filter"]),
+        "test": regex_filter(filters_in["test_filter"]),
+        "ignore-test": regex_filter(filters_in["ignore_test_filter"]),
+        "status": statuses,
+        "owner": regex_filter(filters_in["owner_filter"]),
+        "completed-after": completed_after,
+        "completed-before": completed_before,
+        "with-notes": bool_filter(filters_in["with_notes"]),
+        "with-new-status": bool_filter(filters_in["with_new_status"]),
+        "triage": triages,
+        "log-matches": [re.compile(r) for r in filters_in["log_matches"]],
+    }
     return filters
 
 
@@ -115,8 +123,8 @@ def parse_sort(kwargs, config: dict) -> list[swatbuild.Field]:
     Returns:
         List of Field objects for sorting builds
     """
-    sort_cmd = kwargs.get('sort')
-    sort_config = config.get('swattool', {}).get('sort', [])
+    sort_cmd = kwargs.get("sort")
+    sort_config = config.get("swattool", {}).get("sort", [])
     sort_in = sort_cmd if sort_cmd else sort_config
     if not sort_in:
         sort_in = ["Build"]
@@ -133,8 +141,8 @@ def parse_urlopens(kwargs) -> set[str]:
         Set of URL types to open
     """
     opens = set()
-    for urltype in ['autobuilder', 'swatbot', 'stdio']:
-        if kwargs.get(f'open_{urltype}_url'):
+    for urltype in ["autobuilder", "swatbot", "stdio"]:
+        if kwargs.get(f"open_{urltype}_url"):
             opens.add(urltype)
 
     return opens
@@ -144,10 +152,10 @@ class AliasedGroup(click.Group):
     """Support of subcommand aliases."""
 
     aliases = {
-        'show': 'show-pending-failures',
-        'review': 'review-pending-failures',
-        'publish': 'publish-new-reviews',
-        'push': 'publish-new-reviews',
+        "show": "show-pending-failures",
+        "review": "review-pending-failures",
+        "publish": "publish-new-reviews",
+        "push": "publish-new-reviews",
     }
 
     def get_command(self, ctx, cmd_name):
@@ -157,7 +165,7 @@ class AliasedGroup(click.Group):
 
 
 @click.group(cls=AliasedGroup)
-@click.option('-v', '--verbose', count=True, help="Increase verbosity")
+@click.option("-v", "--verbose", count=True, help="Increase verbosity")
 def maingroup(verbose: int):
     """Handle triage of Yocto autobuilder failures.
 
@@ -180,18 +188,18 @@ def handle_login_exception(err: utils.LoginRequiredException) -> bool:
     config = utils.load_config()
     if err.service == "swatbot":
         logger.warning("Login required to swatbot server")
-        user = config.get('credentials', {}).get('swatbot_login')
+        user = config.get("credentials", {}).get("swatbot_login")
         if not user:
-            user = click.prompt('swatbot user')
-        password = click.prompt('swatbot password', hide_input=True)
+            user = click.prompt("swatbot user")
+        password = click.prompt("swatbot password", hide_input=True)
         return swatbotrest.login(user, password)
 
     if err.service == "bugzilla":
         logger.warning("Login required to bugzilla server")
-        user = config.get('credentials', {}).get('bugzilla_login')
+        user = config.get("credentials", {}).get("bugzilla_login")
         if not user:
-            user = click.prompt('bugzilla user')
-        password = click.prompt('bugzilla password', hide_input=True)
+            user = click.prompt("bugzilla user")
+        password = click.prompt("bugzilla password", hide_input=True)
         return Bugzilla.login(user, password)
 
     raise err
@@ -231,8 +239,8 @@ def main():
 
 
 @maingroup.command()
-@click.option('--user', '-u', prompt=True)
-@click.option('--password', '-p', prompt=True, hide_input=True)
+@click.option("--user", "-u", prompt=True)
+@click.option("--password", "-p", prompt=True, hide_input=True)
 def login(user: str, password: str):
     """Login to the swatbot Django interface.
 
@@ -244,8 +252,8 @@ def login(user: str, password: str):
 
 
 @maingroup.command()
-@click.option('--user', '-u', prompt=True)
-@click.option('--password', '-p', prompt=True, hide_input=True)
+@click.option("--user", "-u", prompt=True)
+@click.option("--password", "-p", prompt=True, hide_input=True)
 def bugzilla_login(user: str, password: str):
     """Login to Yocto Project Bugzilla.
 
@@ -257,65 +265,127 @@ def bugzilla_login(user: str, password: str):
 
 
 failures_list_options = [
-    click.option('--limit', '-l', type=click.INT, default=None,
-                 help="Only parse the n last failures"),
-    click.option('--sort', '-s', multiple=True, default=[],
-                 type=click.Choice([str(f) for f in swatbuild.Field],
-                                   case_sensitive=False),
-                 help="Specify sort order"),
-    click.option('--refresh', '-r',
-                 type=click.Choice([p.name for p in swatbotrest.RefreshPolicy],
-                                   case_sensitive=False),
-                 default="auto",
-                 help="Fetch failures list from server instead of using cache"
-                 ),
-    click.option('--test-filter', '-t', multiple=True,
-                 help="Only show some tests"),
-    click.option('--build-filter', '-b', multiple=True,
-                 help="Only show some builds"),
-    click.option('--parent-build-filter', '-p', multiple=True,
-                 help="Only show some builds with parent build id"),
-    click.option('--owner-filter', '-o', multiple=True,
-                 help='Only show some owners ("none" for no owner)'),
-    click.option('--ignore-test-filter', '-T', multiple=True,
-                 help="Ignore some tests"),
-    click.option('--status-filter', '-S', multiple=True,
-                 type=click.Choice([str(s) for s in swatbuild.Status],
-                                   case_sensitive=False),
-                 help="Only show some statuses"),
-    click.option('--completed-after', '-A',
-                 type=click.DateTime(),
-                 help="Only show failures after a given date"),
-    click.option('--completed-before', '-B',
-                 type=click.DateTime(),
-                 help="Only show failures before a given date"),
-    click.option('--with-notes', '-N', default="both",
-                 type=click.Choice(["yes", "no", "both", "true", "false"],
-                                   case_sensitive=False),
-                 help="Only show failures with or without attached note"),
-    click.option('--with-new-status', default=None,
-                 type=click.Choice(["yes", "no", "both", "true", "false"],
-                                   case_sensitive=False),
-                 help="Only show failures with or without new (local) status"),
-    click.option('--log-matches', multiple=True, default=None,
-                 help="Only show failures with logs matching a given regex. "
-                 "E.g. '.*Error.*'"),
+    click.option(
+        "--limit",
+        "-l",
+        type=click.INT,
+        default=None,
+        help="Only parse the n last failures",
+    ),
+    click.option(
+        "--sort",
+        "-s",
+        multiple=True,
+        default=[],
+        type=click.Choice(
+            [str(f) for f in swatbuild.Field], case_sensitive=False
+        ),
+        help="Specify sort order",
+    ),
+    click.option(
+        "--refresh",
+        "-r",
+        type=click.Choice(
+            [p.name for p in swatbotrest.RefreshPolicy], case_sensitive=False
+        ),
+        default="auto",
+        help="Fetch failures list from server instead of using cache",
+    ),
+    click.option(
+        "--test-filter", "-t", multiple=True, help="Only show some tests"
+    ),
+    click.option(
+        "--build-filter", "-b", multiple=True, help="Only show some builds"
+    ),
+    click.option(
+        "--parent-build-filter",
+        "-p",
+        multiple=True,
+        help="Only show some builds with parent build id",
+    ),
+    click.option(
+        "--owner-filter",
+        "-o",
+        multiple=True,
+        help='Only show some owners ("none" for no owner)',
+    ),
+    click.option(
+        "--ignore-test-filter", "-T", multiple=True, help="Ignore some tests"
+    ),
+    click.option(
+        "--status-filter",
+        "-S",
+        multiple=True,
+        type=click.Choice(
+            [str(s) for s in swatbuild.Status], case_sensitive=False
+        ),
+        help="Only show some statuses",
+    ),
+    click.option(
+        "--completed-after",
+        "-A",
+        type=click.DateTime(),
+        help="Only show failures after a given date",
+    ),
+    click.option(
+        "--completed-before",
+        "-B",
+        type=click.DateTime(),
+        help="Only show failures before a given date",
+    ),
+    click.option(
+        "--with-notes",
+        "-N",
+        default="both",
+        type=click.Choice(
+            ["yes", "no", "both", "true", "false"], case_sensitive=False
+        ),
+        help="Only show failures with or without attached note",
+    ),
+    click.option(
+        "--with-new-status",
+        default=None,
+        type=click.Choice(
+            ["yes", "no", "both", "true", "false"], case_sensitive=False
+        ),
+        help="Only show failures with or without new (local) status",
+    ),
+    click.option(
+        "--log-matches",
+        multiple=True,
+        default=None,
+        help="Only show failures with logs matching a given regex. "
+        "E.g. '.*Error.*'",
+    ),
 ]
 
 url_open_options = [
-    click.option('--open-autobuilder-url', '-u', is_flag=True,
-                 help="Open the autobuilder url in web browser"),
-    click.option('--open-swatbot-url', '-w', is_flag=True,
-                 help="Open the swatbot url in web browser"),
-    click.option('--open-stdio-url', '-g', is_flag=True,
-                 help="Open the first stdio url in web browser"),
+    click.option(
+        "--open-autobuilder-url",
+        "-u",
+        is_flag=True,
+        help="Open the autobuilder url in web browser",
+    ),
+    click.option(
+        "--open-swatbot-url",
+        "-w",
+        is_flag=True,
+        help="Open the swatbot url in web browser",
+    ),
+    click.option(
+        "--open-stdio-url",
+        "-g",
+        is_flag=True,
+        help="Open the first stdio url in web browser",
+    ),
 ]
 
 
-def _format_pending_failures(builds: list[swatbuild.Build],
-                             userinfos: userdata.UserInfos,
-                             shown_fields: list[swatbuild.Field]
-                             ) -> tuple[list[list[str]], list[str]]:
+def _format_pending_failures(
+    builds: list[swatbuild.Build],
+    userinfos: userdata.UserInfos,
+    shown_fields: list[swatbuild.Field],
+) -> tuple[list[list[str]], list[str]]:
     # Generate a list of formatted builds on failures.
     def format_header(field):
         if field == swatbuild.Field.PARENT_BUILD:
@@ -325,21 +395,30 @@ def _format_pending_failures(builds: list[swatbuild.Build],
         return str(field)
 
     headers = [format_header(f) for f in shown_fields]
-    table = [[build.format_field(userinfos.get(build.id, {}), field)
-              for field in shown_fields] for build in builds]
+    table = [
+        [
+            build.format_field(userinfos.get(build.id, {}), field)
+            for field in shown_fields
+        ]
+        for build in builds
+    ]
 
     return (table, headers)
 
 
-def _get_builds_infos(refresh: str, limit: int,
-                      sort: Collection[swatbuild.Field],
-                      filters: dict[str, Any], for_review: bool = False,
-                      ) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
+def _get_builds_infos(
+    refresh: str,
+    limit: int,
+    sort: Collection[swatbuild.Field],
+    filters: dict[str, Any],
+    for_review: bool = False,
+) -> tuple[list[swatbuild.Build], userdata.UserInfos]:
     swatbotrest.RefreshManager().set_policy_by_name(refresh)
 
     userinfos = userdata.UserInfos()
-    init = initmanager.InitManager(userinfos, limit=limit, filters=filters,
-                                   for_review=for_review)
+    init = initmanager.InitManager(
+        userinfos, limit=limit, filters=filters, for_review=for_review
+    )
     init.run()
 
     builds = init.get_builds(sort)
@@ -347,8 +426,13 @@ def _get_builds_infos(refresh: str, limit: int,
     return (builds, userinfos)
 
 
-def _show_failures(refresh: str, urlopens: set[str], limit: int,
-                   sort: Collection[swatbuild.Field], filters: dict[str, Any]):
+def _show_failures(
+    refresh: str,
+    urlopens: set[str],
+    limit: int,
+    sort: Collection[swatbuild.Field],
+    filters: dict[str, Any],
+):
     """Show all failures waiting for triage.
 
     Args:
@@ -370,7 +454,7 @@ def _show_failures(refresh: str, urlopens: set[str], limit: int,
         *swatbuild.Field.get_base_fields(),
         swatbuild.Field.SWAT_URL,
         swatbuild.Field.FAILURES,
-        swatbuild.Field.TRIAGE if len(filters['triage']) != 1 else None,
+        swatbuild.Field.TRIAGE if len(filters["triage"]) != 1 else None,
         swatbuild.Field.USER_STATUS if has_user_status else None,
         swatbuild.Field.USER_NOTES if has_notes else None,
     ]
@@ -379,23 +463,26 @@ def _show_failures(refresh: str, urlopens: set[str], limit: int,
     table, headers = _format_pending_failures(builds, userinfos, shown_fields)
     print(tabulate.tabulate(table, headers=headers))
 
-    logging.info("%s entries found (%s warnings, %s errors and %s cancelled)",
-                 len(builds),
-                 len([b for b in builds
-                      if b.status == swatbuild.Status.WARNING]),
-                 len([b for b in builds
-                      if b.status == swatbuild.Status.ERROR]),
-                 len([b for b in builds
-                      if b.status == swatbuild.Status.CANCELLED]))
+    logging.info(
+        "%s entries found (%s warnings, %s errors and %s cancelled)",
+        len(builds),
+        len([b for b in builds if b.status == swatbuild.Status.WARNING]),
+        len([b for b in builds if b.status == swatbuild.Status.ERROR]),
+        len([b for b in builds if b.status == swatbuild.Status.CANCELLED]),
+    )
 
 
 @maingroup.command()
 @_add_options(failures_list_options)
 @_add_options(url_open_options)
-@click.option('--triage-filter', multiple=True,
-              type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
-                                case_sensitive=False),
-              help="Only show some triage statuses")
+@click.option(
+    "--triage-filter",
+    multiple=True,
+    type=click.Choice(
+        [str(s) for s in swatbotrest.TriageStatus], case_sensitive=False
+    ),
+    help="Only show some triage statuses",
+)
 def show_failures(refresh: str, limit: int, **kwargs):
     """Show all failures, including the old ones.
 
@@ -427,7 +514,7 @@ def show_pending_failures(refresh: str, limit: int, **kwargs):
     urlopens = parse_urlopens(kwargs)
     config = utils.load_config()
     filters = parse_filters(kwargs, config)
-    filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    filters["triage"] = [swatbotrest.TriageStatus.PENDING]
     sort = parse_sort(kwargs, config)
     _show_failures(refresh, urlopens, limit, sort, filters)
 
@@ -447,11 +534,12 @@ def review_pending_failures(refresh: str, limit: int, **kwargs):
     urlopens = parse_urlopens(kwargs)
     config = utils.load_config()
     filters = parse_filters(kwargs, config)
-    filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    filters["triage"] = [swatbotrest.TriageStatus.PENDING]
     sort = parse_sort(kwargs, config)
 
-    builds, userinfos = _get_builds_infos(refresh, limit, sort, filters,
-                                          for_review=True)
+    builds, userinfos = _get_builds_infos(
+        refresh, limit, sort, filters, for_review=True
+    )
 
     if not builds:
         return
@@ -464,14 +552,27 @@ def review_pending_failures(refresh: str, limit: int, **kwargs):
 
 @maingroup.command()
 @_add_options(failures_list_options)
-@click.option('--yes', '-y', is_flag=True,
-              help="Do not ask for confirmation for each failure")
-@click.argument('status',
-                type=click.Choice([str(s) for s in swatbotrest.TriageStatus],
-                                  case_sensitive=False))
-@click.argument('status-comment', type=str)
-def batch_triage_failures(refresh: str, limit: int, yes: bool, status: str,
-                          status_comment: str, **kwargs):
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    help="Do not ask for confirmation for each failure",
+)
+@click.argument(
+    "status",
+    type=click.Choice(
+        [str(s) for s in swatbotrest.TriageStatus], case_sensitive=False
+    ),
+)
+@click.argument("status-comment", type=str)
+def batch_triage_failures(
+    refresh: str,
+    limit: int,
+    yes: bool,
+    status: str,
+    status_comment: str,
+    **kwargs,
+):
     """Triage pending failures matching given criteria.
 
     Args:
@@ -488,21 +589,22 @@ def batch_triage_failures(refresh: str, limit: int, yes: bool, status: str,
 
     config = utils.load_config()
     filters = parse_filters(kwargs, config)
-    filters['triage'] = [swatbotrest.TriageStatus.PENDING]
+    filters["triage"] = [swatbotrest.TriageStatus.PENDING]
     sort = parse_sort(kwargs, config)
 
     builds, userinfos = _get_builds_infos(refresh, limit, sort, filters)
     reviewmenu = review.ReviewMenu(config, builds, userinfos)
-    reviewmenu.batch_menu(not yes,
-                          swatbotrest.TriageStatus.from_str(status),
-                          status_comment)
+    reviewmenu.batch_menu(
+        not yes, swatbotrest.TriageStatus.from_str(status), status_comment
+    )
 
     userinfos.save()
 
 
 @maingroup.command()
-@click.option('--dry-run', '-n', is_flag=True,
-              help="Only shows what would be done")
+@click.option(
+    "--dry-run", "-n", is_flag=True, help="Only shows what would be done"
+)
 def publish_new_reviews(dry_run: bool):
     """Publish new local triage status to swatbot Django interface.
 
@@ -512,8 +614,9 @@ def publish_new_reviews(dry_run: bool):
     reviews = review.get_new_reviews()
 
     bar_format = "{l_bar}{bar}| [{elapsed}<{remaining}, {postfix}]"
-    with tqdm_logging_redirect(reviews.items(), bar_format=bar_format,
-                               desc="Publishing new reviews") as progress:
+    with tqdm_logging_redirect(
+        reviews.items(), bar_format=bar_format, desc="Publishing new reviews"
+    ) as progress:
         if not progress:
             return
 
@@ -523,30 +626,39 @@ def publish_new_reviews(dry_run: bool):
             # Bug entry: need to also publish a new comment on bugzilla.
             if status == swatbotrest.TriageStatus.BUG:
                 bugid = int(comment)
-                logs = [triage.extra['bugzilla-comment']
-                        for triage in sorted(triages,
-                                             key=lambda d: d.change_date)
-                        if triage.failures]
+                logs = [
+                    triage.extra["bugzilla-comment"]
+                    for triage in sorted(triages, key=lambda d: d.change_date)
+                    if triage.failures
+                ]
 
                 if any(logs):
                     comment = bugurl = Bugzilla.get_bug_url(bugid)
                     bugtitle = Bugzilla.get_bug_title(bugid)
-                    logger.info('Need to update ticket %s (%s) with:\n%s',
-                                bugtitle, bugurl,
-                                "\n".join(textwrap.indent(log, '    ')
-                                          for log in logs))
+                    logger.info(
+                        "Need to update ticket %s (%s) with:\n%s",
+                        bugtitle,
+                        bugurl,
+                        "\n".join(
+                            textwrap.indent(log, "    ") for log in logs
+                        ),
+                    )
                     if not dry_run:
-                        Bugzilla.add_bug_comment(bugid, '\n'.join(logs))
+                        Bugzilla.add_bug_comment(bugid, "\n".join(logs))
 
             failureids = [fid for triage in triages for fid in triage.failures]
-            wrappedfails = textwrap.wrap(', '.join(str(fid)
-                                                   for fid in failureids),
-                                         initial_indent='    ',
-                                         subsequent_indent='    ')
+            wrappedfails = textwrap.wrap(
+                ", ".join(str(fid) for fid in failureids),
+                initial_indent="    ",
+                subsequent_indent="    ",
+            )
 
-            logger.info('Need to update failures to status %s with comment '
-                        '"%s"\n%s\n',
-                        status, comment, "\n".join(wrappedfails))
+            logger.info(
+                'Need to update failures to status %s with comment "%s"\n%s\n',
+                status,
+                comment,
+                "\n".join(wrappedfails),
+            )
             if not dry_run:
                 for failureid in failureids:
                     swatbotrest.publish_status(failureid, status, comment)
@@ -555,7 +667,7 @@ def publish_new_reviews(dry_run: bool):
         swatbotrest.invalidate_stepfailures_cache()
 
 
-CACHE_CLEAN_DATE_FILE = utils.CACHEDIR / 'cache_clean'
+CACHE_CLEAN_DATE_FILE = utils.CACHEDIR / "cache_clean"
 
 
 def _do_clean_cache():
@@ -565,14 +677,14 @@ def _do_clean_cache():
 
     logging.info("Cleaning old cache entries.")
 
-    for path in utils.CACHEDIR.rglob('*'):
+    for path in utils.CACHEDIR.rglob("*"):
         if not path.is_file():
             continue
         if path.stat().st_atime > clean_limit_time:
             continue
         path.unlink()
 
-    with CACHE_CLEAN_DATE_FILE.open('w') as file:
+    with CACHE_CLEAN_DATE_FILE.open("w") as file:
         file.write(str(datetime.datetime.now().timestamp()))
 
 
@@ -584,7 +696,7 @@ def maybe_clean_cache(*args, **kwargs):
     clean_date_min = datetime.datetime.now() - datetime.timedelta(days=7)
 
     try:
-        with CACHE_CLEAN_DATE_FILE.open('r') as file:
+        with CACHE_CLEAN_DATE_FILE.open("r") as file:
             last_clean = float(file.read())
     except (FileNotFoundError, ValueError):
         last_clean = 0

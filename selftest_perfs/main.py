@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.option('-v', '--verbose', count=True, help="Increase verbosity")
+@click.option("-v", "--verbose", count=True, help="Increase verbosity")
 def maingroup(verbose: int):
     """Handle triage of Yocto autobuilder failures.
 
@@ -55,18 +55,18 @@ def extract_times_from_log(log_data: str) -> dict[str, float]:
     """
     timings = {}
     for line in log_data.splitlines():
-        fields = line.split(' - ')
+        fields = line.split(" - ")
         if len(fields) < 4:
             continue
-        if fields[1] != 'oe-selftest' or fields[3] != 'RESULTS':
+        if fields[1] != "oe-selftest" or fields[3] != "RESULTS":
             continue
 
         subfields = fields[4].split()
-        if subfields[1] != 'PASSED':
+        if subfields[1] != "PASSED":
             continue
 
-        testname = subfields[0].strip(':')
-        testtime = subfields[2].strip('()s')
+        testname = subfields[0].strip(":")
+        testtime = subfields[2].strip("()s")
 
         timings[testname] = float(testtime)
 
@@ -86,13 +86,17 @@ def get_build_log(rest_url: str, build_id: int) -> Optional[str]:
     steps_url = f"{rest_url}/builds/{build_id}/steps"
     steps_json = Session().get(steps_url, True, -1)
     steps_data = json.loads(steps_json)
-    selftest_steps = [step for step in steps_data["steps"]
-                      if step["name"] == "OE Selftest: Run cmds"]
+    selftest_steps = [
+        step
+        for step in steps_data["steps"]
+        if step["name"] == "OE Selftest: Run cmds"
+    ]
     if len(selftest_steps) != 1:
         return None
     stepnumber = selftest_steps[0]["number"]
-    logmetadata = buildbotrest.get_log_data(rest_url, build_id,
-                                            stepnumber, 'stdio')
+    logmetadata = buildbotrest.get_log_data(
+        rest_url, build_id, stepnumber, "stdio"
+    )
 
     if not logmetadata:
         return None
@@ -101,34 +105,37 @@ def get_build_log(rest_url: str, build_id: int) -> Optional[str]:
     return Session().get(log_url, True, -1)
 
 
-def _get_builds(rest_url: str, builder_id: int, start_date: datetime,
-                branch_name: str):
+def _get_builds(
+    rest_url: str, builder_id: int, start_date: datetime, branch_name: str
+):
     cache_max_age = 60 * 60
 
-    branches = ['oecore', 'poky']
-    params = {'property': [f'branch_{branch}' for branch in branches]}
+    branches = ["oecore", "poky"]
+    params = {"property": [f"branch_{branch}" for branch in branches]}
     fparams = urllib.parse.urlencode(params, doseq=True)
     all_builds_url = f"{rest_url}/builders/{builder_id}/builds?{fparams}"
     builds_json = Session().get(all_builds_url, True, cache_max_age)
     builds_data = json.loads(builds_json)
 
     def use_build(build):
-        if not build.get('complete_at'):
+        if not build.get("complete_at"):
             return False
-        if datetime.fromtimestamp(build['complete_at']) < start_date:
+        if datetime.fromtimestamp(build["complete_at"]) < start_date:
             return False
 
-        return all(build['properties'][f'branch_{branch}'][0] == branch_name
-                   for branch in branches)
+        return all(
+            build["properties"][f"branch_{branch}"][0] == branch_name
+            for branch in branches
+        )
 
-    builds = [build for build in builds_data['builds'] if use_build(build)]
+    builds = [build for build in builds_data["builds"] if use_build(build)]
 
     return builds
 
 
-def get_builds_data(rest_url: str, builder_id: int, start_date: datetime,
-                    branch_name: str
-                    ) -> dict[int, tuple[date, dict[str, float]]]:
+def get_builds_data(
+    rest_url: str, builder_id: int, start_date: datetime, branch_name: str
+) -> dict[int, tuple[date, dict[str, float]]]:
     """Retrieve and analyze selftest timing data from buildbot builds.
 
     Fetches build data from a specific builder, filters by date and branch,
@@ -148,34 +155,41 @@ def get_builds_data(rest_url: str, builder_id: int, start_date: datetime,
 
     builds_data: dict[int, tuple[date, dict[str, float]]] = {}
     for build in builds:
-        log_data = get_build_log(rest_url, build['buildid'])
+        log_data = get_build_log(rest_url, build["buildid"])
         if not log_data:
             continue
 
-        complete_date = datetime.fromtimestamp(build['complete_at']).date()
+        complete_date = datetime.fromtimestamp(build["complete_at"]).date()
         timings = extract_times_from_log(log_data)
-        builds_data[build['buildid']] = (complete_date, timings)
+        builds_data[build["buildid"]] = (complete_date, timings)
 
     return builds_data
 
 
-def _get_timings(builds_data: dict[int, tuple[date, dict[str, float]]],
-                 test: str):
-    return [timing for _, build_timings in builds_data.values()
-            if (timing := build_timings.get(test)) is not None]
+def _get_timings(
+    builds_data: dict[int, tuple[date, dict[str, float]]], test: str
+):
+    return [
+        timing
+        for _, build_timings in builds_data.values()
+        if (timing := build_timings.get(test)) is not None
+    ]
 
 
-def _print_data(builds_data: dict[int, tuple[date, dict[str, float]]],
-                name: str, tests: list[str]):
-    print(f'--- {name} ---')
+def _print_data(
+    builds_data: dict[int, tuple[date, dict[str, float]]],
+    name: str,
+    tests: list[str],
+):
+    print(f"--- {name} ---")
     for test in tests:
         timings = _get_timings(builds_data, test)
         print(test, min(timings), max(timings), sum(timings) / len(timings))
 
 
-def _find_long_tests(builds_data: dict[int, tuple[date, dict[str, float]]],
-                     tests: list[str]
-                     ) -> tuple[list[str], list[str]]:
+def _find_long_tests(
+    builds_data: dict[int, tuple[date, dict[str, float]]], tests: list[str]
+) -> tuple[list[str], list[str]]:
     long_tests = []
     longer_tests = []
     for test in tests:
@@ -192,9 +206,12 @@ def _find_long_tests(builds_data: dict[int, tuple[date, dict[str, float]]],
     return (long_tests, longer_tests)
 
 
-def print_export_data(builds_data: dict[int, tuple[date, dict[str, float]]],
-                      csvname: str, export_all_stats: bool,
-                      export_stats: str):
+def print_export_data(
+    builds_data: dict[int, tuple[date, dict[str, float]]],
+    csvname: str,
+    export_all_stats: bool,
+    export_stats: str,
+):
     """Print statistics and export results.
 
     Args:
@@ -209,42 +226,57 @@ def print_export_data(builds_data: dict[int, tuple[date, dict[str, float]]],
 
     long_tests, longer_tests = _find_long_tests(builds_data, list(tests))
 
-    _print_data(builds_data, 'all tests', list(tests))
-    _print_data(builds_data, 'long tests', long_tests)
-    _print_data(builds_data, 'longer tests', longer_tests)
+    _print_data(builds_data, "all tests", list(tests))
+    _print_data(builds_data, "long tests", long_tests)
+    _print_data(builds_data, "longer tests", longer_tests)
 
     exported_tests_set = set()
     if export_all_stats:
         exported_tests_set.update(tests)
     for stat in export_stats:
-        exported_tests_set.update([test for test in tests
-                                   if re.match(stat, test)])
+        exported_tests_set.update(
+            [test for test in tests if re.match(stat, test)]
+        )
 
     if not exported_tests_set:
         exported_tests_set.update(longer_tests)
     exported_tests = list(exported_tests_set)
-    with open(csvname, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.writer(csvfile, delimiter=' ', quotechar='|',
-                            quoting=csv.QUOTE_MINIMAL)
+    with open(csvname, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(
+            csvfile, delimiter=" ", quotechar="|", quoting=csv.QUOTE_MINIMAL
+        )
         writer.writerow(["build_date", *exported_tests])
         for build_date, build_timings in builds_data.values():
-            writer.writerow([build_date, *[build_timings.get(test)
-                                           for test in exported_tests]])
+            writer.writerow(
+                [
+                    build_date,
+                    *[build_timings.get(test) for test in exported_tests],
+                ]
+            )
 
 
 @maingroup.command()
-@click.argument('buildbot_url')
-@click.argument('builder_id', type=click.INT)
-@click.argument('start_date', type=click.DateTime())
-@click.option('--branch-name', '-b', default="master",
-              help="branch to analyze")
-@click.option('--export-all-stats', '-a', is_flag=True,
-              help="Export all stats")
-@click.option('--export-stats', '-s', multiple=True,
-              help="Export stats for a given test")
+@click.argument("buildbot_url")
+@click.argument("builder_id", type=click.INT)
+@click.argument("start_date", type=click.DateTime())
+@click.option(
+    "--branch-name", "-b", default="master", help="branch to analyze"
+)
+@click.option(
+    "--export-all-stats", "-a", is_flag=True, help="Export all stats"
+)
+@click.option(
+    "--export-stats", "-s", multiple=True, help="Export stats for a given test"
+)
 # pylint: disable=too-many-arguments,too-many-positional-arguments
-def stats(buildbot_url: str, builder_id: int, start_date: datetime,
-          branch_name: str, export_all_stats: bool, export_stats: str):
+def stats(
+    buildbot_url: str,
+    builder_id: int,
+    start_date: datetime,
+    branch_name: str,
+    export_all_stats: bool,
+    export_stats: str,
+):
     """Analyze selftest performance statistics and export results.
 
     Analyzes selftest timing data from a buildbot builder, identifies tests
@@ -261,8 +293,9 @@ def stats(buildbot_url: str, builder_id: int, start_date: datetime,
     base_url = buildbotrest.autobuilder_base_url(buildbot_url)
     rest_url = buildbotrest.rest_api_url(base_url)
 
-    builds_data = get_builds_data(rest_url, builder_id, start_date,
-                                  branch_name)
+    builds_data = get_builds_data(
+        rest_url, builder_id, start_date, branch_name
+    )
 
-    filename = f'selftest_timings_{builder_id}_{branch_name}.csv'
+    filename = f"selftest_timings_{builder_id}_{branch_name}.csv"
     print_export_data(builds_data, filename, export_all_stats, export_stats)

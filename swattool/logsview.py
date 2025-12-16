@@ -54,24 +54,33 @@ class LogView:
         loglines = logdata.splitlines()
         highlights = self.log.get_highlights()
 
-        entries = ["View entire log file|",
-                   "View entire log file in default editor|",
-                   *[f"On line {line: 6d}: {highlights[line].keyword}|{line}"
-                     for line in sorted(highlights)
-                     if highlights[line].in_menu]
-                   ]
+        entries = [
+            "View entire log file|",
+            "View entire log file in default editor|",
+            *[
+                f"On line {line: 6d}: {highlights[line].keyword}|{line}"
+                for line in sorted(highlights)
+                if highlights[line].in_menu
+            ],
+        ]
 
         def preview(line):
             return self._format_preview(int(line), loglines)
 
-        title = f"{self.failure.build.format_short_description()}: " \
-                f"{self.logname} of step {self.failure.stepnumber}"
+        title = (
+            f"{self.failure.build.format_short_description()}: "
+            f"{self.logname} of step {self.failure.stepnumber}"
+        )
         entry = 2
         while True:
-            menu = TerminalMenu(entries, title=title, cursor_index=entry,
-                                preview_command=preview,
-                                preview_size=self.preview_size,
-                                raise_error_on_interrupt=True)
+            menu = TerminalMenu(
+                entries,
+                title=title,
+                cursor_index=entry,
+                preview_command=preview,
+                preview_size=self.preview_size,
+                raise_error_on_interrupt=True,
+            )
             menu_ret = menu.show()
             if not isinstance(menu_ret, int):
                 return True
@@ -82,11 +91,14 @@ class LogView:
             elif entry == 1:
                 utils.launch_in_system_default(logdata)
             else:
-                _, _, num = entries[entry].partition('|')
+                _, _, num = entries[entry].partition("|")
                 self._show(loglines, int(num))
 
-    def _get_preview_window(self, linenum: int, lines: list[str],
-                            ) -> tuple[int, int]:
+    def _get_preview_window(
+        self,
+        linenum: int,
+        lines: list[str],
+    ) -> tuple[int, int]:
         """Calculate the start and end lines for a preview window.
 
         Args:
@@ -141,8 +153,10 @@ class LogView:
             loglines: The lines of the log file
             selected_line: Optional line number to highlight and position at
         """
-        colorlines = [self._format_line(i, t, selected_line)
-                      for i, t in enumerate(loglines, start=1)]
+        colorlines = [
+            self._format_line(i, t, selected_line)
+            for i, t in enumerate(loglines, start=1)
+        ]
 
         startline: Optional[int]
         if selected_line and self.preview_height and self.preview_width:
@@ -152,8 +166,9 @@ class LogView:
             startline = selected_line
         utils.show_in_less("\n".join(colorlines), startline)
 
-    def _format_line(self, linenum: int, text: str,
-                     colorized_line: Optional[int]):
+    def _format_line(
+        self, linenum: int, text: str, colorized_line: Optional[int]
+    ):
         """Format a line with appropriate highlighting.
 
         Args:
@@ -164,8 +179,9 @@ class LogView:
         Returns:
             Formatted line with ANSI color codes
         """
-        highlight_lines = {k: h for k, h in self.log.get_highlights().items()
-                           if h.in_logview}
+        highlight_lines = {
+            k: h for k, h in self.log.get_highlights().items() if h.in_logview
+        }
         highlight = highlight_lines.get(linenum)
         if linenum == colorized_line:
             if linenum in highlight_lines:
@@ -190,8 +206,10 @@ class LogView:
         """
         preview_text = text.expandtabs(4)
         width = self.preview_width - (1 + 6 + 1)  # space + line number + space
-        return [preview_text[offset:offset + width]
-                for offset in range(0, max(1, len(preview_text)), width)]
+        return [
+            preview_text[offset : offset + width]
+            for offset in range(0, max(1, len(preview_text)), width)
+        ]
 
     @staticmethod
     def _escape_line(text):
@@ -205,8 +223,9 @@ class LogView:
         """
         return repr(text)[1:-1]
 
-    def _format_preview_line(self, linenum: int, text: str,
-                             colorized_line: int):
+    def _format_preview_line(
+        self, linenum: int, text: str, colorized_line: int
+    ):
         """Format a line for preview display with line numbers.
 
         Args:
@@ -219,8 +238,9 @@ class LogView:
         """
         text = self._escape_line(text)
         for i, wrappedtext in enumerate(self._split_preview_line(text)):
-            formatted_text = self._format_line(linenum, wrappedtext,
-                                               colorized_line)
+            formatted_text = self._format_line(
+                linenum, wrappedtext, colorized_line
+            )
             if i == 0:
                 yield f"{linenum: 6d} {formatted_text}"
             else:
@@ -247,11 +267,12 @@ class LogView:
         """
         self._update_preview_size()
         start, end = self._get_preview_window(linenum, lines)
-        lines = [previewline
-                 for i, t in enumerate(lines[start: end + 1], start=start + 1)
-                 for previewline in self._format_preview_line(i, t, linenum)
-                 ]
-        return "\n".join(lines[:self.preview_height])
+        lines = [
+            previewline
+            for i, t in enumerate(lines[start : end + 1], start=start + 1)
+            for previewline in self._format_preview_line(i, t, linenum)
+        ]
+        return "\n".join(lines[: self.preview_height])
 
 
 def show_logs_menu(build: swatbuild.Build):
@@ -263,16 +284,21 @@ def show_logs_menu(build: swatbuild.Build):
     Args:
         build: The build containing failures with logs
     """
+
     def get_failure_line(failure, logname):
         return (failure.id, failure.stepnumber, failure.stepname, logname)
-    logs = [(failure, logname)
-            for failure in build.failures.values()
-            for logname in failure.urls]
+
+    logs = [
+        (failure, logname)
+        for failure in build.failures.values()
+        for logname in failure.urls
+    ]
     entries = [get_failure_line(failure, logname) for failure, logname in logs]
-    default_line = get_failure_line(build.get_first_failure(), 'stdio')
+    default_line = get_failure_line(build.get_first_failure(), "stdio")
     entry = entries.index(default_line)
-    logs_menu = utils.tabulated_menu(entries, title="Log files",
-                                     cursor_index=entry)
+    logs_menu = utils.tabulated_menu(
+        entries, title="Log files", cursor_index=entry
+    )
 
     while True:
         newentry = logs_menu.show()
